@@ -1,0 +1,163 @@
+FROM rust:1.21
+
+# define libsodium library environment variables
+ENV libsodium libsodium-1.0.15
+ENV libsodium_file ${libsodium}.tar.gz
+
+# download libsodium and its signature
+WORKDIR /usr/local/src
+RUN wget https://download.libsodium.org/libsodium/releases/${libsodium_file}
+RUN wget https://download.libsodium.org/libsodium/releases/${libsodium_file}.sig
+
+# import libsodium's author's public key
+# from https://download.libsodium.org/doc/installation/
+RUN echo '-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
+Version: GnuPG v1 (OpenBSD)\n\
+\n\
+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\n\
+=Hkmu\n\
+-----END PGP PUBLIC KEY BLOCK-----\n'\
+> pub.key
+RUN gpg --import pub.key
+RUN gpg --verify ${libsodium_file}.sig
+
+# install libsodium
+RUN tar zxvf ${libsodium_file} && rm ${libsodium_file}
+WORKDIR ${libsodium}
+RUN ./configure && make && make install
+
+# set environment variable
+ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
+
+# pre-fetch dependencies
+RUN mkdir /usr/local/src/zbox
+WORKDIR /usr/local/src/zbox
+COPY Cargo.toml ./
+COPY src ./src
+RUN cargo fetch
+RUN rm -rf /usr/local/src/zbox
+
+# set working dir
+WORKDIR /zbox

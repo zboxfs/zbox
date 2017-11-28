@@ -1,0 +1,36 @@
+[package]
+name = "zbox"
+version = "0.1.1"
+authors = ["Bo Lu"]
+description = "This package is still under working, please check it later."
+documentation = "https://docs.zbox.io"
+homepage = "https://github.com/Zbox-io/zbox"
+repository = "https://github.com/Zbox-io/zbox"
+readme = "README.md"
+keywords = []
+categories = []
+license = "Apache-2.0"
+build = "build.rs"
+
+[lib]
+name = "zbox"
+crate-type = ["rlib", "dylib"]
+
+[dependencies]
+bytes = "^0.4"
+env_logger = "~0.4"
+log = "~0.3"
+rmp-serde = "~0.13"
+serde = "~1.0"
+serde_derive = "~1.0"
+lz4 = "~1.21"
+
+[dependencies.linked-hash-map]
+version = "~0.5"
+features = ["serde_impl"]
+
+[dev-dependencies]
+tempdir = "~0.3"
+
+[build-dependencies]
+pkg-config = "~0.3"
