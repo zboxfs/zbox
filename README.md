@@ -35,7 +35,7 @@ Features
 Disclaimer
 ==========
 `Zbox` is under active development, we are not responsible for any data loss
-caused by it. Use it at your own risk.
+or leak caused by it. Use it at your own risk.
 
 How to use
 ==========
@@ -48,9 +48,10 @@ Requirements
 
 Supported Platforms
 -------------------
-- 64bit Debian Linux or Ubuntu
-- 64bit MacOS
-- Windows IS NOT supported yet
+- 64-bit Debian or Ubuntu Linux
+- 64-bit macOS
+
+32-bit OS and Windows is not supported yet.
 
 Usage
 ------

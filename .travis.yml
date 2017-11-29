@@ -16,8 +16,10 @@ matrix:
 install:
   - mkdir -p $TRAVIS_BUILD_DIR/libsodium
   - wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.15.tar.gz
-  - tar -xzvf libsodium-1.0.15.tar.gz -C $TRAVIS_BUILD_DIR/libsodium --strip-components=1
-  - pushd $TRAVIS_BUILD_DIR/libsodium && ./configure --prefix=/usr && make && sudo make install && popd
+  - tar -xzvf libsodium-1.0.15.tar.gz -C $TRAVIS_BUILD_DIR/libsodium
+  - pushd $TRAVIS_BUILD_DIR/libsodium/libsodium-1.0.15
+  - [ "$(ls -A Makefile)" ] || ./configure --prefix=/usr
+  - make && sudo make install && popd
 
 script:
   - cargo build
