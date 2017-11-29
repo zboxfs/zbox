@@ -1,6 +1,11 @@
 Zbox
 ======
-[![Build Status](https://travis-ci.org/zboxfs/zbox.svg?branch=master)](https://travis-ci.org/zboxfs/zbox)
+[![Travis](https://img.shields.io/travis/zboxfs/zbox.svg)](https://travis-ci.org/zboxfs/zbox)
+[![Crates.io](https://img.shields.io/crates/d/zbox.svg)](https://crates.io/crates/zbox)
+[![Crates.io](https://img.shields.io/crates/v/zbox.svg)](https://crates.io/crates/zbox)
+[![GitHub last commit](https://img.shields.io/github/last-commit/zboxfs/zbox.svg)](https://github.com/zboxfs/zbox)
+[![GitHub stars](https://img.shields.io/github/stars/zboxfs/zbox.svg?style=social&label=Stars)](https://github.com/zboxfs/zbox)
+[![license](https://img.shields.io/github/license/zboxfs/zbox.svg)](https://github.com/zboxfs/zbox)
 
 Zbox is a zero-knowledge, privacy focused embeddable file system. Its goal is
 to help application store files securely, privately and reliably. By
