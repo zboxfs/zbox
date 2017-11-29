@@ -42,15 +42,18 @@ Features
 Comparison
 ----------
 Many OS-level file systems support encryption, such as
-[EncFS](https://vgough.github.io/encfs/), APFS() and ZFS(). Some disk encryption
-tools also provide virtual file system, such as TrueCrypt and VeraCrypt. Below
-is the comparison between Zbox and them.
+[EncFS](https://vgough.github.io/encfs/),
+[APFS](https://en.wikipedia.org/wiki/Apple_File_System) and
+[ZFS](https://en.wikipedia.org/wiki/ZFS). Some disk encryption tools also
+provide virtual file system, such as TrueCrypt and VeraCrypt. Below is the
+comparison between Zbox and them.
 
 |                             | Zbox                     | OS-level File Systems    | Disk Encryption Tools    |
-| --------------------------- | ------------------------ | -------                  | ----------------------   |
+| --------------------------- | ------------------------ | ------------------------ | ------------------------ |
 | Encrypts file contents      | :heavy_check_mark:       | partial                  | :heavy_check_mark:       |
 | Encrypts file metadata      | :heavy_check_mark:       | partial                  | :heavy_check_mark:       |
 | Encrypts directory          | :heavy_check_mark:       | partial                  | :heavy_check_mark:       |
+| Data integrity              | :heavy_check_mark:       | partial                  | :heavy_multiplication_x: |
 | Shared access for processes | :heavy_multiplication_x: | :heavy_check_mark:       | :heavy_check_mark:       |
 | Deduplication               | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
 | Compression                 | :heavy_check_mark:       | partial                  | :heavy_multiplication_x: |
