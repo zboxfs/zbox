@@ -3,7 +3,10 @@ rust:
   - stable
   - beta
   - nightly
-cache: cargo
+cache:
+  cargo: true
+  directories:
+    - $TRAVIS_BUILD_DIR/libsodium
 dist: trusty
 sudo: required
 matrix:
@@ -11,9 +14,10 @@ matrix:
     - rust: nightly
 
 install:
+  - mkdir -p $TRAVIS_BUILD_DIR/libsodium
   - wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.15.tar.gz
-  - tar -xzvf libsodium-1.0.15.tar.gz
-  - pushd libsodium-1.0.15 && ./configure --prefix=/usr && make && sudo make install && popd
+  - tar -xzvf libsodium-1.0.15.tar.gz -C $TRAVIS_BUILD_DIR/libsodium --strip-components=1
+  - pushd $TRAVIS_BUILD_DIR/libsodium && ./configure --prefix=/usr && make && sudo make install && popd
 
 script:
   - cargo build
