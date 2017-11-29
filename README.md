@@ -4,8 +4,8 @@ Zbox
 [![Crates.io](https://img.shields.io/crates/d/zbox.svg)](https://crates.io/crates/zbox)
 [![Crates.io](https://img.shields.io/crates/v/zbox.svg)](https://crates.io/crates/zbox)
 [![GitHub last commit](https://img.shields.io/github/last-commit/zboxfs/zbox.svg)](https://github.com/zboxfs/zbox)
-[![GitHub stars](https://img.shields.io/github/stars/zboxfs/zbox.svg?style=social&label=Stars)](https://github.com/zboxfs/zbox)
 [![license](https://img.shields.io/github/license/zboxfs/zbox.svg)](https://github.com/zboxfs/zbox)
+[![GitHub stars](https://img.shields.io/github/stars/zboxfs/zbox.svg?style=social&label=Stars)](https://github.com/zboxfs/zbox)
 
 Zbox is a zero-knowledge, privacy focused embeddable file system. Its goal is
 to help application store files securely, privately and reliably. By
@@ -17,13 +17,13 @@ provide shared access to multiple processes, Zbox is an user-space file system
 and runs in the same memory space as the application. It provides access to
 only one process at a time.
 
-To minimise data exposure, Zbox intentionally does not support
+To minimise data exposure, Zbox deliberately does not support
 [FUSE](https://github.com/libfuse/libfuse).
 
 Features
 ========
-- Everything is encrypted, including metadata and directory structure, no
-  knowledge is leaked to underneath storage
+- Everything is encrypted :lock:, including metadata and directory structure,
+  no knowledge is leaked to underneath storage
 - State-of-the-art cryptography: AES-256-GCM (hardware), ChaCha20-Poly1305,
   Argon2 password hashing and etc., empowered by
   [libsodium](https://libsodium.org/)
@@ -31,13 +31,12 @@ Features
 - Data compression using [LZ4](http://www.lz4.org) in fast mode
 - Data integrity is guranteed by authenticated encryption primitives
 - File content Revision history
-- Copy-on-write (COW) semantics
+- Copy-on-write (COW) semantics :cow:
 - ACID transactional operations
-- Snapshot
-- Append-only content data on storage
+- Snapshot :camera:
 - Support multiple storages, including memory, OS file system, RDBMS (incoming),
   Key-value object store (incoming) and more
-- Build in love with Rust
+- Build in Rust with :hearts:
 
 Disclaimer
 ==========
