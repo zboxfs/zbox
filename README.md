@@ -1,5 +1,8 @@
 Zbox
 ======
+[![Build Status](https://travis-ci.org/zboxfs/zbox.svg?branch=master)]
+(https://travis-ci.org/zboxfs/zbox)
+
 Zbox is a zero-knowledge, privacy focused embeddable file system. Its goal is
 to help application store files securely, privately and reliably. By
 encapsulating files and directories into an encrypted repository, it can provide
@@ -35,7 +38,8 @@ Features
 Disclaimer
 ==========
 `Zbox` is under active development, we are not responsible for any data loss
-or leak caused by it. Use it at your own risk.
+or leak caused by using it. Always back up your files and use it at your
+own risk!
 
 How to use
 ==========
@@ -48,10 +52,10 @@ Requirements
 
 Supported Platforms
 -------------------
-- 64-bit Debian or Ubuntu Linux
+- 64-bit Debian-based Linux
 - 64-bit macOS
 
-32-bit OS and Windows is not supported yet.
+32-bit OS and Windows are not supported yet.
 
 Usage
 ------
@@ -59,7 +63,7 @@ Add the following dependency to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-zbox = "0.1"
+zbox = "~0.1"
 ```
 
 Example
@@ -67,25 +71,78 @@ Example
 ```rust
 extern crate zbox;
 
-use zbox::{zbox_init, RepoOpener};
+use std::io::{Read, Write};
+use zbox::{zbox_init, RepoOpener, OpenOptions};
 
 fn main() {
-    // initialise zbox environment, only called once
+    // Initialise zbox environment, need to be called first and only.
     zbox_init();
 
-    // repository path on your OS file system
-    let repo_uri = "file://./hello_world_repo";
+    // Speicify repository location using URI-like string. Currently, two
+    // types of prefixes are supported:
+    //   - "file://": use OS file as storage
+    //   - "mem://": use memory as storage
+    // After the prefix is the actual location of repository. Here we're
+    // going to create an OS file repository called 'my_repo' under current
+    // directory.
+    let repo_uri = "file://./my_repo";
 
-    // password of your repository
+    // Speicify password of the repository.
     let pwd = "your secret";
 
-    // create the repository
-    let mut repo = RepoOpener::new()
+    // Create and open the repository.
+    let mut repo = RepoOpener::new().create(true).open(&repo_uri, &pwd).unwrap();
+
+    // Speicify file path we need to create in the repository and its data.
+    let file_path = "/my_file";
+    let data = String::from("Hello, world").into_bytes();
+
+    // Create and open a regular file for writing, this file is inside the
+    // repository so it will be encrypted and kept privately.
+    let mut f = OpenOptions::new()
         .create(true)
-        .open(&repo_uri, &pwd)
+        .open(&mut repo, &file_path)
         .unwrap();
+
+    // Like normal file operations, we can use std::io::Write trait to write
+    // data into it.
+    f.write_all(&data).unwrap();
+
+    // But need to finish the writting before a permanent content version
+    // can be made.
+    f.finish().unwrap();
+
+    // Now we can read content from the file using std::io::Read trait.
+    let mut buf = Vec::new();
+    f.read_to_end(&mut buf).unwrap();
+
+    // Convert content from bytes to string and print it to stdout. It should
+    // display 'Hello, world' to your terminal.
+    let output = String::from_utf8(buf).unwrap();
+    println!("{}", output);
 }
 ```
+
+Build with Docker
+-----------------
+Zbox comes with Docker support, it is based on rust:latest and Debian Linux.
+Check the [Dockerfile](Dockerfile) for details.
+
+First, we build the Docker image which can be used to compile Zbox, run below
+commands from Zbox project folder.
+```bash
+socker build --force-rm -t zbox ./
+```
+
+After the Docker image is built, we can use it to build Zbox.
+```bash
+docker run --rm -v $PWD:/zbox zbox cargo build
+```
+
+Contributing
+============
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of
+conduct, and the process for submitting pull requests to us.
 
 License
 =======

@@ -1,4 +1,4 @@
-FROM rust:1.21
+FROM rust:latest
 
 # define libsodium library environment variables
 ENV libsodium libsodium-1.0.15

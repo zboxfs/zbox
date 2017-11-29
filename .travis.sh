@@ -10,8 +10,7 @@ mkdir -p $base_dir
 
 if [ ! -f $sodium_dir/Makefile ]; then
   wget https://download.libsodium.org/libsodium/releases/$sodium.tar.gz
-  tar -xzvf $sodium.tar.gz -C $base_dir
-  cd $sodium_dir && ./configure --prefix=/usr
+  tar -xzf $sodium.tar.gz -C $base_dir
+  cd $sodium_dir && ./configure --prefix=/usr && make && sudo make install
 fi
 
-cd $sodium_dir && make && sudo make install

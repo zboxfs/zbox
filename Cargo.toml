@@ -13,7 +13,7 @@ license = "Apache-2.0"
 build = "build.rs"
 
 [badges]
-maintenance = { status = "actively-developed"  }
+circle-ci = { repository = "zboxfs/zbox" }
 
 [lib]
 name = "zbox"
