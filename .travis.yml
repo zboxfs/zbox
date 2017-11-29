@@ -13,13 +13,8 @@ matrix:
   allow_failures:
     - rust: nightly
 
-install:
-  - mkdir -p $TRAVIS_BUILD_DIR/libsodium
-  - wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.15.tar.gz
-  - tar -xzvf libsodium-1.0.15.tar.gz -C $TRAVIS_BUILD_DIR/libsodium
-  - pushd $TRAVIS_BUILD_DIR/libsodium/libsodium-1.0.15
-  - [ "$(ls -A Makefile)" ] || ./configure --prefix=/usr
-  - make && sudo make install && popd
+before_install:
+  - ./.travis.sh
 
 script:
   - cargo build
