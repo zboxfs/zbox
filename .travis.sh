@@ -14,4 +14,4 @@ if [ ! -f $sodium_dir/Makefile ]; then
   cd $sodium_dir && ./configure --prefix=/usr && make
 fi
 
-sudo make install
+cd $sodium_dir && sudo make install
