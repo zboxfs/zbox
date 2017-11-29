@@ -9,16 +9,17 @@ Zbox
 
 Zbox is a zero-knowledge, privacy focused embeddable file system. Its goal is
 to help application store files securely, privately and reliably. By
-encapsulating files and directories into an encrypted repository, it can provide
-exclusive access to the authorised application.
+encapsulating files and directories into an encrypted repository, it provides
+a virtual file system and exclusive access to authorised application.
 
 Unlike other system-level file systems, such as ext4, XFS and btrfs, which
-provide shared access to multiple processes, Zbox is an user-space file system
-and runs in the same memory space as the application. It provides access to
-only one process at a time.
+provide shared access to multiple processes, Zbox is file system that runs
+inside the same memory space as the application. It only provide access to one
+process at a time.
 
-To minimise data exposure, Zbox deliberately does not support
-[FUSE](https://github.com/libfuse/libfuse).
+By abstracting IO access, Zbox supports a variety of underneath storage layers.
+Memory and OS file system are supported, RDBMS and key-value object store
+supports are incoming soon.
 
 Features
 ========
@@ -31,12 +32,36 @@ Features
 - Data compression using [LZ4](http://www.lz4.org) in fast mode
 - Data integrity is guranteed by authenticated encryption primitives
 - File content Revision history
-- Copy-on-write (COW) semantics :cow:
+- Copy-on-write (COW :cow:) semantics
 - ACID transactional operations
 - Snapshot :camera:
 - Support multiple storages, including memory, OS file system, RDBMS (incoming),
   Key-value object store (incoming) and more
 - Build in Rust with :hearts:
+
+Comparison
+----------
+Many OS-level file systems support encryption, such as
+[EncFS](https://vgough.github.io/encfs/), APFS() and ZFS(). Some disk encryption
+tools also provide virtual file system, such as TrueCrypt and VeraCrypt. Below
+is the comparison between Zbox and them.
+
+|                             | Zbox                     | OS-level File Systems    | Disk Encryption Tools    |
+| --------------------------- | ------------------------ | -------                  | ----------------------   |
+| Encrypts file contents      | :heavy_check_mark:       | partial                  | :heavy_check_mark:       |
+| Encrypts file metadata      | :heavy_check_mark:       | partial                  | :heavy_check_mark:       |
+| Encrypts directory          | :heavy_check_mark:       | partial                  | :heavy_check_mark:       |
+| Shared access for processes | :heavy_multiplication_x: | :heavy_check_mark:       | :heavy_check_mark:       |
+| Deduplication               | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
+| Compression                 | :heavy_check_mark:       | partial                  | :heavy_multiplication_x: |
+| COW semantics               | :heavy_check_mark:       | partial                  | :heavy_multiplication_x: |
+| ACID Transaction            | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
+| Multiple storage layers     | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
+| Direct API access           | :heavy_check_mark:       | through VFS              | through VFS              |
+| Symbolic links              | :heavy_multiplication_x: | :heavy_check_mark:       | depends on inner FS      |
+| FUSE support                | :heavy_multiplication_x: | :heavy_check_mark:       | :heavy_check_mark:       |
+| Linux and macOS support     | :heavy_check_mark:       | :heavy_check_mark:       | :heavy_check_mark:       |
+| Windows support             | :heavy_multiplication_x: | partial                  | :heavy_check_mark:       |
 
 Disclaimer
 ==========
