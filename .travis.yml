@@ -1,0 +1,16 @@
+language: rust
+rust:
+  - stable
+  - beta
+  - nightly
+cache: cargo
+dist: trusty
+sudo: required
+matrix:
+  allow_failures:
+    - rust: nightly
+
+install:
+  - wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.15.tar.gz
+  - tar -xzvf libsodium-1.0.15.tar.gz
+  - pushd libsodium-1.0.15 && ./configure && make && sudo make install && popd

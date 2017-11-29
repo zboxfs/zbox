@@ -1,16 +1,19 @@
 [package]
 name = "zbox"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Bo Lu"]
-description = "This package is still under working, please check it later."
-documentation = "https://docs.zbox.io"
-homepage = "https://github.com/Zbox-io/zbox"
-repository = "https://github.com/Zbox-io/zbox"
+description = "Zbox is a zero-knowledge, privacy focused embeddable file system."
+documentation = "https://docs.rs/zbox"
+homepage = "https://github.com/zboxfs/zbox"
+repository = "https://github.com/zboxfs/zbox"
 readme = "README.md"
-keywords = []
-categories = []
+keywords = ["filesystem", "crypto", "security", "privacy", "storage"]
+categories = ["filesystem", "cryptography"]
 license = "Apache-2.0"
 build = "build.rs"
+
+[badges]
+maintenance = { status = "actively-developed"  }
 
 [lib]
 name = "zbox"
