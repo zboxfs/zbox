@@ -1,4 +1,4 @@
-![Zbox](https://www.zbox.io/img/logo_120x120.png) Zbox
+![Zbox](https://www.zbox.io/img/logo_96x96.png) Zbox
 ======
 [![Travis](https://img.shields.io/travis/zboxfs/zbox.svg)](https://travis-ci.org/zboxfs/zbox)
 [![Crates.io](https://img.shields.io/crates/d/zbox.svg)](https://crates.io/crates/zbox)
