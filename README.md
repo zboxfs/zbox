@@ -1,4 +1,4 @@
-Zbox
+![Zbox](https://www.zbox.io/img/logo_120x120.png) Zbox
 ======
 [![Travis](https://img.shields.io/travis/zboxfs/zbox.svg)](https://travis-ci.org/zboxfs/zbox)
 [![Crates.io](https://img.shields.io/crates/d/zbox.svg)](https://crates.io/crates/zbox)
@@ -20,6 +20,11 @@ process at a time.
 By abstracting IO access, Zbox supports a variety of underneath storage layers.
 Memory and OS file system are supported, RDBMS and key-value object store
 supports are incoming soon.
+
+Disclaimer
+----------
+Zbox is under active development, we are not responsible for any data loss
+or leak caused by using it. Always back up your files and use at your own risk!
 
 Features
 ========
@@ -65,11 +70,6 @@ comparison between Zbox and them.
 | FUSE support                | :heavy_multiplication_x: | :heavy_check_mark:       | :heavy_check_mark:       |
 | Linux and macOS support     | :heavy_check_mark:       | :heavy_check_mark:       | :heavy_check_mark:       |
 | Windows support             | :heavy_multiplication_x: | partial                  | :heavy_check_mark:       |
-
-Disclaimer
-==========
-Zbox is under active development, we are not responsible for any data loss
-or leak caused by using it. Always back up your files and use at your own risk!
 
 How to use
 ==========
