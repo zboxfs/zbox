@@ -14,7 +14,7 @@ a virtual file system and exclusive access to authorised application.
 
 Unlike other system-level file systems, such as ext4, XFS and btrfs, which
 provide shared access to multiple processes, Zbox is file system that runs
-inside the same memory space as the application. It only provide access to one
+in the same memory space as the application. It only provide access to one
 process at a time.
 
 By abstracting IO access, Zbox supports a variety of underneath storage layers.
@@ -33,24 +33,21 @@ Features
 - State-of-the-art cryptography: AES-256-GCM (hardware), ChaCha20-Poly1305,
   Argon2 password hashing and etc., empowered by [libsodium]
 - Content-based data chunk deduplication and file-based deduplication
-- Data compression using [LZ4](http://www.lz4.org) in fast mode
+- Data compression using [LZ4] in fast mode
 - Data integrity is guranteed by authenticated encryption primitives (AEAD)
 - File contents versioning
 - Copy-on-write (COW :cow:) semantics
 - ACID transactional operations
 - Snapshot :camera:
-- Support multiple storages, including memory, OS file system, RDBMS (incoming),
-  Key-value object store (incoming) and more
+- Support multiple storages, including memory, OS file system, RDBMS (coming
+  soon), Key-value object store (coming soon) and more
 - Build in [Rust] with :hearts:
 
 ## Comparison
 
-Many OS-level file systems support encryption, such as
-[EncFS](https://vgough.github.io/encfs/),
-[APFS](https://en.wikipedia.org/wiki/Apple_File_System) and
-[ZFS](https://en.wikipedia.org/wiki/ZFS). Some disk encryption tools also
-provide virtual file system, such as TrueCrypt and VeraCrypt. Below is the
-comparison between Zbox and them.
+Many OS-level file systems support encryption, such as [EncFS], [APFS] and
+[ZFS]. Some disk encryption tools also provide virtual file system, such as
+[TrueCrypt] and [VeraCrypt]. Below is the comparison between Zbox and them.
 
 |                             | Zbox                     | OS-level File Systems    | Disk Encryption Tools    |
 | --------------------------- | ------------------------ | ------------------------ | ------------------------ |
@@ -108,20 +105,20 @@ fn main() {
     // initialise zbox environment, called first
     zbox_init();
 
-    // create and open a repository
+    // create and open a repository in current OS directory
     let mut repo = RepoOpener::new()
         .create(true)
         .open("file://./my_repo", "your password")
         .unwrap();
 
-    // create and open a file for writing
+    // create and open a file in repository for writing
     let mut file = OpenOptions::new()
         .create(true)
         .open(&mut repo, "/my_file")
         .unwrap();
 
     // use std::io::Write trait to write data into it
-    filej.write_all(b"Hello, world!").unwrap();
+    file.write_all(b"Hello, world!").unwrap();
 
     // finish the writting to make a permanent version of content
     file.finish().unwrap();
@@ -166,3 +163,8 @@ conduct, and the process for submitting pull requests to us.
 [Rust]: https://www.rust-lang.org
 [libsodium]: https://libsodium.org
 [LZ4]: http://www.lz4.org
+[EncFS]: https://vgough.github.io/encfs/
+[APFS]: https://en.wikipedia.org/wiki/Apple_File_System
+[ZFS]: https://en.wikipedia.org/wiki/ZFS
+[TrueCrypt]: http://truecrypt.sourceforge.net
+[VeraCrypt]: https://veracrypt.codeplex.com
