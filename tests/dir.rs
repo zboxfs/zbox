@@ -19,9 +19,9 @@ fn dir_create() {
     assert!(repo.create_dir("/xxx/yyy").is_err());
     repo.create_dir("/dir2").unwrap();
     repo.create_dir("/dir3").unwrap();
-    assert!(repo.path_is_dir("/dir"));
-    assert!(repo.path_is_dir("/dir2"));
-    assert!(repo.path_is_dir("/dir3"));
+    assert!(repo.is_dir("/dir"));
+    assert!(repo.is_dir("/dir2"));
+    assert!(repo.is_dir("/dir3"));
 
     // #2: test create_dir_all
     repo.create_dir_all("/xxx/yyy").unwrap();

@@ -455,7 +455,10 @@ impl Salt {
 pub const HASH_STATE_SIZE: usize = 384;
 pub type HashState = [u8; HASH_STATE_SIZE];
 
-/// Password hash operation limit
+/// Password hash operation limit.
+///
+/// It represents a maximum amount of computations to perform. High level will
+/// require more CPU cycles to compute.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum OpsLimit {
     Interactive = 4,
@@ -480,12 +483,20 @@ impl From<u8> for OpsLimit {
     }
 }
 
-/// Password hash memory limit
+/// Password hash memory limit.
+///
+/// It represents a maximum amount of memory required to perform password
+/// hashing.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum MemLimit {
-    Interactive = 33554432, // 32 MB
-    Moderate = 134217728, // 128 MB
-    Sensitive = 536870912, // 512 MB
+    /// 64 MB
+    Interactive = 67108864,
+
+    /// 256 MB
+    Moderate = 268435456,
+
+    /// 1024 MB
+    Sensitive = 1073741824,
 }
 
 impl Default for MemLimit {
@@ -494,6 +505,10 @@ impl Default for MemLimit {
     }
 }
 
+/// Password hashing cost consists of [`OpsLimit`] and [`MemLimit`].
+///
+/// [`OpsLimit`]: enum.OpsLimit.html
+/// [`MemLimit`]: enum.MemLimit.html
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Cost {
     pub ops_limit: OpsLimit,
@@ -584,11 +599,14 @@ impl Default for Key {
     }
 }
 
-/// Crypto cipher primitivies
+/// Crypto cipher primitivies.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Cipher {
-    Xchacha, // XChaCha20-Poly1305
-    Aes, // AES256-GCM
+    /// XChaCha20-Poly1305
+    Xchacha,
+
+    /// AES256-GCM (hardware)
+    Aes,
 }
 
 impl Cipher {
@@ -648,9 +666,6 @@ type DecryptFn = unsafe extern "C" fn(m: *mut u8,
                                       k: *const u8)
                                       -> i32;
 
-// ---------
-// Crypto
-// ---------
 /// Crypto
 #[derive(Debug, Clone)]
 pub struct Crypto {

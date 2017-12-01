@@ -20,7 +20,7 @@ use super::Handle;
 // maximum sub nodes for a fnode
 const SUB_NODES_CNT: usize = 8;
 
-/// Fnode type
+/// A structure representing a type of file with accessors for each file type.
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize, Serialize)]
 pub enum FileType {
     File,
@@ -83,7 +83,7 @@ impl Version {
     }
 }
 
-/// Fnode metadata
+/// Metadata information about a file or a directory.
 #[derive(Debug, Copy, Clone)]
 pub struct Metadata {
     ftype: FileType,
@@ -123,7 +123,9 @@ impl Metadata {
     }
 }
 
-/// Directory entry
+/// Entries returned by the [`read_dir`].
+///
+/// [`read_dir`]: struct.Repo.html#method.read_dir
 #[derive(Debug)]
 pub struct DirEntry {
     path: PathBuf,

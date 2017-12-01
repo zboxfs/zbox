@@ -8,7 +8,9 @@ use trans::Eid;
 use fs::{Fs, FsRef, FileType, Version, Metadata, DirEntry, Fnode};
 use super::{Result, File};
 
-/// Repo opener
+/// A builder used to create repository [`Repo`] in various manners.
+///
+/// [`Repo`]: struct.Repo.html
 #[derive(Debug)]
 pub struct RepoOpener {
     cost: Cost,
@@ -80,7 +82,7 @@ impl Default for RepoOpener {
     }
 }
 
-/// File open options
+/// Options and flags which can be used to configure how a file is opened.
 #[derive(Debug)]
 pub struct OpenOptions {
     read: bool,
@@ -158,6 +160,7 @@ impl OpenOptions {
         repo: &mut Repo,
         path: P,
     ) -> Result<File> {
+        // version limit must be greater than 0
         if self.version_limit == 0 {
             return Err(Error::InvalidArgument);
         }
@@ -165,19 +168,84 @@ impl OpenOptions {
     }
 }
 
-/// Repository info
+/// Information about a repository.
 #[derive(Debug)]
 pub struct RepoInfo {
+    /// Unique volume id
     pub volume_id: Eid,
+
+    /// Repository version number
     pub ver: RepoVersion,
+
+    /// Location URI string
     pub uri: String,
+
+    /// Password hashing cost
     pub cost: Cost,
+
+    /// Crypto cipher
     pub cipher: Cipher,
+
+    /// Creation time
     pub ctime: Time,
+
+    /// Read only mode
     pub read_only: bool,
 }
 
-/// Repository
+/// An encrypted repository contains the whole file system.
+///
+/// A `Repo` represents a secure collection which consists of files,
+/// directories and their associated data. Similar to [`std::fs`], `Repo`
+/// provides methods to manipulate the inner file system.
+///
+/// [`zbox_init`] should be called before any operations on `Repo`.
+///
+/// # Create and open `Repo`
+///
+/// `Repo` can be created on different storages using [`RepoOpener`]. It uses
+/// an URI-like string to specify location. Currently two types of storages
+/// are supported:
+///
+/// * OS file system based storage, location prefix: `file://`
+/// * Memory based storage, location prefix: `mem://`
+///
+/// `Repo` can only be opened once at a time. After opened, it keeps locked
+/// from other open attempts until it goes out scope.
+///
+/// Optionally, `Repo` can also be opened in [`read-only`] mode.
+///
+/// # Examples
+///
+/// Create an OS file system based repository.
+///
+/// ```no_run
+/// # use zbox::Result;
+/// use zbox::{zbox_init, RepoOpener};
+///
+/// # fn foo() -> Result<()> {
+/// zbox_init();
+/// let mut repo = RepoOpener::new()
+///     .create(true)
+///     .open("file:///local/path", "pwd")?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// Create a memory based repository.
+///
+/// ```no_run
+/// # use zbox::{Result, RepoOpener};
+/// # fn foo() -> Result<()> {
+/// let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// [`std::fs`]: https://doc.rust-lang.org/std/fs/index.html
+/// [`zbox_init`]: fn.zbox_init.html
+/// [`RepoOpener`]: struct.RepoOpener.html
+/// [`read-only`]: struct.RepoOpener.html#method.read_only
 #[derive(Debug)]
 pub struct Repo {
     fs: FsRef,
@@ -185,7 +253,10 @@ pub struct Repo {
 }
 
 impl Repo {
-    /// Check if repo exists
+    /// Returns whether the URI points at an existing repository.
+    ///
+    /// Existence check depends on underneath storage, for memory storage, it
+    /// always returns true.
     pub fn exists(uri: &str) -> Result<bool> {
         Fs::exists(uri)
     }
@@ -245,7 +316,7 @@ impl Repo {
     }
 
     /// Check if path is a regular file
-    pub fn path_is_file<P: AsRef<Path>>(&self, path: P) -> bool {
+    pub fn is_file<P: AsRef<Path>>(&self, path: P) -> bool {
         let fs = self.fs.read().unwrap();
         match fs.resolve(path.as_ref()) {
             Ok(fnode_ref) => {
@@ -257,7 +328,7 @@ impl Repo {
     }
 
     /// Check if path is a directory
-    pub fn path_is_dir<P: AsRef<Path>>(&self, path: P) -> bool {
+    pub fn is_dir<P: AsRef<Path>>(&self, path: P) -> bool {
         let fs = self.fs.read().unwrap();
         match fs.resolve(path.as_ref()) {
             Ok(fnode_ref) => {
@@ -284,12 +355,16 @@ impl Repo {
         let mut fs = self.fs.write().unwrap();
         let path = path.as_ref();
 
-        if fs.resolve(path).is_ok() {
-            if opts.create_new {
-                return Err(Error::AlreadyExists);
+        match fs.resolve(path) {
+            Ok(_) => {
+                if opts.create_new {
+                    return Err(Error::AlreadyExists);
+                }
             }
-        } else if opts.create {
-            fs.create_fnode(path, FileType::File, opts.version_limit)?;
+            Err(ref err) if *err == Error::NotFound => {
+                fs.create_fnode(path, FileType::File, opts.version_limit)?;
+            }
+            Err(err) => return Err(err),
         }
 
         let curr_len;
@@ -316,7 +391,15 @@ impl Repo {
         Ok(file)
     }
 
-    /// Open a regular file in read-only
+    /// Create a file
+    pub fn create_file<P: AsRef<Path>>(&mut self, path: P) -> Result<File> {
+        OpenOptions::new().create(true).truncate(true).open(
+            self,
+            path,
+        )
+    }
+
+    /// Open a regular file in read-only mode
     pub fn open_file<P: AsRef<Path>>(&mut self, path: P) -> Result<File> {
         OpenOptions::new().open(self, path)
     }
@@ -348,7 +431,8 @@ impl Repo {
         fs.read_dir(path.as_ref())
     }
 
-    /// Get metadata of a path
+    /// Given a path, query the repository to get information about a file,
+    /// directory, etc.
     pub fn metadata<P: AsRef<Path>>(&self, path: P) -> Result<Metadata> {
         let fs = self.fs.read().unwrap();
         fs.metadata(path.as_ref())

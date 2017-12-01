@@ -9,9 +9,12 @@ use rmp_serde::decode::Error as DecodeError;
 
 use base::crypto::Error as CryptoError;
 
+/// The error type for operations with [`Repo`] and [`File`].
+///
+/// [`Repo`]: struct.Repo.html
+/// [`File`]: struct.File.html
 #[derive(Debug)]
 pub enum Error {
-    Lock,
     RefOverflow,
     RefUnderflow,
 
@@ -56,7 +59,6 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
-            Error::Lock => write!(f, "Lock failed"),
             Error::RefOverflow => write!(f, "Refcnt overflow"),
             Error::RefUnderflow => write!(f, "Refcnt underflow"),
 
@@ -103,7 +105,6 @@ impl Display for Error {
 impl StdError for Error {
     fn description(&self) -> &str {
         match *self {
-            Error::Lock => "Lock failed",
             Error::RefOverflow => "Refcnt overflow",
             Error::RefUnderflow => "Refcnt underflow",
 
@@ -190,7 +191,6 @@ impl From<IoError> for Error {
 impl PartialEq for Error {
     fn eq(&self, other: &Error) -> bool {
         match (self, other) {
-            (&Error::Lock, &Error::Lock) => true,
             (&Error::RefOverflow, &Error::RefOverflow) => true,
             (&Error::RefUnderflow, &Error::RefUnderflow) => true,
             (&Error::InvalidUri, &Error::InvalidUri) => true,
@@ -228,4 +228,8 @@ impl PartialEq for Error {
         }
     }
 }
+
+/// A specialized [`Result`] type for Zbox operations.
+///
+/// [`Result`]: https://doc.rust-lang.org/std/result/enum.Result.html
 pub type Result<T> = StdResult<T, Error>;

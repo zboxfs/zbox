@@ -19,7 +19,7 @@ fn file_open_close() {
         .unwrap();
     assert!(f.metadata().is_file());
     assert!(repo.path_exists("/file"));
-    assert!(repo.path_is_file("/file"));
+    assert!(repo.is_file("/file"));
 }
 
 #[test]
@@ -43,6 +43,13 @@ fn file_read_write() {
         let result = f.read_to_end(&mut dst).unwrap();
         assert_eq!(result, buf.len());
         assert_eq!(&dst[..], &buf[..]);
+
+        // use repo file creation shortcut
+        repo.create_file("/file1.1").unwrap();
+        assert_eq!(
+            repo.create_file("file1.2").unwrap_err(),
+            Error::InvalidPath
+        );
     }
 
     // #2, overwrite file

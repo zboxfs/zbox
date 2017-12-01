@@ -35,7 +35,66 @@ impl<'a> Seek for VersionReader<'a> {
     }
 }
 
-/// File
+/// A reference to an open file in the repository.
+///
+/// An instance of a `File` can be read and/or written depending on what options
+/// it was opened with. Files also implement [`Seek`] to alter the logical cursor
+/// that the file contains internally.
+///
+/// Files are automatically flushed and closed when they go out of scope. So
+/// calling [`flush`] is not recommendated.
+///
+/// As Zbox internally cached file content, it is no need to use buffered
+/// reader, such as [`BufReader<R>`].
+///
+/// # Examples
+///
+/// Create a new file and write bytes to it:
+///
+/// ```
+/// use std::io::prelude::*;
+/// # use zbox::{zbox_init, Result, RepoOpener};
+///
+/// # fn foo() -> Result<()> {
+/// # zbox_init();
+/// # let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
+/// let mut file = repo.create_file("/foo.txt")?;
+/// file.write_all(b"Hello, world!")?;
+/// # Ok(())
+/// # }
+/// # foo().unwrap();
+/// ```
+///
+/// Read the current version of content of a file into a [`String`]:
+///
+/// ```
+/// # use zbox::{zbox_init, Result, RepoOpener};
+/// use std::io::prelude::*;
+/// # use zbox::OpenOptions;
+///
+/// # fn foo() -> Result<()> {
+/// # zbox_init();
+/// # let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
+/// # {
+/// #     let mut file = OpenOptions::new()
+/// #         .create(true)
+/// #         .open(&mut repo, "/foo.txt")?;
+/// #     file.write_all(b"Hello, world!")?;
+/// #     file.finish()?;
+/// # }
+/// let mut file = repo.open_file("/foo.txt")?;
+/// let mut content = String::new();
+/// file.read_to_string(&mut content)?;
+/// assert_eq!(content, "Hello, world!");
+/// # Ok(())
+/// # }
+/// # foo().unwrap();
+/// ```
+///
+/// [`Seek`]: https://doc.rust-lang.org/std/io/trait.Seek.html
+/// [`BufReader<R>`]: https://doc.rust-lang.org/std/io/struct.BufReader.html
+/// [`flush`]: https://doc.rust-lang.org/std/io/trait.Write.html#tymethod.flush
+/// [`String`]: https://doc.rust-lang.org/std/string/struct.String.html
 pub struct File {
     handle: Handle,
     ver: usize,
