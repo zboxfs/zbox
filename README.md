@@ -34,8 +34,8 @@ Features
   Argon2 password hashing and etc., empowered by [libsodium]
 - Content-based data chunk deduplication and file-based deduplication
 - Data compression using [LZ4](http://www.lz4.org) in fast mode
-- Data integrity is guranteed by authenticated encryption primitives
-- File content Revision history
+- Data integrity is guranteed by authenticated encryption primitives (AEAD)
+- File contents versioning
 - Copy-on-write (COW :cow:) semantics
 - ACID transactional operations
 - Snapshot :camera:
@@ -130,7 +130,6 @@ fn main() {
     let mut content = String::new();
     file.read_to_string(&mut content).unwrap();
     assert_eq!(content, "Hello, world!");
-}
 }
 ```
 
