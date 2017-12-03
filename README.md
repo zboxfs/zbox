@@ -1,10 +1,10 @@
 ![Zbox](https://www.zbox.io/img/logo_96x96.png) Zbox
 ======
-[![Travis](https://img.shields.io/travis/zboxfs/zbox.svg)](https://travis-ci.org/zboxfs/zbox)
-[![Crates.io](https://img.shields.io/crates/d/zbox.svg)](https://crates.io/crates/zbox)
-[![Crates.io](https://img.shields.io/crates/v/zbox.svg)](https://crates.io/crates/zbox)
-[![GitHub last commit](https://img.shields.io/github/last-commit/zboxfs/zbox.svg)](https://github.com/zboxfs/zbox)
-[![license](https://img.shields.io/github/license/zboxfs/zbox.svg)](https://github.com/zboxfs/zbox)
+[![Travis](https://img.shields.io/travis/zboxfs/zbox.svg?style=flat-square)](https://travis-ci.org/zboxfs/zbox)
+[![Crates.io](https://img.shields.io/crates/d/zbox.svg?style=flat-square)](https://crates.io/crates/zbox)
+[![Crates.io](https://img.shields.io/crates/v/zbox.svg?style=flat-square)](https://crates.io/crates/zbox)
+[![GitHub last commit](https://img.shields.io/github/last-commit/zboxfs/zbox.svg?style=flat-square)](https://github.com/zboxfs/zbox)
+[![license](https://img.shields.io/github/license/zboxfs/zbox.svg?style=flat-square)](https://github.com/zboxfs/zbox)
 [![GitHub stars](https://img.shields.io/github/stars/zboxfs/zbox.svg?style=social&label=Stars)](https://github.com/zboxfs/zbox)
 
 Zbox is a zero-knowledge, privacy-focused embeddable file system. Its goal is
@@ -13,7 +13,7 @@ encapsulating files and directories into an encrypted repository, it provides
 a virtual file system and exclusive access to authorised application.
 
 Unlike other system-level file systems, such as ext4, XFS and btrfs, which
-provide shared access to multiple processes, Zbox is file system that runs
+provide shared access to multiple processes, Zbox is a file system that runs
 in the same memory space as the application. It only provide access to one
 process at a time.
 
@@ -30,11 +30,12 @@ Features
 ========
 - Everything is encrypted :lock:, including metadata and directory structure,
   no knowledge is leaked to underneath storage
-- State-of-the-art cryptography: AES-256-GCM (hardware), ChaCha20-Poly1305,
+- State-of-the-art cryptography: AES-256-GCM (hardware), XChaCha20-Poly1305,
   Argon2 password hashing and etc., empowered by [libsodium]
 - Content-based data chunk deduplication and file-based deduplication
 - Data compression using [LZ4] in fast mode
-- Data integrity is guranteed by authenticated encryption primitives (AEAD)
+- Data integrity is guranteed by authenticated encryption primitives (AEAD
+  crypto)
 - File contents versioning
 - Copy-on-write (COW :cow:) semantics
 - ACID transactional operations
@@ -47,7 +48,13 @@ Features
 
 Many OS-level file systems support encryption, such as [EncFS], [APFS] and
 [ZFS]. Some disk encryption tools also provide virtual file system, such as
-[TrueCrypt] and [VeraCrypt]. Below is the comparison between Zbox and them.
+[TrueCrypt] and [VeraCrypt].
+
+This diagram shows the differece between Zbox and them.
+
+![Comparison](https://www.zbox.io/diagram/zbox-compare.svg)
+
+Below is the feature comparison list.
 
 |                             | Zbox                     | OS-level File Systems    | Disk Encryption Tools    |
 | --------------------------- | ------------------------ | ------------------------ | ------------------------ |
@@ -61,7 +68,7 @@ Many OS-level file systems support encryption, such as [EncFS], [APFS] and
 | COW semantics               | :heavy_check_mark:       | partial                  | :heavy_multiplication_x: |
 | ACID Transaction            | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
 | Multiple storage layers     | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
-| Direct API access           | :heavy_check_mark:       | through VFS              | through VFS              |
+| API access                  | :heavy_check_mark:       | through VFS              | through VFS              |
 | Symbolic links              | :heavy_multiplication_x: | :heavy_check_mark:       | depends on inner FS      |
 | Users and permissions       | :heavy_multiplication_x: | :heavy_check_mark:       | :heavy_check_mark:       |
 | FUSE support                | :heavy_multiplication_x: | :heavy_check_mark:       | :heavy_check_mark:       |
@@ -82,7 +89,7 @@ For reference documentation, please visit [documentation](https://docs.rs/zbox).
 - 64-bit Debian-based Linux, such as Ubuntu
 - 64-bit macOS
 
-32-bit OS and Windows are not supported yet.
+32-bit OS and Windows are `NOT` supported yet.
 
 ## Usage
 
@@ -146,12 +153,13 @@ After the Docker image is built, we can use it to build Zbox.
 docker run --rm -v $PWD:/zbox zbox cargo build
 ```
 
-License
-=======
-`Zbox` is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE)
-file for details.
+Or run the test suite.
+```bash
+docker run --rm -v $PWD:/zbox zbox cargo test
+```
 
-## Contribution
+Contribution
+============
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall
@@ -159,6 +167,11 @@ be licensed as above, without any additional terms of conditions.
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of
 conduct, and the process for submitting pull requests to us.
+
+License
+=======
+`Zbox` is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE)
+file for details.
 
 [Rust]: https://www.rust-lang.org
 [libsodium]: https://libsodium.org
@@ -168,3 +181,4 @@ conduct, and the process for submitting pull requests to us.
 [ZFS]: https://en.wikipedia.org/wiki/ZFS
 [TrueCrypt]: http://truecrypt.sourceforge.net
 [VeraCrypt]: https://veracrypt.codeplex.com
+

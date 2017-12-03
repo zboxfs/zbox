@@ -637,6 +637,7 @@ impl Debug for SectorMgr {
             .finish()
     }
 }
+
 #[cfg(test)]
 mod tests {
     use volume::storage::file::span::Span;
