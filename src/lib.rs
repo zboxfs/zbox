@@ -14,7 +14,7 @@
 //! [`zbox_init`] initialises the environment and should be called before
 //! any other methods provied by Zbox. It can be called more than once.
 //!
-//! # Example
+//! # Examples
 //!
 //! Create and open a [`Repo`] using OS file system as storage.
 //!
@@ -24,7 +24,7 @@
 //! // initialise zbox environment, called first
 //! zbox_init();
 //!
-//! // create and open the repository
+//! // create and open a repository
 //! let mut repo = RepoOpener::new()
 //!     .create(true)
 //!     .open("file://./my_repo", "your password")
@@ -43,10 +43,10 @@
 //! #    .open("mem://foo", "pwd")
 //! #    .unwrap();
 //!
-//! // create and open file for writing
+//! // create and open a file for writing
 //! let mut file = OpenOptions::new()
 //!     .create(true)
-//!     .open(&mut repo, "/my_file")
+//!     .open(&mut repo, "/my_file.txt")
 //!     .unwrap();
 //!
 //! // use std::io::Write trait to write data into it

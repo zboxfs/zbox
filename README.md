@@ -1,4 +1,4 @@
-![Zbox](https://www.zbox.io/img/logo_96x96.png) Zbox
+<img src="https://www.zbox.io/svg/logo.svg" alt="Zbox Logo" height="96" /> Zbox
 ======
 [![Travis](https://img.shields.io/travis/zboxfs/zbox.svg?style=flat-square)](https://travis-ci.org/zboxfs/zbox)
 [![Crates.io](https://img.shields.io/crates/d/zbox.svg?style=flat-square)](https://crates.io/crates/zbox)
@@ -52,7 +52,7 @@ Many OS-level file systems support encryption, such as [EncFS], [APFS] and
 
 This diagram shows the differece between Zbox and them.
 
-![Comparison](https://www.zbox.io/diagram/zbox-compare.svg)
+![Comparison](https://www.zbox.io/svg/zbox-compare.svg)
 
 Below is the feature comparison list.
 
@@ -121,7 +121,7 @@ fn main() {
     // create and open a file in repository for writing
     let mut file = OpenOptions::new()
         .create(true)
-        .open(&mut repo, "/my_file")
+        .open(&mut repo, "/my_file.txt")
         .unwrap();
 
     // use std::io::Write trait to write data into it

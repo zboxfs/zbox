@@ -197,14 +197,14 @@ pub struct RepoInfo {
 ///
 /// A `Repo` represents a secure collection which consists of files,
 /// directories and their associated data. Similar to [`std::fs`], `Repo`
-/// provides methods to manipulate the inner file system.
+/// provides methods to manipulate the enclosed file system.
 ///
 /// [`zbox_init`] should be called before any operations on `Repo`.
 ///
 /// # Create and open `Repo`
 ///
 /// `Repo` can be created on different storages using [`RepoOpener`]. It uses
-/// an URI-like string to specify location. Currently two types of storages
+/// an URI-like string to specify its location. Currently two types of storages
 /// are supported:
 ///
 /// * OS file system based storage, location prefix: `file://`
@@ -255,8 +255,9 @@ pub struct Repo {
 impl Repo {
     /// Returns whether the URI points at an existing repository.
     ///
-    /// Existence check depends on underneath storage, for memory storage, it
-    /// always returns true.
+    /// Existence check depends on the underlying storage implementation, for
+    /// memory storage, it always returns true. For file storage, it will
+    /// return if the specified path exists on the OS file system.
     pub fn exists(uri: &str) -> Result<bool> {
         Fs::exists(uri)
     }
@@ -281,7 +282,7 @@ impl Repo {
         Ok(Repo { fs, read_only })
     }
 
-    /// Get repository info
+    /// Get repository metadata infomation.
     pub fn info(&self) -> RepoInfo {
         let fs = self.fs.read().unwrap();
         let meta = fs.volume_meta();
@@ -296,7 +297,7 @@ impl Repo {
         }
     }
 
-    /// Change repo password
+    /// Change password for the respository.
     pub fn change_password(
         &mut self,
         old_pwd: &str,
@@ -309,13 +310,18 @@ impl Repo {
         fs.change_password(old_pwd, new_pwd, cost)
     }
 
-    /// Check if path exists
+    /// Returns whether the path points at an existing entity in repository.
+    ///
+    /// `path` must be an absolute path.
     pub fn path_exists<P: AsRef<Path>>(&self, path: P) -> bool {
         let fs = self.fs.read().unwrap();
         fs.resolve(path.as_ref()).map(|_| true).unwrap_or(false)
     }
 
-    /// Check if path is a regular file
+    /// Returns whether the path exists in repository and is pointing at
+    /// a regular file.
+    ///
+    /// `path` must be an absolute path.
     pub fn is_file<P: AsRef<Path>>(&self, path: P) -> bool {
         let fs = self.fs.read().unwrap();
         match fs.resolve(path.as_ref()) {
@@ -327,7 +333,10 @@ impl Repo {
         }
     }
 
-    /// Check if path is a directory
+    /// Returns whether the path exists in repository and is pointing at
+    /// a directory.
+    ///
+    /// `path` must be an absolute path.
     pub fn is_dir<P: AsRef<Path>>(&self, path: P) -> bool {
         let fs = self.fs.read().unwrap();
         match fs.resolve(path.as_ref()) {
@@ -391,7 +400,13 @@ impl Repo {
         Ok(file)
     }
 
-    /// Create a file
+    /// Create a file in read-write mode.
+    ///
+    /// This function will create a file if it does not exist, and will
+    /// truncate it if it does.
+    ///
+    /// See the [`OpenOptions::open`](struct.OpenOptions.html#method.open)
+    /// function for more details.
     pub fn create_file<P: AsRef<Path>>(&mut self, path: P) -> Result<File> {
         OpenOptions::new().create(true).truncate(true).open(
             self,
@@ -399,7 +414,29 @@ impl Repo {
         )
     }
 
-    /// Open a regular file in read-only mode
+    /// Attempts to open a file in read-only mode.
+    ///
+    /// See the [`OpenOptions::open`] function for more details.
+    ///
+    /// # Errors
+    /// This function will return an error if path does not already exist.
+    /// Other errors may also be returned according to [`OpenOptions::open`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use zbox::{zbox_init, Result, RepoOpener};
+    /// # fn foo() -> Result<()> {
+    /// # zbox_init();
+    /// # let mut repo = RepoOpener::new()
+    /// #     .create(true)
+    /// #     .open("mem://foo", "pwd")?;
+    /// let mut f = repo.open_file("foo.txt")?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`OpenOptions::open`]: struct.OpenOptions.html#method.open
     pub fn open_file<P: AsRef<Path>>(&mut self, path: P) -> Result<File> {
         OpenOptions::new().open(self, path)
     }

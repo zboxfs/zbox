@@ -1,5 +1,5 @@
 use std::error::Error as StdError;
-use std::result::Result as StdResult;
+use std::result;
 use std::io::Error as IoError;
 use std::env::VarError;
 use std::fmt::{self, Display, Formatter};
@@ -231,5 +231,8 @@ impl PartialEq for Error {
 
 /// A specialized [`Result`] type for Zbox operations.
 ///
+/// See the [`zbox::Error`] for all possible errors.
+///
 /// [`Result`]: https://doc.rust-lang.org/std/result/enum.Result.html
-pub type Result<T> = StdResult<T, Error>;
+/// [`zbox::Error`]: enum.Error.html
+pub type Result<T> = result::Result<T, Error>;

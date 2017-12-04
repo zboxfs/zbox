@@ -16,7 +16,7 @@ fn main() {
     // create and open a file for writing
     let mut file = OpenOptions::new()
         .create(true)
-        .open(&mut repo, "/my_file")
+        .open(&mut repo, "/my_file.txt")
         .unwrap();
 
     // use std::io::Write trait to write data into it
