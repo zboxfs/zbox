@@ -1,4 +1,3 @@
-extern crate tempdir;
 extern crate zbox;
 
 mod common;
@@ -97,7 +96,6 @@ fn test_round(round: usize, f: &mut File, test_data: &[u8], ctl: &mut Vec<u8>) {
     }
 }
 
-#[test]
 //#[cfg_attr(rustfmt, rustfmt_skip)]
 fn fuzz_file_read_write() {
     let mut env = common::setup();
@@ -135,7 +133,6 @@ fn fuzz_file_read_write() {
     verify(repo, &ctl);
 }
 
-#[test]
 fn fuzz_file_read_write_mt() {
     let env_ref = Arc::new(RwLock::new(common::setup()));
     let (seed, permu, test_data) =
@@ -196,4 +193,9 @@ fn fuzz_file_read_write_mt() {
         let ctl = ctl_ref.read().unwrap();
         verify(&mut env.repo, &ctl);
     }
+}
+
+fn main() {
+    fuzz_file_read_write();
+    fuzz_file_read_write_mt();
 }

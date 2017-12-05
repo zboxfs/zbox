@@ -1,4 +1,3 @@
-extern crate tempdir;
 extern crate zbox;
 
 mod common;
@@ -522,8 +521,6 @@ fn verify(env: &mut common::TestEnv, nodes: &mut Vec<Node>) {
     }
 }
 
-#[test]
-//#[ignore]
 //#[cfg_attr(rustfmt, rustfmt_skip)]
 fn fuzz_fs() {
     let mut env = common::setup();
@@ -560,8 +557,6 @@ fn fuzz_fs() {
     verify(&mut env, &mut nodes);
 }
 
-#[test]
-//#[ignore]
 fn fuzz_fs_mt() {
     let env_ref = Arc::new(RwLock::new(common::setup()));
     let (seed, permu, test_data) =
@@ -615,4 +610,9 @@ fn fuzz_fs_mt() {
         let mut nodes = nodes.write().unwrap();
         verify(&mut env, &mut nodes);
     }
+}
+
+fn main() {
+    fuzz_fs();
+    fuzz_fs_mt();
 }

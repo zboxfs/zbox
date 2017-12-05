@@ -2,7 +2,7 @@
 name = "zbox"
 version = "0.1.2"
 authors = ["Bo Lu"]
-description = "Zbox is a zero-knowledge, privacy focused embeddable file system."
+description = "Zbox is a zero-knowledge, privacy-focused embeddable file system."
 documentation = "https://docs.rs/zbox"
 homepage = "https://github.com/zboxfs/zbox"
 repository = "https://github.com/zboxfs/zbox"
