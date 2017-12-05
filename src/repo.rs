@@ -120,16 +120,24 @@ impl RepoOpener {
     ///
     /// Currently two types of storages are supported:
     ///
-    /// * OS file system based storage, location prefix: `file://`
+    /// - OS file system based storage, location prefix is `file://`
     ///
     ///   After the prefix is the path to a directory on OS file system. It can
     ///   be a relative or absolute path.
     ///
-    /// * Memory based storage, location prefix: `mem://`
+    /// - Memory based storage, location prefix is `mem://`
     ///
-    ///   As memory stoage is volatile, it can only be used in repository
-    ///   creation. It doesn't make sense to open an existing memory storage,
+    ///   As memory stoage is volatile, it is always be used with `create`
+    ///   option. It doesn't make sense to open an existing memory storage,
     ///   thus the string after prefix is arbitrary.
+    ///
+    /// After a repository is opened, all of the other functions provided by
+    /// Zbox will be thread-safe.
+    ///
+    /// # Errors
+    ///
+    /// Open a memory based repository without enable `create` option will
+    /// return an error.
     pub fn open(&self, uri: &str, pwd: &str) -> Result<Repo> {
         if self.create {
             if self.read_only {

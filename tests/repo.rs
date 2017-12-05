@@ -74,4 +74,9 @@ fn repo_oper() {
     let info = repo.info();
     assert_eq!(info.ops_limit(), OpsLimit::Moderate);
     assert_eq!(info.mem_limit(), MemLimit::Interactive);
+
+    // case #5: open memory storage without create
+    {
+        assert!(RepoOpener::new().open("mem://foo", &pwd).is_err());
+    }
 }

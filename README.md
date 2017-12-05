@@ -168,6 +168,11 @@ be licensed as above, without any additional terms of conditions.
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of
 conduct, and the process for submitting pull requests to us.
 
+Community
+=========
+
+- [Gitter Chat Room](https://gitter.im/zboxfs/zbox)
+
 License
 =======
 `Zbox` is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE)
