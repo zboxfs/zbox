@@ -27,6 +27,18 @@ pub enum FileType {
     Dir,
 }
 
+impl FileType {
+    /// Test whether this file type represents a regular file.
+    pub fn is_file(&self) -> bool {
+        *self == FileType::File
+    }
+
+    /// Test whether this file type represents a directory.
+    pub fn is_dir(&self) -> bool {
+        *self == FileType::Dir
+    }
+}
+
 impl Default for FileType {
     fn default() -> Self {
         FileType::File
@@ -51,7 +63,7 @@ impl ChildEntry {
     }
 }
 
-// fnode version
+/// A representation of a permanent file content.
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct Version {
     num: usize, // version number
@@ -70,60 +82,84 @@ impl Version {
         }
     }
 
+    /// Returns the version number of this content.
+    ///
+    /// The version number starts from 1 and continuously increases by 1.
     pub fn num(&self) -> usize {
         self.num
     }
 
+    /// Returns the byte length of this version of content.
     pub fn len(&self) -> usize {
         self.len
     }
 
+    /// Returns the creation time of this version of content.
     pub fn created(&self) -> SystemTime {
         self.ctime.to_system_time()
     }
 }
 
 /// Metadata information about a file or a directory.
+///
+/// This structure is returned from the [`File::metadata`] and
+/// [`Repo::metadata`] represents known metadata about a file such as its type,
+/// size, modification times, etc.
+///
+/// [`File::metadata`]: struct.File.html#method.metadata
+/// [`Repo::metadata`]: struct.Repo.html#method.metadata
 #[derive(Debug, Copy, Clone)]
 pub struct Metadata {
     ftype: FileType,
     len: usize,
-    version: usize,
+    curr_version: usize,
     ctime: Time,
     mtime: Time,
 }
 
 impl Metadata {
+    /// Returns the file type for this metadata.
     pub fn file_type(&self) -> FileType {
         self.ftype
     }
 
+    /// Returns whether this metadata is for a directory.
     pub fn is_dir(&self) -> bool {
         self.ftype == FileType::Dir
     }
 
+    /// Returns whether this metadata is for a regular file.
     pub fn is_file(&self) -> bool {
         self.ftype == FileType::File
     }
 
+    /// Returns the size of the current version of file, in bytes, this
+    /// metadata is for.
     pub fn len(&self) -> usize {
         self.len
     }
 
-    pub fn version(&self) -> usize {
-        self.version
+    /// Returns current version number of file listed in this metadata.
+    pub fn curr_version(&self) -> usize {
+        self.curr_version
     }
 
+    /// Returns the creation time listed in this metadata.
     pub fn created(&self) -> SystemTime {
         self.ctime.to_system_time()
     }
 
+    /// Returns the last modification time listed in this metadata.
     pub fn modified(&self) -> SystemTime {
         self.mtime.to_system_time()
     }
 }
 
-/// Entries returned by the [`read_dir`].
+/// Entries returned by the [`read_dir`] function.
+///
+/// An instance of `DirEntry` represents an entry inside of a directory in the
+/// repository. Each entry can be inspected via methods to learn about the
+/// full path or other metadata.
 ///
 /// [`read_dir`]: struct.Repo.html#method.read_dir
 #[derive(Debug)]
@@ -134,18 +170,23 @@ pub struct DirEntry {
 }
 
 impl DirEntry {
+    /// Returns the full path to the file that this entry represents.
     pub fn path(&self) -> &Path {
         self.path.as_path()
     }
 
+    /// Return the metadata for the file that this entry points at.
     pub fn metadata(&self) -> Metadata {
         self.metadata
     }
 
+    /// Return the file type for the file that this entry points at.
     pub fn file_type(&self) -> FileType {
         self.metadata.file_type()
     }
 
+    /// Returns the bare file name of this directory entry without any other
+    /// leading path component.
     pub fn file_name(&self) -> &str {
         &self.name
     }
@@ -263,7 +304,7 @@ impl Fnode {
                 FileType::File => self.curr_ver().len,
                 FileType::Dir => 0,
             },
-            version: self.curr_ver_num(),
+            curr_version: self.curr_ver_num(),
             ctime: self.ctime,
             mtime: self.mtime,
         }
@@ -530,12 +571,6 @@ impl Fnode {
             st.get_content(&ver.content_id)?
         };
         Ok(ContentReader::new(&content, &self.store))
-    }
-
-    /// Read data from file at given offset and current version
-    pub fn reader(&self) -> Result<ContentReader> {
-        let ver = self.curr_ver();
-        self.version_reader(ver.num)
     }
 
     /// Set file to specified length

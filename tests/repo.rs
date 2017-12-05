@@ -4,11 +4,11 @@ extern crate zbox;
 
 use tempdir::TempDir;
 
-use zbox::{zbox_init, Error, RepoOpener, OpsLimit, MemLimit, Cipher};
+use zbox::{init_env, Error, RepoOpener, OpsLimit, MemLimit, Cipher};
 
 #[test]
 fn repo_oper() {
-    zbox_init();
+    init_env();
 
     let pwd = "pwd";
     let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
@@ -31,10 +31,10 @@ fn repo_oper() {
         .unwrap();
     let repo = RepoOpener::new().open(&path, &pwd).unwrap();
     let info = repo.info();
-    assert_eq!(info.cost.ops_limit, OpsLimit::Moderate);
-    assert_eq!(info.cost.mem_limit, MemLimit::Moderate);
-    assert_eq!(info.cipher, Cipher::Aes);
-    assert!(!info.read_only);
+    assert_eq!(info.ops_limit(), OpsLimit::Moderate);
+    assert_eq!(info.mem_limit(), MemLimit::Moderate);
+    assert_eq!(info.cipher(), Cipher::Aes);
+    assert!(!info.is_read_only());
 
     // case #3: open repo in read-only mode
     let path = base.clone() + "/repo3";
@@ -48,7 +48,7 @@ fn repo_oper() {
     }
     let mut repo = RepoOpener::new().read_only(true).open(&path, &pwd).unwrap();
     let info = repo.info();
-    assert!(info.read_only);
+    assert!(info.is_read_only());
     assert_eq!(repo.create_dir("/dir"), Err(Error::ReadOnly));
 
     // case #4: change repo password
@@ -59,19 +59,19 @@ fn repo_oper() {
     }
     {
         let mut repo = RepoOpener::new().open(&path, &pwd).unwrap();
-        repo.change_password(
+        repo.reset_password(
             &pwd,
             &new_pwd,
             OpsLimit::Moderate,
             MemLimit::Interactive,
         ).unwrap();
         let info = repo.info();
-        assert_eq!(info.cost.ops_limit, OpsLimit::Moderate);
-        assert_eq!(info.cost.mem_limit, MemLimit::Interactive);
+        assert_eq!(info.ops_limit(), OpsLimit::Moderate);
+        assert_eq!(info.mem_limit(), MemLimit::Interactive);
     }
     RepoOpener::new().open(&path, &pwd).is_err();
     let repo = RepoOpener::new().open(&path, &new_pwd).unwrap();
     let info = repo.info();
-    assert_eq!(info.cost.ops_limit, OpsLimit::Moderate);
-    assert_eq!(info.cost.mem_limit, MemLimit::Interactive);
+    assert_eq!(info.ops_limit(), OpsLimit::Moderate);
+    assert_eq!(info.mem_limit(), MemLimit::Interactive);
 }

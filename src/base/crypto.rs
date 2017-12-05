@@ -1,6 +1,5 @@
-use std::error::Error as StdError;
 use std::result::Result as StdResult;
-use std::fmt::{self, Debug, Display, Formatter};
+use std::fmt::{self, Debug, Formatter};
 use std::cmp::min;
 use std::mem;
 use std::ptr;
@@ -11,6 +10,8 @@ use std::ops::Deref;
 use serde::{Deserialize, Serialize};
 use serde::ser::Serializer;
 use serde::de::{self, Deserializer};
+
+use error::{Result, Error};
 
 extern "C" {
     // Initialisation
@@ -148,53 +149,6 @@ extern "C" {
     fn sodium_malloc(size: usize) -> *mut u8;
     fn sodium_free(ptr: *mut u8);
 }
-
-#[derive(Debug, PartialEq)]
-pub enum Error {
-    Initialise,
-    NoHardware,
-    Hashing,
-    InvalidCost,
-    InvalidCipher,
-    Encrypt,
-    Decrypt,
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match *self {
-            Error::Initialise => write!(f, "Initialise crypto error"),
-            Error::NoHardware => write!(f, "No hardware AES support"),
-            Error::Hashing => write!(f, "Hashing out of memory"),
-            Error::InvalidCost => write!(f, "Invalid cost number"),
-            Error::InvalidCipher => write!(f, "Invalid cipher"),
-            Error::Encrypt => write!(f, "Encrypt error"),
-            Error::Decrypt => write!(f, "Decrypt error"),
-        }
-    }
-}
-
-impl StdError for Error {
-    fn description(&self) -> &str {
-        match *self {
-            Error::Initialise => "Initialise crypto error",
-            Error::NoHardware => "No hardware AES support",
-            Error::Hashing => "Hashing out of memory",
-            Error::InvalidCost => "Invalid cost number",
-            Error::InvalidCipher => "Invalid cipher",
-            Error::Encrypt => "Encrypt error",
-            Error::Decrypt => "Decrypt error",
-        }
-    }
-
-    fn cause(&self) -> Option<&StdError> {
-        match *self {
-            _ => None,
-        }
-    }
-}
-
-pub type Result<T> = StdResult<T, Error>;
 
 /// Safe memory buffer
 pub struct SafeBox<T: Sized> {
@@ -457,8 +411,10 @@ pub type HashState = [u8; HASH_STATE_SIZE];
 
 /// Password hash operation limit.
 ///
-/// It represents a maximum amount of computations to perform. High level will
-/// require more CPU cycles to compute.
+/// It represents a maximum amount of computations to perform. Higher level
+/// will require more CPU cycles to compute.
+///
+/// See https://download.libsodium.org/doc/password_hashing/ for more details.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum OpsLimit {
     Interactive = 4,
@@ -487,6 +443,8 @@ impl From<u8> for OpsLimit {
 ///
 /// It represents a maximum amount of memory required to perform password
 /// hashing.
+///
+/// See https://download.libsodium.org/doc/password_hashing/ for more details.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum MemLimit {
     /// 64 MB
@@ -605,21 +563,21 @@ pub enum Cipher {
     /// XChaCha20-Poly1305
     Xchacha,
 
-    /// AES256-GCM (hardware)
+    /// AES256-GCM, hardware only
     Aes,
 }
 
 impl Cipher {
-    pub const BYTES_LEN: usize = 1;
+    pub(crate) const BYTES_LEN: usize = 1;
 
-    pub fn to_u8(&self) -> u8 {
+    pub(crate) fn to_u8(&self) -> u8 {
         match *self {
             Cipher::Aes => 0,
             Cipher::Xchacha => 1,
         }
     }
 
-    pub fn from_u8(s: u8) -> Result<Self> {
+    pub(crate) fn from_u8(s: u8) -> Result<Self> {
         Ok(match s {
             0 => Cipher::Aes,
             1 => Cipher::Xchacha,
@@ -700,7 +658,7 @@ impl Crypto {
     pub fn init() -> Result<()> {
         unsafe {
             if sodium_init() < 0 {
-                return Err(Error::Initialise);
+                return Err(Error::InitCrypto);
             }
         }
         Ok(())
@@ -719,7 +677,7 @@ impl Crypto {
             }
             Cipher::Aes => {
                 if !Crypto::is_aes_hardware_available() {
-                    return Err(Error::NoHardware);
+                    return Err(Error::NoAesHardware);
                 }
 
                 Ok(Crypto {

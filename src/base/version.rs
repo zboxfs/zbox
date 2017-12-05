@@ -42,7 +42,6 @@ impl Version {
         Version::new(buf[0], buf[1], buf[2])
     }
 
-    #[allow(dead_code)]
     pub fn to_string(&self) -> String {
         format!("{}.{}.{}", self.major, self.minor, self.patch)
     }

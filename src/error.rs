@@ -7,8 +7,6 @@ use std::fmt::{self, Display, Formatter};
 use rmp_serde::encode::Error as EncodeError;
 use rmp_serde::decode::Error as DecodeError;
 
-use base::crypto::Error as CryptoError;
-
 /// The error type for operations with [`Repo`] and [`File`].
 ///
 /// [`Repo`]: struct.Repo.html
@@ -17,6 +15,14 @@ use base::crypto::Error as CryptoError;
 pub enum Error {
     RefOverflow,
     RefUnderflow,
+
+    InitCrypto,
+    NoAesHardware,
+    Hashing,
+    InvalidCost,
+    InvalidCipher,
+    Encrypt,
+    Decrypt,
 
     InvalidUri,
     InvalidSuperBlk,
@@ -49,7 +55,6 @@ pub enum Error {
     NotWrite,
     NotFinish,
 
-    Crypto(CryptoError),
     Encode(EncodeError),
     Decode(DecodeError),
     Var(VarError),
@@ -61,6 +66,14 @@ impl Display for Error {
         match *self {
             Error::RefOverflow => write!(f, "Refcnt overflow"),
             Error::RefUnderflow => write!(f, "Refcnt underflow"),
+
+            Error::InitCrypto => write!(f, "InitCrypto crypto error"),
+            Error::NoAesHardware => write!(f, "No AES hardware"),
+            Error::Hashing => write!(f, "Hashing out of memory"),
+            Error::InvalidCost => write!(f, "Invalid cost"),
+            Error::InvalidCipher => write!(f, "Invalid cipher"),
+            Error::Encrypt => write!(f, "Encrypt error"),
+            Error::Decrypt => write!(f, "Decrypt error"),
 
             Error::InvalidUri => write!(f, "Invalid Uri"),
             Error::InvalidSuperBlk => write!(f, "Invalid super block"),
@@ -93,7 +106,6 @@ impl Display for Error {
             Error::NotWrite => write!(f, "File does not write yet"),
             Error::NotFinish => write!(f, "File does not finish yet"),
 
-            Error::Crypto(ref err) => err.fmt(f),
             Error::Encode(ref err) => err.fmt(f),
             Error::Decode(ref err) => err.fmt(f),
             Error::Var(ref err) => err.fmt(f),
@@ -107,6 +119,14 @@ impl StdError for Error {
         match *self {
             Error::RefOverflow => "Refcnt overflow",
             Error::RefUnderflow => "Refcnt underflow",
+
+            Error::InitCrypto => "Initialise crypto error",
+            Error::NoAesHardware => "No AES hardware",
+            Error::Hashing => "Hashing out of memory",
+            Error::InvalidCost => "Invalid cost",
+            Error::InvalidCipher => "Invalid cipher",
+            Error::Encrypt => "Encrypt error",
+            Error::Decrypt => "Decrypt error",
 
             Error::InvalidUri => "Invalid Uri",
             Error::InvalidSuperBlk => "Invalid super block",
@@ -139,7 +159,6 @@ impl StdError for Error {
             Error::NotWrite => "File does not write yet",
             Error::NotFinish => "File does not finish yet",
 
-            Error::Crypto(ref err) => err.description(),
             Error::Encode(ref err) => err.description(),
             Error::Decode(ref err) => err.description(),
             Error::Var(ref err) => err.description(),
@@ -149,19 +168,12 @@ impl StdError for Error {
 
     fn cause(&self) -> Option<&StdError> {
         match *self {
-            Error::Crypto(ref err) => Some(err),
             Error::Encode(ref err) => Some(err),
             Error::Decode(ref err) => Some(err),
             Error::Var(ref err) => Some(err),
             Error::Io(ref err) => Some(err),
             _ => None,
         }
-    }
-}
-
-impl From<CryptoError> for Error {
-    fn from(err: CryptoError) -> Error {
-        Error::Crypto(err)
     }
 }
 
@@ -193,18 +205,30 @@ impl PartialEq for Error {
         match (self, other) {
             (&Error::RefOverflow, &Error::RefOverflow) => true,
             (&Error::RefUnderflow, &Error::RefUnderflow) => true,
+
+            (&Error::InitCrypto, &Error::InitCrypto) => true,
+            (&Error::NoAesHardware, &Error::NoAesHardware) => true,
+            (&Error::Hashing, &Error::Hashing) => true,
+            (&Error::InvalidCost, &Error::InvalidCost) => true,
+            (&Error::InvalidCipher, &Error::InvalidCipher) => true,
+            (&Error::Encrypt, &Error::Encrypt) => true,
+            (&Error::Decrypt, &Error::Decrypt) => true,
+
             (&Error::InvalidUri, &Error::InvalidUri) => true,
             (&Error::InvalidSuperBlk, &Error::InvalidSuperBlk) => true,
             (&Error::Corrupted, &Error::Corrupted) => true,
             (&Error::Opened, &Error::Opened) => true,
             (&Error::WrongVersion, &Error::WrongVersion) => true,
             (&Error::NoEntity, &Error::NoEntity) => true,
+
             (&Error::InTrans, &Error::InTrans) => true,
             (&Error::NotInTrans, &Error::NotInTrans) => true,
             (&Error::NoTrans, &Error::NoTrans) => true,
             (&Error::Uncompleted, &Error::Uncompleted) => true,
             (&Error::InUse, &Error::InUse) => true,
+
             (&Error::NoContent, &Error::NoContent) => true,
+
             (&Error::InvalidArgument, &Error::InvalidArgument) => true,
             (&Error::InvalidPath, &Error::InvalidPath) => true,
             (&Error::NotFound, &Error::NotFound) => true,
@@ -216,10 +240,11 @@ impl PartialEq for Error {
             (&Error::NotFile, &Error::NotFile) => true,
             (&Error::NotEmpty, &Error::NotEmpty) => true,
             (&Error::NoVersion, &Error::NoVersion) => true,
+
             (&Error::ReadOnly, &Error::ReadOnly) => true,
             (&Error::NotWrite, &Error::NotWrite) => true,
             (&Error::NotFinish, &Error::NotFinish) => true,
-            (&Error::Crypto(ref a), &Error::Crypto(ref b)) => *a == *b,
+
             (&Error::Encode(_), &Error::Encode(_)) => true,
             (&Error::Decode(_), &Error::Decode(_)) => true,
             (&Error::Var(_), &Error::Var(_)) => true,

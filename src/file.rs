@@ -1,6 +1,5 @@
 use std::error::Error as StdError;
-use std::io::{Read, Write, Result as IoResult, Error as IoError, ErrorKind,
-              Seek, SeekFrom};
+use std::io::{self, Read, Write, Error as IoError, ErrorKind, Seek, SeekFrom};
 use std::fmt::{self, Debug};
 
 use trans::{TxMgr, TxHandle};
@@ -9,7 +8,13 @@ use fs::fnode::{Fnode, Version, Metadata, Reader as FnodeReader,
                 Writer as FnodeWriter};
 use super::{Result, Error};
 
-/// Version reader
+/// A reader for a specific vesion of file content.
+///
+/// This reader is returned by the [`version_reader`] function, and implements
+/// [`Read`] trait.
+///
+/// [`version_reader`]: struct.File.html#method.version_reader
+/// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
 #[derive(Debug)]
 pub struct VersionReader<'a> {
     handle: &'a Handle,
@@ -24,13 +29,13 @@ impl<'a> VersionReader<'a> {
 }
 
 impl<'a> Read for VersionReader<'a> {
-    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.rdr.read(buf)
     }
 }
 
 impl<'a> Seek for VersionReader<'a> {
-    fn seek(&mut self, pos: SeekFrom) -> IoResult<u64> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         self.rdr.seek(pos)
     }
 }
@@ -41,8 +46,7 @@ impl<'a> Seek for VersionReader<'a> {
 /// it was opened with. Files also implement [`Seek`] to alter the logical cursor
 /// that the file contains internally.
 ///
-/// Files are automatically flushed and closed when they go out of scope. So
-/// calling [`flush`] is not recommendated.
+/// Files are automatically closed when they go out of scope.
 ///
 /// As Zbox internally cached file content, it is no need to use buffered
 /// reader, such as [`BufReader<R>`].
@@ -53,27 +57,28 @@ impl<'a> Seek for VersionReader<'a> {
 ///
 /// ```
 /// use std::io::prelude::*;
-/// # use zbox::{zbox_init, Result, RepoOpener};
+/// # use zbox::{init_env, Result, RepoOpener};
 ///
 /// # fn foo() -> Result<()> {
-/// # zbox_init();
+/// # init_env();
 /// # let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
 /// let mut file = repo.create_file("/foo.txt")?;
 /// file.write_all(b"Hello, world!")?;
+/// file.finish()?;
 /// # Ok(())
 /// # }
 /// # foo().unwrap();
 /// ```
 ///
-/// Read the current version of content of a file into a [`String`]:
+/// Read the content of a file into a [`String`]:
 ///
 /// ```
-/// # use zbox::{zbox_init, Result, RepoOpener};
+/// # use zbox::{init_env, Result, RepoOpener};
 /// use std::io::prelude::*;
 /// # use zbox::OpenOptions;
 ///
 /// # fn foo() -> Result<()> {
-/// # zbox_init();
+/// # init_env();
 /// # let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
 /// # {
 /// #     let mut file = OpenOptions::new()
@@ -91,13 +96,168 @@ impl<'a> Seek for VersionReader<'a> {
 /// # foo().unwrap();
 /// ```
 ///
+/// # Versioning
+///
+/// `File` contents support up to 255 revision versions. [`Version`] is
+/// immutable once it is created.
+///
+/// By default, the maximum number of versions of a `File` is `10`, which is
+/// configurable by [`version_limit`]. After reaching this limit, the oldest
+/// [`Version`] will be automatically deleted after adding a new one.
+///
+/// Version number starts from `1` and continuously increases by 1.
+///
+/// # Writing
+///
+/// The file content is cached internally for deduplication and will be handled
+/// automatically, thus calling [`flush`] is not recommendated.
+///
+/// `File` is multi-versioned, each time updating the content will create a new
+/// permanent [`Version`]. There are two ways of writing data:
+///
+/// - **Multi-part Write**
+///
+///   This is done by updating `File` using [`Write`] trait. After all writing
+///   operations, [`finish`] must be called to create a new version.
+///
+///   ## Examples
+///   ```
+///   # use zbox::{init_env, Result, RepoOpener};
+///   use std::io::prelude::*;
+///   # use zbox::OpenOptions;
+///
+///   # fn foo() -> Result<()> {
+///   # init_env();
+///   # let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
+///   let mut file = OpenOptions::new().create(true).open(&mut repo, "/foo.txt")?;
+///   file.write_all(b"foo ")?;
+///   file.write_all(b"bar")?;
+///   file.finish()?;
+///
+///   let mut content = String::new();
+///   file.read_to_string(&mut content)?;
+///   assert_eq!(content, "foo bar");
+///
+///   # Ok(())
+///   # }
+///   # foo().unwrap();
+///   ```
+///
+/// - **Single-part Write**
+///
+///   This can be done by calling [`write_once`], which will call [`finish`]
+///   internally to create a new version.
+///
+///   ## Examples
+///   ```
+///   # use zbox::{init_env, Result, RepoOpener};
+///   use std::io::Read;
+///   # use zbox::OpenOptions;
+///
+///   # fn foo() -> Result<()> {
+///   # init_env();
+///   # let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
+///   let mut file = OpenOptions::new().create(true).open(&mut repo, "/foo.txt")?;
+///   file.write_once(b"foo bar")?;
+///
+///   let mut content = String::new();
+///   file.read_to_string(&mut content)?;
+///   assert_eq!(content, "foo bar");
+///
+///   # Ok(())
+///   # }
+///   # foo().unwrap();
+///   ```
+///
+/// # Reading
+///
+/// As `File` contains multiple versions, [`Read`] operation must be
+/// associated with a version. By default, the latest version is binded for
+/// reading. To read a specific version, a [`VersionReader`], which supports
+/// [`Read`] trait, can be used.
+///
+/// `File` internally maintain a reader, which will be opened for current
+/// version when it is used at first time. Once the reader is opened,
+/// subsequent write operations have no effect on it. So be carefull when
+/// doing both reading and writing at the same time.
+///
+/// ## Examples
+///
+/// Read multiple versions using [`VersionReader`].
+///
+/// ```
+/// use std::io::prelude::*;
+/// # use zbox::{init_env, Result, RepoOpener};
+/// # use zbox::OpenOptions;
+///
+/// # fn foo() -> Result<()> {
+/// # init_env();
+/// # let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
+/// let mut file = OpenOptions::new().create(true).open(&mut repo, "/foo.txt")?;
+/// file.write_once(b"foo")?;
+/// file.write_once(b"bar")?;
+///
+/// // get latest version number
+/// let curr_ver = file.curr_version();
+///
+/// let mut rdr = file.version_reader(curr_ver)?;
+/// let mut content = String::new();
+/// rdr.read_to_string(&mut content)?;
+/// assert_eq!(content, "bar");
+///
+/// let mut rdr = file.version_reader(curr_ver - 1)?;
+/// let mut content = String::new();
+/// rdr.read_to_string(&mut content)?;
+/// assert_eq!(content, "foo");
+///
+/// # Ok(())
+/// # }
+/// # foo().unwrap();
+/// ```
+///
+/// Read the file content while it is in writing, notice that the read is not
+/// affected by the following write.
+///
+/// ```
+/// use std::io::prelude::*;
+/// # use zbox::{init_env, Result, RepoOpener};
+/// # use zbox::OpenOptions;
+///
+/// # fn foo() -> Result<()> {
+/// # init_env();
+/// # let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
+/// let mut file = OpenOptions::new().create(true).open(&mut repo, "/foo.txt")?;
+/// file.write_once(&[1, 2, 3, 4])?;
+///
+/// let mut buf = [0; 2];
+/// file.read_exact(&mut buf)?;
+/// assert_eq!(&buf[..], &[1, 2]);
+///
+/// // create a new version
+/// file.write_once(&[5, 6, 7])?;
+///
+/// // notice this read still continues on previous version
+/// file.read_exact(&mut buf)?;
+/// assert_eq!(&buf[..], &[3, 4]);
+///
+/// # Ok(())
+/// # }
+/// # foo().unwrap();
+/// ```
+///
 /// [`Seek`]: https://doc.rust-lang.org/std/io/trait.Seek.html
 /// [`BufReader<R>`]: https://doc.rust-lang.org/std/io/struct.BufReader.html
 /// [`flush`]: https://doc.rust-lang.org/std/io/trait.Write.html#tymethod.flush
 /// [`String`]: https://doc.rust-lang.org/std/string/struct.String.html
+/// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
+/// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
+/// [`Version`]: struct.Version.html
+/// [`VersionReader`]: struct.VersionReader.html
+/// [`version_limit`]: struct.OpenOptions.html#method.version_limit
+/// [`finish`]: struct.File.html#method.finish
+/// [`write_once`]: struct.File.html#method.write_once
 pub struct File {
     handle: Handle,
-    ver: usize,
     pos: SeekFrom, // always SeekFrom::Start
     rdr: Option<FnodeReader>,
     wtr: Option<FnodeWriter>,
@@ -106,10 +266,9 @@ pub struct File {
 }
 
 impl File {
-    pub fn new(handle: Handle, pos: SeekFrom, read_only: bool) -> Self {
+    pub(super) fn new(handle: Handle, pos: SeekFrom, read_only: bool) -> Self {
         File {
             handle,
-            ver: 0,
             pos,
             rdr: None,
             wtr: None,
@@ -118,33 +277,40 @@ impl File {
         }
     }
 
-    /// Get file metadata
+    /// Queries metadata about the underlying file.
     pub fn metadata(&self) -> Metadata {
         let fnode = self.handle.fnode.read().unwrap();
         fnode.metadata()
     }
 
-    /// Get file history
+    /// Returns a list of all the file content versions.
     pub fn history(&self) -> Vec<Version> {
         let fnode = self.handle.fnode.read().unwrap();
         fnode.history()
     }
 
-    /// Get current version number
+    /// Returns the current content version number.
     pub fn curr_version(&self) -> usize {
         let fnode = self.handle.fnode.read().unwrap();
         fnode.curr_ver_num()
     }
 
-    /// Get current version content size
+    /// Returns content byte size of the current version.
     fn curr_len(&self) -> usize {
         let fnode = self.handle.fnode.read().unwrap();
         fnode.curr_len()
     }
 
-    /// Create a version reader
-    pub fn version_reader(&self, ver: usize) -> Result<VersionReader> {
-        VersionReader::new(&self.handle, ver)
+    /// Return reader of specified version.
+    ///
+    /// The returned reader implements [`Read`] trait. To get the version
+    /// number, firstly call [`history`] to get the list of all versions and
+    /// then choose the version number from it.
+    ///
+    /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
+    /// [`history`]: struct.File.html#method.history
+    pub fn version_reader(&self, ver_num: usize) -> Result<VersionReader> {
+        VersionReader::new(&self.handle, ver_num)
     }
 
     // calculate seek position based on file current size
@@ -205,7 +371,14 @@ impl File {
         Ok(())
     }
 
-    /// Finish multi-part writing
+    /// Complete multi-part write to create a new version.
+    ///
+    /// # Errors
+    ///
+    /// Calling this function without writing data before will return
+    /// [`Error::NotWrite`] error.
+    ///
+    /// [`Error::NotWrite`]: enum.Error.html
     pub fn finish(&mut self) -> Result<()> {
         match self.wtr.take() {
             Some(wtr) => {
@@ -223,8 +396,14 @@ impl File {
         }
     }
 
-    /// Single-part write
-    pub fn write_once(mut self, buf: &[u8]) -> Result<()> {
+    /// Single-part write to create a new version.
+    ///
+    /// This function provides a convenient way of combining [`Write`] and
+    /// [`finish`].
+    ///
+    /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
+    /// [`finish`]: struct.File.html#method.finish
+    pub fn write_once(&mut self, buf: &[u8]) -> Result<()> {
         match self.wtr {
             Some(_) => Err(Error::NotFinish),
             None => {
@@ -248,7 +427,18 @@ impl File {
         }
     }
 
-    /// Set file length by appending to end or truncating
+    /// Truncates or extends the underlying file, create a new version of
+    /// content which size to become `size`.
+    ///
+    /// If the size is less than the current content size, then the new
+    /// content will be shrunk. If it is greater than the current content size,
+    /// then the content will be extended to `size` and have all of the
+    /// intermediate data filled in with 0s.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the file is not opened for
+    /// writing or not finished writing.
     pub fn set_len(&mut self, len: usize) -> Result<()> {
         if self.wtr.is_some() {
             return Err(Error::NotFinish);
@@ -267,7 +457,7 @@ impl File {
 }
 
 impl Read for File {
-    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.rdr.is_none() {
             let mut rdr = map_io_err!(
                 FnodeReader::new_current(self.handle.fnode.clone())
@@ -283,7 +473,7 @@ impl Read for File {
 }
 
 impl Write for File {
-    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.wtr.is_none() {
             map_io_err!(self.begin_write())?;
         }
@@ -305,7 +495,7 @@ impl Write for File {
         }
     }
 
-    fn flush(&mut self) -> IoResult<()> {
+    fn flush(&mut self) -> io::Result<()> {
         match self.wtr {
             Some(ref mut wtr) => {
                 match self.tx_handle {
@@ -328,7 +518,7 @@ impl Write for File {
 }
 
 impl Seek for File {
-    fn seek(&mut self, pos: SeekFrom) -> IoResult<u64> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         if self.wtr.is_some() {
             return Err(IoError::new(
                 ErrorKind::Other,
@@ -353,7 +543,6 @@ impl Seek for File {
 impl Debug for File {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("File")
-            .field("ver", &self.ver)
             .field("pos", &self.pos)
             .field("rdr", &self.rdr)
             .field("wtr", &self.wtr)

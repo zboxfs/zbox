@@ -6,7 +6,7 @@ mod common;
 use std::io::{Read, Write, Seek, SeekFrom};
 use std::sync::{Arc, RwLock};
 use std::thread;
-use zbox::{Error, OpenOptions};
+use zbox::{Error, OpenOptions, File};
 
 #[test]
 fn file_open_close() {
@@ -20,6 +20,13 @@ fn file_open_close() {
     assert!(f.metadata().is_file());
     assert!(repo.path_exists("/file"));
     assert!(repo.is_file("/file"));
+}
+
+fn verify_content(f: &mut File, buf: &[u8]) {
+    let mut dst = Vec::new();
+    let result = f.read_to_end(&mut dst).unwrap();
+    assert_eq!(result, buf.len());
+    assert_eq!(&dst[..], &buf[..]);
 }
 
 #[test]
@@ -39,10 +46,7 @@ fn file_read_write() {
         f.write_all(&buf[..]).unwrap();
         f.finish().unwrap();
 
-        let mut dst = Vec::new();
-        let result = f.read_to_end(&mut dst).unwrap();
-        assert_eq!(result, buf.len());
-        assert_eq!(&dst[..], &buf[..]);
+        verify_content(&mut f, &buf);
 
         // use repo file creation shortcut
         repo.create_file("/file1.1").unwrap();
@@ -61,15 +65,12 @@ fn file_read_write() {
         f.write_all(&buf2[..]).unwrap();
         f.finish().unwrap();
 
-        let mut dst = Vec::new();
-        let result = f.read_to_end(&mut dst).unwrap();
-        assert_eq!(result, buf2.len());
-        assert_eq!(&dst[..], &buf2[..]);
+        verify_content(&mut f, &buf2);
 
         let meta = f.metadata();
         let hist = f.history();
         assert_eq!(meta.len(), buf2.len());
-        assert_eq!(meta.version(), 3);
+        assert_eq!(meta.curr_version(), 3);
         assert_eq!(hist.len(), 3);
     }
 
@@ -82,16 +83,15 @@ fn file_read_write() {
         f.write_all(&buf[..]).unwrap();
         f.finish().unwrap();
 
-        let mut dst = Vec::new();
-        let result = f.read_to_end(&mut dst).unwrap();
-        assert_eq!(result, buf.len() + buf2.len());
-        assert_eq!(&dst[..buf2.len()], &buf2[..]);
-        assert_eq!(&dst[buf2.len()..], &buf[..]);
+        let mut combo = Vec::new();
+        combo.extend_from_slice(&buf2);
+        combo.extend_from_slice(&buf);
+        verify_content(&mut f, &combo);
 
         let meta = f.metadata();
         let hist = f.history();
         assert_eq!(meta.len(), buf.len() + buf2.len());
-        assert_eq!(meta.version(), 4);
+        assert_eq!(meta.curr_version(), 4);
         assert_eq!(hist.len(), 4);
     }
 
@@ -103,14 +103,11 @@ fn file_read_write() {
             .unwrap();
         f.set_len(3).unwrap();
 
-        let mut dst = Vec::new();
-        let result = f.read_to_end(&mut dst).unwrap();
-        assert_eq!(result, 3);
-        assert_eq!(&dst[..], &buf2[..3]);
+        verify_content(&mut f, &buf2[..3]);
 
         let meta = f.metadata();
         assert_eq!(meta.len(), 3);
-        assert_eq!(meta.version(), 5);
+        assert_eq!(meta.curr_version(), 5);
     }
 
     // #5, extend file
@@ -121,15 +118,14 @@ fn file_read_write() {
             .unwrap();
         f.set_len(5).unwrap();
 
-        let mut dst = Vec::new();
-        let result = f.read_to_end(&mut dst).unwrap();
-        assert_eq!(result, 5);
-        assert_eq!(&dst[..3], &buf2[..3]);
-        assert_eq!(&dst[3..], &[0, 0]);
+        let mut combo = Vec::new();
+        combo.extend_from_slice(&buf2[..3]);
+        combo.extend_from_slice(&[0, 0]);
+        verify_content(&mut f, &combo);
 
         let meta = f.metadata();
         assert_eq!(meta.len(), 5);
-        assert_eq!(meta.version(), 6);
+        assert_eq!(meta.curr_version(), 6);
     }
 
     // #6, set file length to zero
@@ -142,7 +138,7 @@ fn file_read_write() {
 
         let meta = f.metadata();
         assert_eq!(meta.len(), 0);
-        assert_eq!(meta.version(), 7);
+        assert_eq!(meta.curr_version(), 7);
     }
 
     // #7, create file under another file should fail
@@ -212,10 +208,7 @@ fn file_read_write() {
         f.write_all(&buf2[..]).unwrap();
         f.finish().unwrap();
 
-        let mut dst = Vec::new();
-        let result = f.read_to_end(&mut dst).unwrap();
-        assert_eq!(result, buf2.len());
-        assert_eq!(&dst[..], &buf2[..]);
+        verify_content(&mut f, &buf2);
 
         let meta = f.metadata();
         assert_eq!(meta.len(), buf2.len());
@@ -236,10 +229,7 @@ fn file_read_write() {
         f.write_all(&buf2[..]).unwrap();
         f.finish().unwrap();
 
-        let mut dst = Vec::new();
-        let result = f.read_to_end(&mut dst).unwrap();
-        assert_eq!(result, buf2.len());
-        assert_eq!(&dst[..], &buf2[..]);
+        verify_content(&mut f, &buf2);
 
         let meta = f.metadata();
         let history = f.history();
@@ -257,6 +247,29 @@ fn file_read_write() {
         let mut dst = Vec::new();
         let result = rdr.read_to_end(&mut dst).unwrap();
         assert_eq!(result, buf.len());
+        assert_eq!(&dst[..], &buf[..]);
+    }
+
+    // #12, single-part write
+    {
+        let mut f = OpenOptions::new()
+            .create(true)
+            .open(&mut repo, "/file12")
+            .unwrap();
+
+        f.write_once(&buf[..]).unwrap();
+        f.write_once(&buf2[..]).unwrap();
+
+        let curr_ver = f.curr_version();
+
+        let mut rdr = f.version_reader(curr_ver).unwrap();
+        let mut dst = Vec::new();
+        rdr.read_to_end(&mut dst).unwrap();
+        assert_eq!(&dst[..], &buf2[..]);
+
+        let mut rdr = f.version_reader(curr_ver - 1).unwrap();
+        let mut dst = Vec::new();
+        rdr.read_to_end(&mut dst).unwrap();
         assert_eq!(&dst[..], &buf[..]);
     }
 }
@@ -386,20 +399,20 @@ fn file_truncate() {
 
         let meta = f.metadata();
         assert_eq!(meta.len(), 0);
-        assert_eq!(meta.version(), 3);
+        assert_eq!(meta.curr_version(), 3);
 
         // write some data
         f.write_all(&buf[..]).unwrap();
         f.finish().unwrap();
         let meta = f.metadata();
         assert_eq!(meta.len(), 3);
-        assert_eq!(meta.version(), 4);
+        assert_eq!(meta.curr_version(), 4);
 
         // then truncate again
         f.set_len(0).unwrap();
         let meta = f.metadata();
         assert_eq!(meta.len(), 0);
-        assert_eq!(meta.version(), 5);
+        assert_eq!(meta.curr_version(), 5);
     }
 }
 

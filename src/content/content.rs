@@ -155,10 +155,6 @@ impl Reader {
             store: store.clone(),
         }
     }
-
-    pub fn reset(&mut self) {
-        self.pos = 0;
-    }
 }
 
 impl Read for Reader {

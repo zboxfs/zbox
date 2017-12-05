@@ -12,12 +12,12 @@ to help application store files securely, privately and reliably. By
 encapsulating files and directories into an encrypted repository, it provides
 a virtual file system and exclusive access to authorised application.
 
-Unlike other system-level file systems, such as ext4, XFS and btrfs, which
+Unlike other system-level file systems, such as [ext4], [XFS] and [Btrfs], which
 provide shared access to multiple processes, Zbox is a file system that runs
 in the same memory space as the application. It only provide access to one
 process at a time.
 
-By abstracting IO access, Zbox supports a variety of underneath storage layers.
+By abstracting IO access, Zbox supports a variety of underlying storage layers.
 Memory and OS file system are supported, RDBMS and key-value object store
 supports are coming soon.
 
@@ -29,7 +29,7 @@ or leak caused by using it. Always back up your files and use at your own risk!
 Features
 ========
 - Everything is encrypted :lock:, including metadata and directory structure,
-  no knowledge is leaked to underneath storage
+  no knowledge can be leaked to underlying storage
 - State-of-the-art cryptography: AES-256-GCM (hardware), XChaCha20-Poly1305,
   Argon2 password hashing and etc., empowered by [libsodium]
 - Content-based data chunk deduplication and file-based deduplication
@@ -127,7 +127,7 @@ fn main() {
     // use std::io::Write trait to write data into it
     file.write_all(b"Hello, world!").unwrap();
 
-    // finish the writting to make a permanent version of content
+    // finish writting to make a permanent version of content
     file.finish().unwrap();
 
     // read file content using std::io::Read trait
@@ -173,6 +173,9 @@ License
 `Zbox` is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE)
 file for details.
 
+[ext4]: https://en.wikipedia.org/wiki/Ext4
+[xfs]: http://xfs.org
+[btrfs]: https://btrfs.wiki.kernel.org
 [Rust]: https://www.rust-lang.org
 [libsodium]: https://libsodium.org
 [LZ4]: http://www.lz4.org

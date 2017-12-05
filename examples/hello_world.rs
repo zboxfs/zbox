@@ -1,11 +1,11 @@
 extern crate zbox;
 
 use std::io::{Read, Write};
-use zbox::{zbox_init, RepoOpener, OpenOptions};
+use zbox::{init_env, RepoOpener, OpenOptions};
 
 fn main() {
     // initialise zbox environment, called first
-    zbox_init();
+    init_env();
 
     // create and open a repository
     let mut repo = RepoOpener::new()
@@ -22,7 +22,7 @@ fn main() {
     // use std::io::Write trait to write data into it
     file.write_all(b"Hello, world!").unwrap();
 
-    // finish the writting to make a permanent version of content
+    // finish writting to make a permanent version of content
     file.finish().unwrap();
 
     // read file content using std::io::Read trait

@@ -318,7 +318,7 @@ impl Write for Writer {
     }
 
     fn flush(&mut self) -> IoResult<()> {
-        // As the auto-flush flag is set for underneath LZ4 data writer,
+        // As the auto-flush flag is set for underlying LZ4 data writer,
         // nothing need to do here
         Ok(())
     }

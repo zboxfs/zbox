@@ -29,10 +29,6 @@ impl Chunk {
         }
     }
 
-    pub fn refcnt(&self) -> u32 {
-        self.refcnt.val()
-    }
-
     pub fn inc_ref(&mut self) -> Result<u32> {
         Ok(self.refcnt.inc_ref()?)
     }

@@ -2,7 +2,7 @@ use std::ptr;
 use std::fmt::{self, Debug};
 use std::cmp::min;
 use tempdir::TempDir;
-use zbox::{zbox_init, Repo, RepoOpener};
+use zbox::{init_env, Repo, RepoOpener};
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -20,14 +20,14 @@ impl TestEnv {
         let dummy_repo =
             RepoOpener::new().create(true).open(&path, "pwd").unwrap();
 
-        let uri = self.repo.info().uri.clone();
+        let info = self.repo.info();
         self.repo = dummy_repo;
-        self.repo = RepoOpener::new().open(&uri, "pwd").unwrap();
+        self.repo = RepoOpener::new().open(info.uri(), "pwd").unwrap();
     }
 }
 
 pub fn setup() -> TestEnv {
-    zbox_init();
+    init_env();
     let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
     let dir = tmpdir.path().join("repo");
     let path = "file://".to_string() + dir.to_str().unwrap();

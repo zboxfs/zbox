@@ -1,25 +1,26 @@
 use std::fmt::{self, Debug};
-use std::path::PathBuf;
 use std::ops::Index;
 
 use base::crypto::Crypto;
 use super::txid::Txid;
 
-/// Entity ID
+/// Unique entity ID.
+///
+/// This represents a 32-byte randomly-generated unique ID.
 #[derive(PartialEq, Eq, Hash, Default, Clone, Deserialize, Serialize)]
 pub struct Eid([u8; Eid::EID_SIZE]);
 
 impl Eid {
     /// Entity ID size
-    pub const EID_SIZE: usize = 32;
+    pub(crate) const EID_SIZE: usize = 32;
 
     /// Create an empty entity ID
-    pub fn new_empty() -> Self {
+    pub(crate) fn new_empty() -> Self {
         Eid::default()
     }
 
     /// Create a new random entity ID
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let mut eid = Eid::new_empty();
         Crypto::random_buf(&mut eid.0);
         if let Ok(txid) = Txid::current() {
@@ -28,19 +29,14 @@ impl Eid {
         eid
     }
 
-    pub fn from_slice(buf: &[u8]) -> Self {
+    pub(crate) fn from_slice(buf: &[u8]) -> Self {
         assert_eq!(buf.len(), Eid::EID_SIZE);
         let mut ret = Eid::new_empty();
         ret.0.copy_from_slice(buf);
         ret
     }
 
-    pub fn to_path_string(&self) -> PathBuf {
-        let s = self.to_string();
-        PathBuf::new().join(&s[0..2]).join(&s[2..4]).join(&s)
-    }
-
-    pub fn to_short_string(&self) -> String {
+    pub(crate) fn to_short_string(&self) -> String {
         (&self.to_string()[..8]).to_string()
     }
 }

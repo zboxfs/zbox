@@ -18,8 +18,11 @@ use env_logger;
 
 static INIT: Once = ONCE_INIT;
 
-/// Global initilisation
-pub fn global_init() {
+/// Initialise Zbox environment.
+///
+/// This function should be called before any other functions provided by Zbox.
+/// This function can be called more than one time.
+pub fn init_env() {
     // only call the initialisation code once globally
     INIT.call_once(|| {
         env_logger::init().expect("Initialise logger failed");

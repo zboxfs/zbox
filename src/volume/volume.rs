@@ -271,8 +271,8 @@ impl Volume {
         self.meta.clone()
     }
 
-    /// Change volume password
-    pub fn change_password(
+    /// Reset volume password
+    pub fn reset_password(
         &mut self,
         old_pwd: &str,
         new_pwd: &str,
@@ -354,7 +354,7 @@ const CRYPT_FRAME_SIZE: usize = 16 * 1024;
 /// Crypto Reader
 struct CryptoReader {
     id: Eid,
-    read: u64, // accumulate bytes read from underneath storage
+    read: u64, // accumulate bytes read from underlying storage
     txid: Txid,
     vol: VolumeRef,
 
@@ -628,12 +628,12 @@ mod tests {
 
     use self::tempdir::TempDir;
 
-    use base::global_init;
+    use base::init_env;
     use base::crypto::{Crypto, RandomSeed, Hash, Cost};
     use super::*;
 
     fn setup_mem() -> VolumeRef {
-        global_init();
+        init_env();
         let uri = "mem://test".to_string();
         let cost = Cost::default();
         let mut vol = Volume::new(&uri).unwrap();
@@ -642,7 +642,7 @@ mod tests {
     }
 
     fn setup_file() -> (VolumeRef, TempDir) {
-        global_init();
+        init_env();
         let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
         let dir = tmpdir.path().to_path_buf();
         /*let dir = ::std::path::PathBuf::from("./tt");

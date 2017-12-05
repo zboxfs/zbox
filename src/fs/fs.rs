@@ -118,15 +118,15 @@ impl Fs {
         vol.meta()
     }
 
-    /// Change volume password
-    pub fn change_password(
+    /// Reset volume password
+    pub fn reset_password(
         &mut self,
         old_pwd: &str,
         new_pwd: &str,
         cost: Cost,
     ) -> Result<()> {
         let mut vol = self.vol.write().unwrap();
-        vol.change_password(old_pwd, new_pwd, cost)
+        vol.reset_password(old_pwd, new_pwd, cost)
     }
 
     /// Resolve path

@@ -779,12 +779,12 @@ mod tests {
     use std::sync::{Arc, RwLock};
     use self::tempdir::TempDir;
     use base::crypto::Crypto;
-    use base::global_init;
+    use base::init_env;
     use trans::Eid;
     use super::*;
 
     fn setup() -> (FileStorage, PathBuf, TempDir) {
-        global_init();
+        init_env();
         let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
         let dir = tmpdir.path().to_path_buf();
         /*let dir = PathBuf::from("./tt");

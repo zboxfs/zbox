@@ -1,16 +1,63 @@
 use std::path::Path;
 use std::io::SeekFrom;
+use std::time::SystemTime;
 
 use error::Error;
-use base::{IntoRef, Time, Version as RepoVersion};
+use base::{self, IntoRef, Time};
 use base::crypto::{OpsLimit, MemLimit, Cost, Cipher, Crypto};
 use trans::Eid;
 use fs::{Fs, FsRef, FileType, Version, Metadata, DirEntry, Fnode};
 use super::{Result, File};
 
-/// A builder used to create repository [`Repo`] in various manners.
+/// A builder used to create a repository [`Repo`] in various manners.
+///
+/// This builder exposes the ability to configure how a [`Repo`] is opened and
+/// what operations are permitted on the opened repository.
+///
+/// Generally speaking, when using `RepoOpener`, you'll first call [`new`], then
+/// chain calls to methods to set each option, then call [`open`], passing the
+/// URI of the repository and password you're trying to open. This will give
+/// you a [`Result`] with a [`Repo`] inside that you can further operate on.
+///
+/// # Examples
+///
+/// Opening a repository and creating it if it doesn't exist.
+///
+/// ```
+/// # use zbox::{init_env, Result};
+/// use zbox::RepoOpener;
+///
+/// # fn foo() -> Result<()> {
+/// # init_env();
+/// let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
+/// # Ok(())
+/// # }
+/// # foo().unwrap();
+/// ```
+///
+/// Specify parameters for creating a repository.
+///
+/// ```
+/// # use zbox::{init_env, Result};
+/// use zbox::{RepoOpener, OpsLimit, MemLimit, Cipher};
+///
+/// # fn foo() -> Result<()> {
+/// # init_env();
+/// let mut repo = RepoOpener::new()
+///     .ops_limit(OpsLimit::Moderate)
+///     .mem_limit(MemLimit::Interactive)
+///     .cipher(Cipher::Xchacha)
+///     .create(true)
+///     .open("mem://foo", "pwd")?;
+/// # Ok(())
+/// # }
+/// # foo().unwrap();
+/// ```
 ///
 /// [`Repo`]: struct.Repo.html
+/// [`new`]: struct.RepoOpener.html#method.new
+/// [`open`]: struct.RepoOpener.html#method.open
+/// [`Result`]: type.Result.html
 #[derive(Debug)]
 pub struct RepoOpener {
     cost: Cost,
@@ -20,35 +67,69 @@ pub struct RepoOpener {
 }
 
 impl RepoOpener {
+    /// Creates a blank new set of options ready for configuration.
     pub fn new() -> Self {
         RepoOpener::default()
     }
 
+    /// Sets the password hash operation limit.
+    ///
+    /// This option is only used for creating a repository.
+    /// `OpsLimit::Interactive` is the default.
     pub fn ops_limit(&mut self, ops_limit: OpsLimit) -> &mut Self {
         self.cost.ops_limit = ops_limit;
         self
     }
 
+    /// Sets the password hash memory limit.
+    ///
+    /// This option is only used for creating a repository.
+    /// `MemLimit::Interactive` is the default.
     pub fn mem_limit(&mut self, mem_limit: MemLimit) -> &mut Self {
         self.cost.mem_limit = mem_limit;
         self
     }
 
+    /// Sets the crypto cipher encrypts the repository.
+    ///
+    /// This option is only used for creating a repository. `Cipher::Aes` is
+    /// the default if hardware supports AES-NI instructions, otherwise it will
+    /// fall back to `Cipher::Xchacha`.
     pub fn cipher(&mut self, cipher: Cipher) -> &mut Self {
         self.cipher = cipher;
         self
     }
 
+    /// Sets the option for creating a new repository.
+    ///
+    /// This option indicates whether a new repository will be created if the
+    /// repository does not yet already exist.
     pub fn create(&mut self, create: bool) -> &mut Self {
         self.create = create;
         self
     }
 
+    /// Sets the option for read-only mode.
     pub fn read_only(&mut self, read_only: bool) -> &mut Self {
         self.read_only = read_only;
         self
     }
 
+    /// Opens a repository at URI with the password and options specified by
+    /// `self`.
+    ///
+    /// Currently two types of storages are supported:
+    ///
+    /// * OS file system based storage, location prefix: `file://`
+    ///
+    ///   After the prefix is the path to a directory on OS file system. It can
+    ///   be a relative or absolute path.
+    ///
+    /// * Memory based storage, location prefix: `mem://`
+    ///
+    ///   As memory stoage is volatile, it can only be used in repository
+    ///   creation. It doesn't make sense to open an existing memory storage,
+    ///   thus the string after prefix is arbitrary.
     pub fn open(&self, uri: &str, pwd: &str) -> Result<Repo> {
         if self.create {
             if self.read_only {
@@ -83,6 +164,44 @@ impl Default for RepoOpener {
 }
 
 /// Options and flags which can be used to configure how a file is opened.
+///
+/// This builder exposes the ability to configure how a [`File`] is opened and
+/// what operations are permitted on the opened file. The [`Repo::open_file`]
+/// and [`Repo::create_file`] methods are aliases for commonly used options
+/// using this builder.
+///
+/// Generally speaking, when using `OpenOptions`, you'll first call [`new`], then
+/// chain calls to methods to set each option, then call [`open`], passing the
+/// path of the file you're trying to open. This will give you a [`Result`]
+/// with a [`File`] inside that you can further operate on.
+///
+/// # Examples
+///
+/// Opening a file for both reading and writing, as well as creating it if it
+/// doesn't exist.
+///
+/// ```
+/// # use zbox::{init_env, Result, RepoOpener};
+/// # use zbox::OpenOptions;
+/// # fn foo() -> Result<()> {
+/// # init_env();
+/// # let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
+/// let file = OpenOptions::new()
+///     .read(true)
+///     .write(true)
+///     .create(true)
+///     .open(&mut repo, "/foo.txt")?;
+/// # Ok(())
+/// # }
+/// # foo().unwrap();
+/// ```
+///
+/// [`File`]: struct.File.html
+/// [`Repo::open_file`]: struct.Repo.html#method.open_file
+/// [`Repo::create_file`]: struct.Repo.html#method.create_file
+/// [`new`]: struct.OpenOptions.html#method.new
+/// [`open`]: struct.OpenOptions.html#method.open
+/// [`Result`]: type.Result.html
 #[derive(Debug)]
 pub struct OpenOptions {
     read: bool,
@@ -95,6 +214,9 @@ pub struct OpenOptions {
 }
 
 impl OpenOptions {
+    /// Creates a blank new set of options ready for configuration.
+    ///
+    /// All options are initially set to false, except for `read`.
     pub fn new() -> Self {
         OpenOptions {
             read: true,
@@ -107,16 +229,24 @@ impl OpenOptions {
         }
     }
 
+    /// Sets the option for read access.
     pub fn read(&mut self, read: bool) -> &mut OpenOptions {
         self.read = read;
         self
     }
 
+    /// Sets the option for write access.
     pub fn write(&mut self, write: bool) -> &mut OpenOptions {
         self.write = write;
         self
     }
 
+    /// Sets the option for the append mode.
+    ///
+    /// This option, when true, means that writes will append to a file instead
+    /// of overwriting previous content. Note that setting
+    /// `.write(true).append(true)` has the same effect as setting only
+    /// `.append(true)`.
     pub fn append(&mut self, append: bool) -> &mut OpenOptions {
         self.append = append;
         if append {
@@ -125,6 +255,10 @@ impl OpenOptions {
         self
     }
 
+    /// Sets the option for truncating a previous file.
+    ///
+    /// Note that setting `.write(true).truncate(true)` has the same effect as
+    /// setting only `.truncate(true)`.
     pub fn truncate(&mut self, truncate: bool) -> &mut OpenOptions {
         self.truncate = truncate;
         if truncate {
@@ -133,6 +267,10 @@ impl OpenOptions {
         self
     }
 
+    /// Sets the option for creating a new file.
+    ///
+    /// This option indicates whether a new file will be created if the file
+    /// does not yet already exist.
     pub fn create(&mut self, create: bool) -> &mut OpenOptions {
         self.create = create;
         if create {
@@ -141,6 +279,10 @@ impl OpenOptions {
         self
     }
 
+    /// Sets the option to always create a new file.
+    ///
+    /// This option indicates whether a new file will be created. No file is
+    /// allowed to exist at the target location.
     pub fn create_new(&mut self, create_new: bool) -> &mut OpenOptions {
         self.create_new = create_new;
         if create_new {
@@ -150,11 +292,15 @@ impl OpenOptions {
         self
     }
 
+    /// Sets the maximum number of version allowed.
+    ///
+    /// The `version_limit` must be within [1, 255].
     pub fn version_limit(&mut self, version_limit: u8) -> &mut OpenOptions {
         self.version_limit = version_limit;
         self
     }
 
+    /// Opens a file at path with the options specified by `self`.
     pub fn open<P: AsRef<Path>>(
         &self,
         repo: &mut Repo,
@@ -171,26 +317,58 @@ impl OpenOptions {
 /// Information about a repository.
 #[derive(Debug)]
 pub struct RepoInfo {
-    /// Unique volume id
-    pub volume_id: Eid,
+    volume_id: Eid,
+    ver: base::Version,
+    uri: String,
+    cost: Cost,
+    cipher: Cipher,
+    ctime: Time,
+    read_only: bool,
+}
 
-    /// Repository version number
-    pub ver: RepoVersion,
+impl RepoInfo {
+    /// Returns the unique volume id in this repository.
+    pub fn volume_id(&self) -> &Eid {
+        &self.volume_id
+    }
 
-    /// Location URI string
-    pub uri: String,
+    /// Returns repository version string.
+    ///
+    /// This is the string representation of this repository, for example,
+    /// `1.0.2`.
+    pub fn version(&self) -> String {
+        self.ver.to_string()
+    }
 
-    /// Password hashing cost
-    pub cost: Cost,
+    /// Returns the location URI string of this repository.
+    pub fn uri(&self) -> &str {
+        &self.uri
+    }
 
-    /// Crypto cipher
-    pub cipher: Cipher,
+    /// Returns the operation limit for repository password hash.
+    pub fn ops_limit(&self) -> OpsLimit {
+        self.cost.ops_limit
+    }
 
-    /// Creation time
-    pub ctime: Time,
+    /// Returns the memory limit for repository password hash
+    pub fn mem_limit(&self) -> MemLimit {
+        self.cost.mem_limit
+    }
 
-    /// Read only mode
-    pub read_only: bool,
+    /// Returns repository password encryption cipher.
+    pub fn cipher(&self) -> Cipher {
+        self.cipher
+    }
+
+    /// Returns the creation time of this repository.
+    pub fn created(&self) -> SystemTime {
+        self.ctime.to_system_time()
+    }
+
+    /// Returns whether this repository is read-only.
+    pub fn is_read_only(&self) -> bool {
+        self.read_only
+    }
 }
 
 /// An encrypted repository contains the whole file system.
@@ -198,8 +376,6 @@ pub struct RepoInfo {
 /// A `Repo` represents a secure collection which consists of files,
 /// directories and their associated data. Similar to [`std::fs`], `Repo`
 /// provides methods to manipulate the enclosed file system.
-///
-/// [`zbox_init`] should be called before any operations on `Repo`.
 ///
 /// # Create and open `Repo`
 ///
@@ -221,29 +397,42 @@ pub struct RepoInfo {
 ///
 /// ```no_run
 /// # use zbox::Result;
-/// use zbox::{zbox_init, RepoOpener};
+/// use zbox::{init_env, RepoOpener};
 ///
 /// # fn foo() -> Result<()> {
-/// zbox_init();
+/// init_env();
 /// let mut repo = RepoOpener::new()
 ///     .create(true)
-///     .open("file:///local/path", "pwd")?;
+///     .open("file:///path/to/repo", "pwd")?;
 /// # Ok(())
 /// # }
 /// ```
 ///
 /// Create a memory based repository.
 ///
-/// ```no_run
-/// # use zbox::{Result, RepoOpener};
+/// ```
+/// # use zbox::{init_env, Result, RepoOpener};
 /// # fn foo() -> Result<()> {
+/// # init_env();
 /// let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
 /// # Ok(())
 /// # }
 /// ```
 ///
+/// Open a repository in read-only mode.
+///
+/// ```no_run
+/// # use zbox::{Result, RepoOpener};
+/// # fn foo() -> Result<()> {
+/// let mut repo = RepoOpener::new()
+///     .read_only(true)
+///     .open("file:///path/to/repo", "pwd")?;
+/// # Ok(())
+/// # }
+/// ```
+///
 /// [`std::fs`]: https://doc.rust-lang.org/std/fs/index.html
-/// [`zbox_init`]: fn.zbox_init.html
+/// [`init_env`]: fn.init_env.html
 /// [`RepoOpener`]: struct.RepoOpener.html
 /// [`read-only`]: struct.RepoOpener.html#method.read_only
 #[derive(Debug)]
@@ -297,8 +486,8 @@ impl Repo {
         }
     }
 
-    /// Change password for the respository.
-    pub fn change_password(
+    /// Reset password for the respository.
+    pub fn reset_password(
         &mut self,
         old_pwd: &str,
         new_pwd: &str,
@@ -307,7 +496,7 @@ impl Repo {
     ) -> Result<()> {
         let mut fs = self.fs.write().unwrap();
         let cost = Cost::new(ops_limit, mem_limit);
-        fs.change_password(old_pwd, new_pwd, cost)
+        fs.reset_password(old_pwd, new_pwd, cost)
     }
 
     /// Returns whether the path points at an existing entity in repository.
@@ -416,6 +605,8 @@ impl Repo {
 
     /// Attempts to open a file in read-only mode.
     ///
+    /// `path` must be an absolute path.
+    ///
     /// See the [`OpenOptions::open`] function for more details.
     ///
     /// # Errors
@@ -425,9 +616,9 @@ impl Repo {
     /// # Examples
     ///
     /// ```
-    /// # use zbox::{zbox_init, Result, RepoOpener};
+    /// # use zbox::{init_env, Result, RepoOpener};
     /// # fn foo() -> Result<()> {
-    /// # zbox_init();
+    /// # init_env();
     /// # let mut repo = RepoOpener::new()
     /// #     .create(true)
     /// #     .open("mem://foo", "pwd")?;
@@ -441,7 +632,9 @@ impl Repo {
         OpenOptions::new().open(self, path)
     }
 
-    /// Create a directory
+    /// Creates a new, empty directory at the specified path.
+    ///
+    /// `path` must be an absolute path.
     pub fn create_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         if self.read_only {
             return Err(Error::ReadOnly);
@@ -452,7 +645,10 @@ impl Repo {
         Ok(())
     }
 
-    /// Recursively create directories along the path
+    /// Recursively create a directory and all of its parent components if they
+    /// are missing.
+    ///
+    /// `path` must be an absolute path.
     pub fn create_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         if self.read_only {
             return Err(Error::ReadOnly);
@@ -462,7 +658,9 @@ impl Repo {
         fs.create_dir_all(path.as_ref())
     }
 
-    /// Read directory entries
+    /// Returns a vector of all the entries within a directory.
+    ///
+    /// `path` must be an absolute path.
     pub fn read_dir<P: AsRef<Path>>(&self, path: P) -> Result<Vec<DirEntry>> {
         let fs = self.fs.read().unwrap();
         fs.read_dir(path.as_ref())
@@ -470,18 +668,29 @@ impl Repo {
 
     /// Given a path, query the repository to get information about a file,
     /// directory, etc.
+    ///
+    /// `path` must be an absolute path.
     pub fn metadata<P: AsRef<Path>>(&self, path: P) -> Result<Metadata> {
         let fs = self.fs.read().unwrap();
         fs.metadata(path.as_ref())
     }
 
-    /// Get file history of a path
+    /// Return a vector of history versions of a regular file.
+    ///
+    /// `path` must be an absolute path to a regular file.
     pub fn history<P: AsRef<Path>>(&self, path: P) -> Result<Vec<Version>> {
         let fs = self.fs.read().unwrap();
         fs.history(path.as_ref())
     }
 
-    /// Copy a file to another
+    /// Copies the content of one file to another.
+    ///
+    /// This function will overwrite the content of `to`.
+    ///
+    /// If `from` and `to` both point to the same file, then this function will
+    /// do nothing.
+    ///
+    /// `from` and `to` must be absolute paths to regular files.
     pub fn copy<P: AsRef<Path>, Q: AsRef<Path>>(
         &mut self,
         from: P,
@@ -495,7 +704,9 @@ impl Repo {
         fs.copy(from.as_ref(), to.as_ref())
     }
 
-    /// Remove a file
+    /// Removes a regular file from the repository.
+    ///
+    /// `path` must be an absolute path.
     pub fn remove_file<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         if self.read_only {
             return Err(Error::ReadOnly);
@@ -505,7 +716,9 @@ impl Repo {
         fs.remove_file(path.as_ref())
     }
 
-    /// Remove an existing empty directory
+    /// Remove an existing empty directory.
+    ///
+    /// `path` must be an absolute path.
     pub fn remove_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         if self.read_only {
             return Err(Error::ReadOnly);
@@ -515,7 +728,10 @@ impl Repo {
         fs.remove_dir(path.as_ref())
     }
 
-    /// Remove an existing directory recursively
+    /// Removes a directory at this path, after removing all its children.
+    /// Use carefully!
+    ///
+    /// `path` must be an absolute path.
     pub fn remove_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         if self.read_only {
             return Err(Error::ReadOnly);
@@ -525,7 +741,10 @@ impl Repo {
         fs.remove_dir_all(path.as_ref())
     }
 
-    /// Rename a file or directory to new name
+    /// Rename a file or directory to a new name, replacing the original file
+    /// if to already exists.
+    ///
+    /// `from` and `to` must be absolute paths.
     pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(
         &mut self,
         from: P,

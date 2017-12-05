@@ -1,6 +1,6 @@
 //! Zbox is a zero-knowledge, privacy-focused embeddable file system.
 //!
-//! It keeps files securely, privately and reliably on underneath storages.
+//! It keeps files securely, privately and reliably on underlying storages.
 //! By encapsulating files and directories into an encrypted repository, it
 //! provides a virtual file system and exclusive access to authorised
 //! application.
@@ -11,18 +11,21 @@
 //! - [`Repo`] provides similar file system manipulation methods as [`std::fs`]
 //! - [`File`] provides similar file I/O methods as [`std::fs::File`]
 //!
-//! [`zbox_init`] initialises the environment and should be called before
-//! any other methods provied by Zbox. It can be called more than once.
+//! [`init_env`] initialises the environment and should be called before
+//! any other methods provied by Zbox.
+//!
+//! After repository is opened by [`RepoOpener`], all of the other functions
+//! provided by Zbox will be thread-safe.
 //!
 //! # Examples
 //!
 //! Create and open a [`Repo`] using OS file system as storage.
 //!
 //! ```no_run
-//! use zbox::{zbox_init, RepoOpener};
+//! use zbox::{init_env, RepoOpener};
 //!
 //! // initialise zbox environment, called first
-//! zbox_init();
+//! init_env();
 //!
 //! // create and open a repository
 //! let mut repo = RepoOpener::new()
@@ -34,10 +37,10 @@
 //! [`File`] content IO using [`Read`] and [`Write`] traits.
 //!
 //! ```
-//! # use zbox::{zbox_init, RepoOpener};
+//! # use zbox::{init_env, RepoOpener};
 //! use std::io::prelude::*;
 //! use zbox::OpenOptions;
-//! # zbox_init();
+//! # init_env();
 //! # let mut repo = RepoOpener::new()
 //! #    .create(true)
 //! #    .open("mem://foo", "pwd")
@@ -52,7 +55,7 @@
 //! // use std::io::Write trait to write data into it
 //! file.write_all(b"Hello, world!").unwrap();
 //!
-//! // finish the writting to make a permanent version of content
+//! // finish writting to make a permanent version of content
 //! file.finish().unwrap();
 //!
 //! // read file content using std::io::Read trait
@@ -64,9 +67,9 @@
 //! Directory navigation can use [`Path`] and [`PathBuf`].
 //!
 //! ```
-//! # use zbox::{zbox_init, RepoOpener};
+//! # use zbox::{init_env, RepoOpener};
 //! use std::path::Path;
-//! # zbox_init();
+//! # init_env();
 //! # let mut repo = RepoOpener::new()
 //! #    .create(true)
 //! #    .open("mem://foo", "pwd")
@@ -83,9 +86,10 @@
 //! [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
 //! [`Path`]: https://doc.rust-lang.org/std/path/struct.Path.html
 //! [`PathBuf`]: https://doc.rust-lang.org/std/path/struct.PathBuf.html
-//! [`zbox_init`]: fn.zbox_init.html
+//! [`init_env`]: fn.init_env.html
 //! [`Repo`]: struct.Repo.html
 //! [`File`]: struct.File.html
+//! [`RepoOpener`]: struct.RepoOpener.html
 
 //#![feature(optin_builtin_traits)]
 
@@ -117,16 +121,9 @@ mod version;
 mod volume;
 
 pub use self::error::{Error, Result};
-pub use self::base::{Time, Version};
-pub use self::base::crypto::{Error as CryptoError, OpsLimit, MemLimit, Cost,
-                             Cipher};
+pub use self::base::init_env;
+pub use self::base::crypto::{OpsLimit, MemLimit, Cipher};
 pub use self::trans::Eid;
-pub use self::fs::fnode::{FileType, Metadata, DirEntry};
-pub use self::file::File;
+pub use self::fs::fnode::{FileType, Metadata, DirEntry, Version};
+pub use self::file::{File, VersionReader};
 pub use self::repo::{RepoOpener, OpenOptions, RepoInfo, Repo};
-
-/// Initialise Zbox environment.
-#[no_mangle]
-pub extern "C" fn zbox_init() {
-    base::global_init();
-}

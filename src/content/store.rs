@@ -116,16 +116,6 @@ impl Store {
         Ok(ent.content_id.clone())
     }
 
-    /// Increase content reference
-    pub fn ref_content(&mut self, content_id: &Eid) -> Result<u32> {
-        let ctn = self.get_content(content_id)?;
-        let ctn = ctn.read().unwrap();
-        self.content_map
-            .get_mut(ctn.hash())
-            .ok_or(Error::NoContent)
-            .and_then(|ent| ent.refcnt.inc_ref().map_err(|e| Error::from(e)))
-    }
-
     /// Decrease content reference,
     /// if the content is not used anymore, remove and return it
     pub fn deref_content(
