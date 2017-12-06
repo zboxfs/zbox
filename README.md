@@ -14,11 +14,11 @@ a virtual file system and exclusive access to authorised application.
 
 Unlike other system-level file systems, such as [ext4], [XFS] and [Btrfs], which
 provide shared access to multiple processes, Zbox is a file system that runs
-in the same memory space as the application. It only provide access to one
+in the same memory space as the application. It only provides access to one
 process at a time.
 
 By abstracting IO access, Zbox supports a variety of underlying storage layers.
-Memory and OS file system are supported, RDBMS and key-value object store
+Memory and OS file system are supported now, RDBMS and key-value object store
 supports are coming soon.
 
 ## Disclaimer
@@ -106,11 +106,11 @@ zbox = "~0.1"
 extern crate zbox;
 
 use std::io::{Read, Write};
-use zbox::{zbox_init, RepoOpener, OpenOptions};
+use zbox::{init_env, RepoOpener, OpenOptions};
 
 fn main() {
     // initialise zbox environment, called first
-    zbox_init();
+    init_env();
 
     // create and open a repository in current OS directory
     let mut repo = RepoOpener::new()
