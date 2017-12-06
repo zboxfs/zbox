@@ -139,7 +139,7 @@ fn main() {
 
 ## Build with Docker
 
-Zbox comes with Docker support, it is based on rust:latest and [libsodium] is
+Zbox comes with Docker support, it is based on [rust:latest] and [libsodium] is
 included. Check the [Dockerfile](Dockerfile) for the details.
 
 First, we build the Docker image which can be used to compile Zbox, run below
@@ -189,4 +189,4 @@ file for details.
 [ZFS]: https://en.wikipedia.org/wiki/ZFS
 [TrueCrypt]: http://truecrypt.sourceforge.net
 [VeraCrypt]: https://veracrypt.codeplex.com
-
+[rust:latest]: https://hub.docker.com/_/rust/
