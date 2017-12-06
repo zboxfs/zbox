@@ -50,7 +50,7 @@ Many OS-level file systems support encryption, such as [EncFS], [APFS] and
 [ZFS]. Some disk encryption tools also provide virtual file system, such as
 [TrueCrypt] and [VeraCrypt].
 
-This diagram shows the differece between Zbox and them.
+This diagram shows the difference between Zbox and them.
 
 ![Comparison](https://www.zbox.io/svg/zbox-compare.svg)
 
