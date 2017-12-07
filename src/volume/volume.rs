@@ -48,7 +48,7 @@ impl SuperBlk {
         crypto: &Crypto,
         payload: &[u8],
     ) -> Result<SuperBlk> {
-        // hash password
+        // hash user specified plaintext password
         let pwd_hash = crypto.hash_pwd(pwd, &Salt::new())?;
 
         Ok(SuperBlk {
@@ -63,8 +63,8 @@ impl SuperBlk {
     }
 
     fn serialize(&self) -> Result<Vec<u8>> {
-        // encrypt body using volume key which is user password hash
-        let vkey = Key::from_slice(&self.pwd_hash.hash);
+        // encrypt body using volume key which is the user password hash
+        let vkey = &self.pwd_hash.value;
         let mut body = Vec::with_capacity(SuperBlk::BODY_LEN);
         body.put(self.volume_id.as_ref());
         body.put(&self.ver.serialize()[..]);
@@ -72,12 +72,12 @@ impl SuperBlk {
         body.put(self.key.as_slice());
         let enc_body = self.crypto.encrypt_with_ad(
             &body,
-            &vkey,
+            vkey,
             &[Self::BODY_LEN as u8],
         )?;
 
         // encrypt payload using volume key
-        let enc_payload = self.crypto.encrypt(&self.payload, &vkey)?;
+        let enc_payload = self.crypto.encrypt(&self.payload, vkey)?;
 
         // serialize super block
         let len = Self::HEADER_LEN + enc_body.len() + enc_payload.len();
@@ -118,10 +118,11 @@ impl SuperBlk {
         let payload_buf = &buf[pos..];
 
         // derive volume key and use it to decrypt body
-        let vkey = Key::from_slice(&crypto.hash_pwd(pwd, &salt)?.hash);
+        let pwd_hash = crypto.hash_pwd(pwd, &salt)?;
+        let vkey = &pwd_hash.value;
         let body = crypto.decrypt_with_ad(
             body_buf,
-            &vkey,
+            vkey,
             &[Self::BODY_LEN as u8],
         )?;
         pos = Eid::EID_SIZE;
@@ -137,7 +138,7 @@ impl SuperBlk {
         let payload = if payload_buf.is_empty() {
             Vec::new()
         } else {
-            crypto.decrypt(payload_buf, &vkey)?
+            crypto.decrypt(payload_buf, vkey)?
         };
 
         Ok(SuperBlk {

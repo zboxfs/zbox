@@ -520,20 +520,12 @@ impl Cost {
 pub struct PwdHash {
     pub salt: Salt,
     pub cost: Cost,
-    pub hash: Hash,
+    pub value: Key, // hashed value as key
 }
 
 impl PwdHash {
     pub fn new() -> Self {
         PwdHash::default()
-    }
-}
-
-impl Drop for PwdHash {
-    fn drop(&mut self) {
-        unsafe {
-            sodium_memzero(self.hash.as_mut_ptr(), HASH_SIZE);
-        }
     }
 }
 
@@ -822,7 +814,7 @@ impl Crypto {
 
         unsafe {
             match crypto_pwhash(
-                pwdhash.hash.as_mut_ptr(),
+                pwdhash.value.as_mut_ptr(),
                 HASH_SIZE as u64,
                 passwd.as_ptr(),
                 passwd.len() as u64,
