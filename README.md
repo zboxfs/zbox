@@ -34,7 +34,7 @@ Features
   Argon2 password hashing and etc., empowered by [libsodium]
 - Content-based data chunk deduplication and file-based deduplication
 - Data compression using [LZ4] in fast mode
-- Data integrity is guranteed by authenticated encryption primitives (AEAD
+- Data integrity is guaranteedby authenticated encryption primitives (AEAD
   crypto)
 - File contents versioning
 - Copy-on-write (COW :cow:) semantics
