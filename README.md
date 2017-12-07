@@ -172,6 +172,7 @@ Community
 =========
 
 - [Gitter Chat Room](https://gitter.im/zboxfs/zbox)
+- [Twitter](https://twitter.com/ZboxFS)
 
 License
 =======

@@ -537,7 +537,7 @@ impl Drop for PwdHash {
     }
 }
 
-// AEAE crypto constants and types
+// AEAD crypto constants and types
 // --------------------------------
 /// Crypto key
 pub const KEY_SIZE: usize = 32;
@@ -886,7 +886,7 @@ impl Crypto {
         }
     }
 
-    // Check if AES is supported by hardware
+    /// Check if AES is supported by hardware
     #[inline]
     pub fn is_aes_hardware_available() -> bool {
         unsafe { crypto_aead_aes256gcm_is_available() == 1 }
@@ -982,6 +982,7 @@ impl Crypto {
         self.encrypt_with_ad(msg, key, &[0u8; 0])
     }
 
+    /// Encrypt message directly to dest buffer, zero copy
     pub fn encrypt_to(
         &self,
         dst: &mut [u8],
@@ -1059,6 +1060,7 @@ impl Crypto {
         self.decrypt_with_ad(ctxt, key, &[0u8; 0])
     }
 
+    /// Decrypt cipher text directly to dest buffer, zero copy
     pub fn decrypt_to(
         &self,
         dst: &mut [u8],
