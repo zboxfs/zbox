@@ -52,6 +52,8 @@ pub enum Error {
     NoVersion,
 
     ReadOnly,
+    CannotRead,
+    CannotWrite,
     NotWrite,
     NotFinish,
 
@@ -103,6 +105,8 @@ impl Display for Error {
             Error::NoVersion => write!(f, "File has no version"),
 
             Error::ReadOnly => write!(f, "Opened as read only"),
+            Error::CannotRead => write!(f, "Cannot read file"),
+            Error::CannotWrite => write!(f, "Cannot write file"),
             Error::NotWrite => write!(f, "File does not write yet"),
             Error::NotFinish => write!(f, "File does not finish yet"),
 
@@ -156,6 +160,8 @@ impl StdError for Error {
             Error::NoVersion => "File has no version",
 
             Error::ReadOnly => "Opened as read only",
+            Error::CannotRead => "Cannot read file",
+            Error::CannotWrite => "Cannot write file",
             Error::NotWrite => "File does not write yet",
             Error::NotFinish => "File does not finish yet",
 
@@ -242,6 +248,8 @@ impl PartialEq for Error {
             (&Error::NoVersion, &Error::NoVersion) => true,
 
             (&Error::ReadOnly, &Error::ReadOnly) => true,
+            (&Error::CannotRead, &Error::CannotRead) => true,
+            (&Error::CannotWrite, &Error::CannotWrite) => true,
             (&Error::NotWrite, &Error::NotWrite) => true,
             (&Error::NotFinish, &Error::NotFinish) => true,
 

@@ -610,7 +610,7 @@ impl Repo {
         } else {
             SeekFrom::Start(0)
         };
-        let mut file = File::new(handle, pos, !opts.write);
+        let mut file = File::new(handle, pos, opts.read, opts.write);
 
         if opts.truncate {
             file.set_len(0)?;

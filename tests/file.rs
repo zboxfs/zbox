@@ -272,6 +272,18 @@ fn file_read_write() {
         rdr.read_to_end(&mut dst).unwrap();
         assert_eq!(&dst[..], &buf[..]);
     }
+
+    // #13, write-only file
+    {
+        let mut f = OpenOptions::new()
+            .read(false)
+            .create(true)
+            .open(&mut repo, "/file13")
+            .unwrap();
+        f.write_once(&buf[..]).unwrap();
+        let mut dst = Vec::new();
+        assert!(f.read_to_end(&mut dst).is_err());
+    }
 }
 
 #[test]

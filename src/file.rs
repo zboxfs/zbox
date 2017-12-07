@@ -262,18 +262,25 @@ pub struct File {
     rdr: Option<FnodeReader>,
     wtr: Option<FnodeWriter>,
     tx_handle: Option<TxHandle>,
-    read_only: bool,
+    can_read: bool,
+    can_write: bool,
 }
 
 impl File {
-    pub(super) fn new(handle: Handle, pos: SeekFrom, read_only: bool) -> Self {
+    pub(super) fn new(
+        handle: Handle,
+        pos: SeekFrom,
+        can_read: bool,
+        can_write: bool,
+    ) -> Self {
         File {
             handle,
             pos,
             rdr: None,
             wtr: None,
             tx_handle: None,
-            read_only,
+            can_read,
+            can_write,
         }
     }
 
@@ -310,6 +317,9 @@ impl File {
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`history`]: struct.File.html#method.history
     pub fn version_reader(&self, ver_num: usize) -> Result<VersionReader> {
+        if !self.can_read {
+            return Err(Error::CannotRead);
+        }
         VersionReader::new(&self.handle, ver_num)
     }
 
@@ -335,8 +345,8 @@ impl File {
             return Err(Error::NotFinish);
         }
 
-        if self.read_only {
-            return Err(Error::ReadOnly);
+        if !self.can_write {
+            return Err(Error::CannotWrite);
         }
 
         assert!(self.tx_handle.is_none());
@@ -444,8 +454,8 @@ impl File {
             return Err(Error::NotFinish);
         }
 
-        if self.read_only {
-            return Err(Error::ReadOnly);
+        if !self.can_write {
+            return Err(Error::CannotWrite);
         }
 
         let tx_handle = TxMgr::begin_trans(&self.handle.txmgr)?;
@@ -458,6 +468,12 @@ impl File {
 
 impl Read for File {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if !self.can_read {
+            return Err(IoError::new(
+                ErrorKind::Other,
+                Error::CannotRead.description(),
+            ));
+        }
         if self.rdr.is_none() {
             let mut rdr = map_io_err!(
                 FnodeReader::new_current(self.handle.fnode.clone())
@@ -511,7 +527,7 @@ impl Write for File {
             }
             None => Err(IoError::new(
                 ErrorKind::PermissionDenied,
-                Error::ReadOnly.description(),
+                Error::CannotWrite.description(),
             )),
         }
     }
@@ -546,7 +562,8 @@ impl Debug for File {
             .field("pos", &self.pos)
             .field("rdr", &self.rdr)
             .field("wtr", &self.wtr)
-            .field("read_only", &self.read_only)
+            .field("can_read", &self.can_read)
+            .field("can_write", &self.can_write)
             .finish()
     }
 }
