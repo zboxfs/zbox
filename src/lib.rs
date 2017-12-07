@@ -1,4 +1,4 @@
-//! Zbox is a zero-knowledge, privacy-focused embeddable file system.
+//! Zbox is a zero-details, privacy-focused embeddable file system.
 //!
 //! It keeps files securely, privately and reliably on underlying storages.
 //! By encapsulating files and directories into an encrypted repository, it

@@ -7,7 +7,7 @@
 [![license](https://img.shields.io/github/license/zboxfs/zbox.svg?style=flat-square)](https://github.com/zboxfs/zbox)
 [![GitHub stars](https://img.shields.io/github/stars/zboxfs/zbox.svg?style=social&label=Stars)](https://github.com/zboxfs/zbox)
 
-Zbox is a zero-knowledge, privacy-focused embeddable file system. Its goal is
+Zbox is a zero-details, privacy-focused embeddable file system. Its goal is
 to help application store files securely, privately and reliably. By
 encapsulating files and directories into an encrypted repository, it provides
 a virtual file system and exclusive access to authorised application.
