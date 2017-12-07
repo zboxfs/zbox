@@ -7,18 +7,18 @@
 [![license](https://img.shields.io/github/license/zboxfs/zbox.svg?style=flat-square)](https://github.com/zboxfs/zbox)
 [![GitHub stars](https://img.shields.io/github/stars/zboxfs/zbox.svg?style=social&label=Stars)](https://github.com/zboxfs/zbox)
 
-Zbox is a zero-knowledge, privacy-focused embeddable file system. Its goal is
+Zbox is a zero-details, privacy-focused embeddable file system. Its goal is
 to help application store files securely, privately and reliably. By
 encapsulating files and directories into an encrypted repository, it provides
 a virtual file system and exclusive access to authorised application.
 
 Unlike other system-level file systems, such as [ext4], [XFS] and [Btrfs], which
 provide shared access to multiple processes, Zbox is a file system that runs
-in the same memory space as the application. It only provide access to one
+in the same memory space as the application. It only provides access to one
 process at a time.
 
 By abstracting IO access, Zbox supports a variety of underlying storage layers.
-Memory and OS file system are supported, RDBMS and key-value object store
+Memory and OS file system are supported now, RDBMS and key-value object store
 supports are coming soon.
 
 ## Disclaimer
@@ -50,7 +50,7 @@ Many OS-level file systems support encryption, such as [EncFS], [APFS] and
 [ZFS]. Some disk encryption tools also provide virtual file system, such as
 [TrueCrypt] and [VeraCrypt].
 
-This diagram shows the differece between Zbox and them.
+This diagram shows the difference between Zbox and them.
 
 ![Comparison](https://www.zbox.io/svg/zbox-compare.svg)
 
@@ -106,11 +106,11 @@ zbox = "~0.1"
 extern crate zbox;
 
 use std::io::{Read, Write};
-use zbox::{zbox_init, RepoOpener, OpenOptions};
+use zbox::{init_env, RepoOpener, OpenOptions};
 
 fn main() {
     // initialise zbox environment, called first
-    zbox_init();
+    init_env();
 
     // create and open a repository in current OS directory
     let mut repo = RepoOpener::new()
@@ -139,7 +139,7 @@ fn main() {
 
 ## Build with Docker
 
-Zbox comes with Docker support, it is based on rust:latest and [libsodium] is
+Zbox comes with Docker support, it is based on [rust:latest] and [libsodium] is
 included. Check the [Dockerfile](Dockerfile) for the details.
 
 First, we build the Docker image which can be used to compile Zbox, run below
@@ -189,4 +189,4 @@ file for details.
 [ZFS]: https://en.wikipedia.org/wiki/ZFS
 [TrueCrypt]: http://truecrypt.sourceforge.net
 [VeraCrypt]: https://veracrypt.codeplex.com
-
+[rust:latest]: https://hub.docker.com/_/rust/

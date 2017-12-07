@@ -1,4 +1,4 @@
-//! Zbox is a zero-knowledge, privacy-focused embeddable file system.
+//! Zbox is a zero-details, privacy-focused embeddable file system.
 //!
 //! It keeps files securely, privately and reliably on underlying storages.
 //! By encapsulating files and directories into an encrypted repository, it
@@ -8,8 +8,8 @@
 //! The most core part of this module is [`Repo`] and [`File`], which provides
 //! most file system operations and file I/O.
 //!
-//! - [`Repo`] provides similar file system manipulation methods as [`std::fs`]
-//! - [`File`] provides similar file I/O methods as [`std::fs::File`]
+//! - [`Repo`] provides similar file system manipulation methods to [`std::fs`]
+//! - [`File`] provides similar file I/O methods to [`std::fs::File`]
 //!
 //! [`init_env`] initialises the environment and should be called before
 //! any other methods provied by Zbox.

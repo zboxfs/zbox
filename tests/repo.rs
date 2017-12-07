@@ -39,11 +39,13 @@ fn repo_oper() {
     // case #3: open repo in read-only mode
     let path = base.clone() + "/repo3";
     {
-        RepoOpener::new()
-            .create(true)
-            .read_only(true)
-            .open(&path, &pwd)
-            .is_err();
+        assert!(
+            RepoOpener::new()
+                .create(true)
+                .read_only(true)
+                .open(&path, &pwd)
+                .is_err()
+        );
         RepoOpener::new().create(true).open(&path, &pwd).unwrap();
     }
     let mut repo = RepoOpener::new().read_only(true).open(&path, &pwd).unwrap();
@@ -78,5 +80,22 @@ fn repo_oper() {
     // case #5: open memory storage without create
     {
         assert!(RepoOpener::new().open("mem://foo", &pwd).is_err());
+    }
+
+    // case #6: test create_new option
+    {
+        let path = base.clone() + "/repo6";
+        RepoOpener::new()
+            .create_new(true)
+            .open(&path, &pwd)
+            .unwrap();
+        assert_eq!(
+            RepoOpener::new()
+                .create_new(true)
+                .open(&path, &pwd)
+                .unwrap_err(),
+            Error::AlreadyExists
+        );
+        RepoOpener::new().create(true).open(&path, &pwd).unwrap();
     }
 }

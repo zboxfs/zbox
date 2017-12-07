@@ -63,6 +63,7 @@ pub struct RepoOpener {
     cost: Cost,
     cipher: Cipher,
     create: bool,
+    create_new: bool,
     read_only: bool,
 }
 
@@ -109,7 +110,21 @@ impl RepoOpener {
         self
     }
 
+    /// Sets the option to always create a new repository.
+    ///
+    /// This option indicates whether a new repository will be created. No
+    /// repository is allowed to exist at the target location.
+    pub fn create_new(&mut self, create_new: bool) -> &mut Self {
+        self.create_new = create_new;
+        if create_new {
+            self.create = true;
+        }
+        self
+    }
+
     /// Sets the option for read-only mode.
+    ///
+    /// This option cannot be true with either `create` or `create_new` is true.
     pub fn read_only(&mut self, read_only: bool) -> &mut Self {
         self.read_only = read_only;
         self
@@ -134,6 +149,9 @@ impl RepoOpener {
     /// After a repository is opened, all of the other functions provided by
     /// Zbox will be thread-safe.
     ///
+    /// The application should destroy the password as soon as possible after
+    /// calling this function.
+    ///
     /// # Errors
     ///
     /// Open a memory based repository without enable `create` option will
@@ -144,6 +162,9 @@ impl RepoOpener {
                 return Err(Error::InvalidArgument);
             }
             if Repo::exists(uri)? {
+                if self.create_new {
+                    return Err(Error::AlreadyExists);
+                }
                 Repo::open(uri, pwd, self.read_only)
             } else {
                 Repo::create(uri, pwd, self.cost, self.cipher)
@@ -166,6 +187,7 @@ impl Default for RepoOpener {
             cost: Cost::default(),
             cipher: default_cipher,
             create: false,
+            create_new: false,
             read_only: false,
         }
     }
