@@ -42,7 +42,7 @@ Features
 - Snapshot :camera:
 - Support multiple storages, including memory, OS file system, RDBMS (coming
   soon), Key-value object store (coming soon) and more
-- Build in [Rust] with :hearts:
+- Built with [Rust] :hearts:
 
 ## Comparison
 
