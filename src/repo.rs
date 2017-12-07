@@ -149,6 +149,9 @@ impl RepoOpener {
     /// After a repository is opened, all of the other functions provided by
     /// Zbox will be thread-safe.
     ///
+    /// The application should destroy the password as soon as possible after
+    /// calling this function.
+    ///
     /// # Errors
     ///
     /// Open a memory based repository without enable `create` option will
