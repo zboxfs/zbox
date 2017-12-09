@@ -20,6 +20,46 @@ When making a feature request, please make it clear what problem you intend to
 solve with the feature, any ideas for how Zbox could support solving that
 problem, any possible alternatives, and any disadvantages.
 
+## Formatting code
+
+We are using [rustfmt](https://github.com/rust-lang-nursery/rustfmt) to format
+source code. The Formatting rules are defined in `rustfmt.toml` file. Please
+make sure you have run `cargo fmt` before submitting code.
+
+You can also use some IDEs, such as Vim, which support `rustfmt` to
+automatically format code while you're editing.
+
+## Branching
+
+Zbox has two main branches, both branches should always be compilable and
+passed all the unit and integration tests before pushed to GitHub.
+
+- master
+
+  This branch always contains stable code and is mainly for releasing. Pull
+  request should not be pushed to this branch.
+
+- develop
+
+  This branch contains latest development code, pull request should be pushed
+  to this branch first.
+
+## Debugging
+
+Zbox uses [env_logger](https://crates.io/crates/env_logger) to output debug
+information. You can use the below environment variable to enable debug log
+output.
+
+```bash
+export RUST_LOG=zbox=debug
+```
+
+Also, this environment variable could be helpful.
+
+```bash
+export RUST_BACKTRACE=full
+```
+
 ## Running the test suite
 
 We encourage you to check that the test suite passes locally before submitting a
@@ -27,11 +67,48 @@ pull request with your changes. If anything does not pass, typically it will be
 easier to iterate and fix it locally than waiting for the CI servers to run
 tests for you.
 
-##### In the [`zbox`] directory
+In the [`zbox`] directory, you can run different test suites. To see more
+details, please check [cargo manual](http://doc.crates.io/guide.html).
+
+### Run unit test suite
 
 ```bash
-# run all tests in Zbox source code
-cargo test
+cargo test --lib
+```
+
+### Run integration test suite
+
+```bash
+cargo test --tests
+```
+
+### Run documentation test suite
+
+```bash
+cargo test --doc
+```
+
+### Run fuzz test
+
+Zbox contains fuzz test program, which is located in `src/bin` directory. To run
+those tests, you can run below commands from [`zbox`] directory.
+
+Run fuzz test for file system.
+
+```bash
+cargo run --bin fuzz_fs
+```
+
+Run fuzz test for file read and write
+
+```bash
+cargo run --bin fuzz_io
+```
+
+Run fuzz test for directory.
+
+```bash
+cargo run --bin fuzz_dir
 ```
 
 ## Code of Conduct

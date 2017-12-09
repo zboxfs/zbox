@@ -158,6 +158,17 @@ Or run the test suite.
 docker run --rm -v $PWD:/zbox zbox cargo test
 ```
 
+## Static linking with libsodium
+
+By default, Zbox use dynamic linking when links with libsodium. If you want to
+change this behavior and use static linking, use below two environment
+variables.
+
+```bash
+export SODIUM_LIB_DIR=/path/to/your/libsodium/lib;
+export SODIUM_STATIC=true;
+```
+
 Contribution
 ============
 
