@@ -123,8 +123,8 @@ impl Store {
         content_id: &Eid,
     ) -> Result<Option<ContentRef>> {
         {
-            let ctn = self.get_content(content_id)?;
-            let ctn = ctn.read().unwrap();
+            let ctn_ref = self.get_content(content_id)?;
+            let ctn = ctn_ref.read().unwrap();
             let refcnt = self.content_map
                 .get_mut(ctn.hash())
                 .ok_or(Error::NoContent)
@@ -149,7 +149,10 @@ impl Store {
 
 impl Debug for Store {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Store(content_map: {})", self.content_map.len())
+        f.debug_struct("Store")
+            .field("id", &self.id)
+            .field("content_map", &self.content_map)
+            .finish()
     }
 }
 

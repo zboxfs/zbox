@@ -4,8 +4,6 @@ use std::clone::Clone;
 use std::default::Default;
 use std::ops::Deref;
 
-use serde::{Deserialize, Serialize};
-
 use error::{Error, Result};
 use base::IntoRef;
 use base::lru::{Lru, CountMeter, Pinnable};
@@ -155,7 +153,7 @@ where
         }
 
         if !self.has_other() {
-            let new_val = T::clone_new(self);
+            let new_val = T::clone_new(self.slot().inner_ref());
             let mut slot = Slot::new(new_val);
             slot.txid = self.txid;
             *self.other_mut() = Some(slot);
@@ -305,26 +303,18 @@ where
         + Default
         + Send
         + Sync
-        + Deserialize<'d>
         + CloneNew
-        + Serialize,
+        + Persistable<'d>
+        + 'static,
 {
     type Target = T;
 
     fn deref(&self) -> &T {
-        match self.switch {
-            Switch::Left => {
-                match self.left {
-                    Some(ref slot) => return slot.inner_ref(),
-                    None => unreachable!(),
-                }
-            }
-            Switch::Right => {
-                match self.right {
-                    Some(ref slot) => return slot.inner_ref(),
-                    None => unreachable!(),
-                }
-            }
+        let curr_txid = Txid::current_or_empty();
+        if self.slot().txid == Some(curr_txid) || !self.has_other() {
+            self.slot().inner_ref()
+        } else {
+            self.other_slot().inner_ref()
         }
     }
 }
@@ -536,5 +526,110 @@ where
     pub fn remove(&self, id: &Eid) -> Option<CowRef<T>> {
         let mut lru = self.lru.write().unwrap();
         lru.remove(id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::{thread, time};
+    use base::init_env;
+    use base::crypto::{Cipher, Cost};
+    use trans::{TxMgr, Txid, Eid, CloneNew};
+    use volume::Volume;
+
+    fn setup_vol() -> VolumeRef {
+        init_env();
+        let uri = "mem://test".to_string();
+        let mut vol = Volume::new(&uri).unwrap();
+        vol.init(Cost::default(), Cipher::Xchacha).unwrap();
+        vol.into_ref()
+    }
+
+    #[derive(Debug, Default, Clone, Deserialize, Serialize)]
+    struct Obj {
+        id: Eid,
+        val: u8,
+    }
+
+    impl Obj {
+        fn new(val: u8) -> Self {
+            Obj {
+                id: Eid::new(),
+                val,
+            }
+        }
+
+        fn val(&self) -> u8 {
+            self.val
+        }
+    }
+
+    impl Id for Obj {
+        fn id(&self) -> &Eid {
+            &self.id
+        }
+
+        fn id_mut(&mut self) -> &mut Eid {
+            &mut self.id
+        }
+    }
+
+    impl CloneNew for Obj {}
+    impl<'de> Persistable<'de> for Obj {}
+
+    #[test]
+    fn inner_obj_ref() {
+        let vol = setup_vol();
+        let txid = Txid::from(0);
+        let txmgr = TxMgr::new(txid, &vol).into_ref();
+        let val = 42;
+        let obj = Obj::new(val);
+        let obj2 = Obj::new(val);
+        let children_cnt = 4;
+        let cow_ref = Cow::new(obj, &txmgr).into_ref();
+        {
+            let mut c = cow_ref.write().unwrap();
+            c.self_ref = Arc::downgrade(&cow_ref);
+            c.slot_mut().txid = Some(txid);
+        }
+        let cow_ref2 = Cow::new(obj2, &txmgr).into_ref();
+
+        let mut children = vec![];
+        for i in 0..children_cnt {
+            let txmgr = txmgr.clone();
+            let cow_ref = cow_ref.clone();
+            let cow_ref2 = cow_ref2.clone();
+            children.push(thread::spawn(move || {
+                if i == 0 {
+                    // writer thread to update value
+                    TxMgr::begin_trans(&txmgr).unwrap();
+                    let mut cow = cow_ref.write().unwrap();
+                    assert_eq!(cow.val(), val);
+                    assert!(!cow.has_other());
+                    {
+                        let c = cow.make_mut().unwrap();
+                        c.val += 1;
+                    }
+                    assert!(cow.has_other());
+                    assert_eq!(cow.val(), val + 1);
+                } else {
+                    thread::sleep(time::Duration::from_millis(100));
+
+                    // reader thread should still read old value
+                    let cow = cow_ref.read().unwrap();
+                    assert_eq!(cow.val(), val);
+
+                    // read unchanged value
+                    let cow2 = cow_ref2.read().unwrap();
+                    assert_eq!(cow2.val(), val);
+                }
+            }));
+        }
+        for child in children {
+            let _ = child.join();
+        }
+
     }
 }

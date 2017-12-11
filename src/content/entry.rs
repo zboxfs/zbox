@@ -211,11 +211,11 @@ impl EntryList {
 
     pub fn link(&self, store: &Store) -> Result<()> {
         for ent in self.ents.iter() {
-            let seg = store.get_seg(&ent.seg_id)?;
-            let mut sg = seg.write().unwrap();
-            //println!("entry.link: {:#?}", seg.id());
+            let seg_ref = store.get_seg(&ent.seg_id)?;
+            let mut seg_cow = seg_ref.write().unwrap();
+            let seg = seg_cow.make_mut()?;
             for span in ent.spans.iter() {
-                sg.make_mut()?.ref_chunks(span.begin..span.end)?;
+                seg.ref_chunks(span.begin..span.end)?;
             }
         }
         Ok(())
@@ -227,22 +227,21 @@ impl EntryList {
         store: &mut Store,
     ) -> Result<()> {
         for ent in self.ents.iter() {
-            let seg = store.get_seg(&ent.seg_id)?;
-            let is_orphaned = {
-                let mut sg = seg.write().unwrap();
+            let seg_ref = store.get_seg(&ent.seg_id)?;
+            let mut seg_cow = seg_ref.write().unwrap();
+
+            {
+                let seg = seg_cow.make_mut()?;
                 for span in ent.spans.iter() {
-                    sg.make_mut()?.deref_chunks(span.begin..span.end)?;
+                    seg.deref_chunks(span.begin..span.end)?;
                 }
-                sg.is_orphan()
-            };
+            }
 
             // if segment is not used anymore, remove it
-            if is_orphaned {
-                let mut sg = seg.write().unwrap();
-                sg.make_del()?;
-                chk_map.remove(sg.id());
-                //println!("entry.unlink: remove seg {:#?}", seg.id());
-                store.remove_segment(sg.id(), sg.seg_data_id());
+            if seg_cow.is_orphan() {
+                seg_cow.make_del()?;
+                chk_map.remove(seg_cow.id());
+                store.remove_segment(seg_cow.id(), seg_cow.seg_data_id());
             }
         }
 

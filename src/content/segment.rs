@@ -169,11 +169,10 @@ impl Segment {
         self.used == 0
     }
 
-    // append chunk data to segment
-    pub fn append(&mut self, data: &[u8]) {
-        let data_len = data.len();
+    // create a new chunk and append to segment
+    fn append_chunk(&mut self, data_len: usize) {
         let mut chunk = Chunk::new(self.len, data_len);
-        chunk.inc_ref().unwrap();
+        chunk.inc_ref().unwrap(); // initialise reference count to 1
         self.chunks.push(chunk);
         self.len += data_len;
         self.used += data_len;
@@ -313,7 +312,7 @@ impl Write for Writer {
         if seg.is_full() {
             return Ok(0);
         }
-        map_io_err!(seg.make_mut())?.append(chunk);
+        map_io_err!(seg.make_mut())?.append_chunk(chunk.len());
         self.data_wtr.write(chunk)
     }
 

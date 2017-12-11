@@ -29,12 +29,14 @@ impl Chunk {
         }
     }
 
+    #[inline]
     pub fn inc_ref(&mut self) -> Result<u32> {
-        Ok(self.refcnt.inc_ref()?)
+        self.refcnt.inc_ref()
     }
 
+    #[inline]
     pub fn dec_ref(&mut self) -> Result<u32> {
-        Ok(self.refcnt.dec_ref()?)
+        self.refcnt.dec_ref()
     }
 }
 
