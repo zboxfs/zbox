@@ -36,13 +36,18 @@ passed all the unit and integration tests before pushed to GitHub.
 
 - master
 
-  This branch always contains stable code and is mainly for releasing. Pull
-  request should not be pushed to this branch.
+  This branch contains latest development code, pull request should be merged
+  to this branch.
 
-- develop
+- stable
 
-  This branch contains latest development code, pull request should be pushed
-  to this branch first.
+  This branch always contains stable code and is mainly for releasing. Release
+  tags are applied to this branch.
+
+There are some other short-lifetime branches, such as release branch and bug
+fix branch. Those branches should based on `master` branch, and will be
+eventually merged back to `master`. Those branches should also regularly use
+`rebase` to sync latest commits from `master`.
 
 ## Debugging
 
