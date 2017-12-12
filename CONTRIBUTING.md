@@ -59,7 +59,7 @@ output.
 export RUST_LOG=zbox=debug
 ```
 
-Also, this environment variable could be helpful.
+Also, this `RUST_BACKTRACE` variable could be helpful when debugging.
 
 ```bash
 export RUST_BACKTRACE=full
@@ -72,7 +72,7 @@ pull request with your changes. If anything does not pass, typically it will be
 easier to iterate and fix it locally than waiting for the CI servers to run
 tests for you.
 
-In the [`zbox`] directory, you can run different test suites. To see more
+In the `zbox` directory, you can run different test suites. To see more
 details, please check [cargo manual](http://doc.crates.io/guide.html).
 
 ### Run unit test suite
@@ -95,8 +95,8 @@ cargo test --doc
 
 ### Run fuzz test
 
-Zbox contains fuzz test program, which is located in `src/bin` directory. To run
-those tests, you can run below commands from [`zbox`] directory.
+Zbox contains fuzz test tools, which are located in `src/bin` directory. To run
+those tests, you can run below commands from `zbox` directory.
 
 Run fuzz test for file system.
 
