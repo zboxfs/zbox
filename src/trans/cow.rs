@@ -153,7 +153,7 @@ where
         }
 
         if !self.has_other() {
-            let new_val = T::clone_new(self.slot().inner_ref());
+            let new_val = T::clone_new(self);
             let mut slot = Slot::new(new_val);
             slot.txid = self.txid;
             *self.other_mut() = Some(slot);
@@ -261,7 +261,7 @@ where
         self.slot_mut_by(switch)
     }
 
-    pub fn load(
+    pub fn load_cow(
         id: &Eid,
         txmgr: &TxMgrRef,
         vol: &VolumeRef,
@@ -288,7 +288,7 @@ where
         Ok(cow_ref)
     }
 
-    pub fn save(&self, txid: Txid, vol: &VolumeRef) -> Result<()> {
+    pub fn save_cow(&self, txid: Txid, vol: &VolumeRef) -> Result<()> {
         // save inner value
         T::save(self, txid, vol)?;
 
@@ -379,7 +379,7 @@ where
         let txid = self.txid.unwrap();
 
         match action {
-            Action::New => self.save(txid, vol),
+            Action::New => self.save_cow(txid, vol),
             Action::Update => {
                 // toggle switch and then save the new inner value
                 self.switch.toggle();
@@ -388,7 +388,7 @@ where
                 // remove old inner value
                 T::remove(&self.other_slot().id, txid, vol)?;
 
-                // save cow
+                // save cow itself
                 let other_bk = self.other_mut().take();
                 let result = <Cow<T> as Persistable>::save(self, txid, vol);
                 *self.other_mut() = other_bk;
@@ -518,7 +518,7 @@ where
 
         // if not in cache, load it from volume
         // then insert into cache
-        let cow_ref = Cow::<T>::load(id, &self.txmgr, vol)?;
+        let cow_ref = Cow::<T>::load_cow(id, &self.txmgr, vol)?;
         lru.insert(id.clone(), cow_ref.clone());
         Ok(cow_ref)
     }

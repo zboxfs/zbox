@@ -330,7 +330,7 @@ impl Fnode {
         store: &StoreRef,
         vol: &VolumeRef,
     ) -> Result<FnodeRef> {
-        let root = Cow::<Fnode>::load(root_id, txmgr, vol)?;
+        let root = Cow::<Fnode>::load_cow(root_id, txmgr, vol)?;
         {
             let mut root_cow = root.write().unwrap();
             let root = root_cow.make_mut_naive()?;

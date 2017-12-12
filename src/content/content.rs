@@ -172,8 +172,8 @@ impl Read for Reader {
             |e| e.end_offset() <= start,
         )
         {
-            let segref = map_io_err!(store.get_seg(&ent.seg_id))?;
-            let seg = segref.read().unwrap();
+            let seg_ref = map_io_err!(store.get_seg(&ent.seg_id))?;
+            let seg = seg_ref.read().unwrap();
             let segdata_ref =
                 map_io_err!(store.get_segdata(seg.seg_data_id()))?;
             let segdata = segdata_ref.read().unwrap();

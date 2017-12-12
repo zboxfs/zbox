@@ -79,7 +79,7 @@ impl Store {
         txmgr: &TxMgrRef,
         vol: &VolumeRef,
     ) -> Result<StoreRef> {
-        let store = Cow::<Store>::load(store_id, txmgr, vol)?;
+        let store = Cow::<Store>::load_cow(store_id, txmgr, vol)?;
         {
             let mut store_cow = store.write().unwrap();
             let store = store_cow.make_mut_naive()?;

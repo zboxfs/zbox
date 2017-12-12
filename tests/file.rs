@@ -386,6 +386,41 @@ fn file_read_write_mt() {
 }
 
 #[test]
+fn file_content_dedup() {
+    let mut env = common::setup();
+    let mut repo = &mut env.repo;
+
+    let buf = [42u8; 16];
+
+    {
+        let mut f = OpenOptions::new()
+            .create(true)
+            .version_limit(1)
+            .open(&mut repo, "/file")
+            .unwrap();
+        let mut f2 = OpenOptions::new()
+            .create(true)
+            .version_limit(1)
+            .open(&mut repo, "/file2")
+            .unwrap();
+        let mut f3 = OpenOptions::new()
+            .create(true)
+            .version_limit(1)
+            .open(&mut repo, "/file3")
+            .unwrap();
+
+        // Those should all point to same content, but how do we verify it?
+        // Probably need to inject some debug println() in fnode.rs.
+        f.write_once(&buf).unwrap();
+        f2.write_once(&buf).unwrap();
+        f.write_once(&buf).unwrap();
+        f2.write_once(&buf).unwrap();
+        f.write_once(&buf).unwrap();
+        f3.write_once(&buf).unwrap();
+    }
+}
+
+#[test]
 fn file_truncate() {
     let mut env = common::setup();
     let mut repo = &mut env.repo;

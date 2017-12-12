@@ -290,7 +290,7 @@ impl Writer {
 
     pub fn save_seg(&self) -> Result<()> {
         let seg = self.seg.read().unwrap();
-        seg.save(self.txid, &self.vol)
+        seg.save_cow(self.txid, &self.vol)
     }
 
     pub fn renew(&mut self) -> Result<()> {
