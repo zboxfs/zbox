@@ -73,7 +73,7 @@ Below is the feature comparison list.
 | Users and permissions       | :heavy_multiplication_x: | :heavy_check_mark:       | :heavy_check_mark:       |
 | FUSE support                | :heavy_multiplication_x: | :heavy_check_mark:       | :heavy_check_mark:       |
 | Linux and macOS support     | :heavy_check_mark:       | :heavy_check_mark:       | :heavy_check_mark:       |
-| Windows support             | :heavy_multiplication_x: | partial                  | :heavy_check_mark:       |
+| Windows support             | :heavy_check_mark:       | partial                  | :heavy_check_mark:       |
 
 How to use
 ==========
@@ -88,8 +88,9 @@ For reference documentation, please visit [documentation](https://docs.rs/zbox).
 
 - 64-bit Debian-based Linux, such as Ubuntu
 - 64-bit macOS
+- 64-bit Windows
 
-32-bit OS and Windows are `NOT` supported yet.
+32-bit and other OS are `NOT` supported yet.
 
 ## Usage
 
@@ -164,9 +165,18 @@ By default, Zbox uses dynamic linking when it is linked with libsodium. If you
 want to change this behavior and use static linking, you can enable below two
 environment variables.
 
+On Linux/macOS,
+
 ```bash
 export SODIUM_LIB_DIR=/path/to/your/libsodium/lib
 export SODIUM_STATIC=true
+```
+
+On Windows,
+
+```bash
+set SODIUM_LIB_DIR=C:\path\to\your\libsodium\lib
+set SODIUM_STATIC=true
 ```
 
 And then re-build the code.

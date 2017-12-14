@@ -5,7 +5,7 @@
 //! provides a virtual file system and exclusive access to authorised
 //! application.
 //!
-//! The most core part of this module is [`Repo`] and [`File`], which provides
+//! The most core parts of this module are [`Repo`] and [`File`], which provides
 //! most file system operations and file I/O.
 //!
 //! - [`Repo`] provides similar file system manipulation methods to [`std::fs`]
@@ -64,7 +64,8 @@
 //! assert_eq!(content, "Hello, world!");
 //! ```
 //!
-//! Directory navigation can use [`Path`] and [`PathBuf`].
+//! Directory navigation can use [`Path`] and [`PathBuf`]. The path separator
+//! should always be "/".
 //!
 //! ```
 //! # use zbox::{init_env, RepoOpener};
