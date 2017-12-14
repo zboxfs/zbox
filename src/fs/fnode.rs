@@ -424,6 +424,21 @@ impl Fnode {
             return Err(Error::NotDir);
         }
 
+        let parent_path = {
+            #[cfg(windows)]
+            {
+                let mut path_str = path.to_str().unwrap().to_string();
+                if !path_str.ends_with("/") {
+                    path_str.push_str("/");
+                }
+                PathBuf::from(path_str)
+            }
+            #[cfg(unix)]
+            {
+                path
+            }
+        };
+
         let mut ret = Vec::new();
         let child_names = par.children_names();
 
@@ -431,7 +446,7 @@ impl Fnode {
             let child_ref = par.load_child(&name, parent.clone(), cache, vol)?;
             let child = child_ref.read().unwrap();
             ret.push(DirEntry {
-                path: path.join(name),
+                path: parent_path.join(name),
                 metadata: child.metadata(),
                 name: name.clone(),
             });

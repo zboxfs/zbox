@@ -132,7 +132,7 @@ impl Fs {
     /// Resolve path
     pub fn resolve(&self, path: &Path) -> Result<FnodeRef> {
         // only resolve absolute path
-        if !path.is_absolute() {
+        if !path.has_root() {
             return Err(Error::InvalidPath);
         }
 
