@@ -1,3 +1,4 @@
+extern crate bytes;
 extern crate zbox;
 
 mod common;
@@ -5,6 +6,11 @@ mod common;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::sync::{Arc, RwLock};
+use std::fs;
+use std::io::{Read, Write, Cursor};
+
+use bytes::{Buf, BufMut};
+
 use zbox::Repo;
 
 #[derive(Debug, Clone)]
@@ -28,20 +34,78 @@ impl Action {
             _ => unreachable!(),
         }
     }
+
+    fn to_u8(&self) -> u8 {
+        match *self {
+            Action::New => 0,
+            Action::Read => 1,
+            Action::Delete => 2,
+            Action::DeleteAll => 3,
+            Action::Rename => 4,
+        }
+    }
+
+    fn from_u8(val: u8) -> Self {
+        match val {
+            0 => Action::New,
+            1 => Action::Read,
+            2 => Action::Delete,
+            3 => Action::DeleteAll,
+            4 => Action::Rename,
+            _ => unreachable!(),
+        }
+    }
+
+    // append single action
+    fn save(&self, env: &common::TestEnv) {
+        let mut buf = Vec::new();
+        let path = env.path.join("actions");
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .open(&path)
+            .unwrap();
+        buf.put_u8(self.to_u8());
+        file.write_all(&buf).unwrap();
+    }
+
+    // load all actions
+    fn load_all(env: &common::TestEnv) -> Vec<Self> {
+        let mut buf = Vec::new();
+        let path = env.path.join("actions");
+        let mut file = fs::File::open(&path).unwrap();
+        let read = file.read_to_end(&mut buf).unwrap();
+        let mut ret = Vec::new();
+        let round = read;
+
+        let mut cur = Cursor::new(buf);
+        for _ in 0..round {
+            let val = cur.get_u8();
+            ret.push(Action::from_u8(val));
+        }
+
+        println!("Loaded {} actions.", round);
+
+        ret
+    }
 }
 
-fn test_round(repo: &mut Repo, round: usize, ctl_grp: &mut Vec<PathBuf>) {
+fn test_round(
+    repo: &mut Repo,
+    action: &Action,
+    round: usize,
+    rounds: usize,
+    ctl_grp: &mut Vec<PathBuf>,
+) {
+    let curr = thread::current();
+    let worker = curr.name().unwrap();
     let root = PathBuf::from("/");
-    let action = Action::new_random();
-    let node = ctl_grp[common::random_usize(ctl_grp.len())].clone();
-    /*println!(
-        "node: {:?}, action: {:?}, ctl_grp: {:?}",
-        node.display(),
-        action,
-        ctl_grp
-    );*/
 
-    match action {
+    // randomly pick up a dir node from control group
+    let node = ctl_grp[common::random_usize(ctl_grp.len())].clone();
+
+    match *action {
         Action::New => {
             let name = format!("{}", common::random_usize(round));
             let path = node.join(name);
@@ -112,38 +176,70 @@ fn test_round(repo: &mut Repo, round: usize, ctl_grp: &mut Vec<PathBuf>) {
             }
         }
     }
-}
 
-fn dir_fuzz() {
-    let mut env = common::setup();
-    let repo = &mut env.repo;
-    let mut ctl_grp: Vec<PathBuf> = vec![PathBuf::from("/")];
-    let rounds = 30;
-
-    for round in 0..rounds {
-        test_round(repo, round, &mut ctl_grp);
+    if round % 100 == 0 {
+        println!("{}: {}/{}...", worker, round, rounds);
+    }
+    if round == rounds - 1 {
+        println!("{}: Finished", worker);
     }
 }
 
-fn dir_fuzz_mt() {
-    let env = Arc::new(RwLock::new(common::setup()));
-    let root = PathBuf::from("/");
-    let ctl_grp = Arc::new(RwLock::new(vec![root.clone()]));
+fn dir_fuzz(rounds: usize) {
+    let mut env = common::TestEnv::new("dir");
+    let mut ctl_grp: Vec<PathBuf> = vec![PathBuf::from("/")];
+
+    // start fuzz rounds
+    // ------------------
+    for round in 0..rounds {
+        let action = Action::new_random();
+        action.save(&env);
+        test_round(&mut env.repo, &action, round, rounds, &mut ctl_grp);
+    }
+}
+
+#[allow(dead_code)]
+fn dir_fuzz_reproduce(batch_id: &str) {
+    let mut env = common::TestEnv::load(batch_id);
+    let mut ctl_grp: Vec<PathBuf> = vec![PathBuf::from("/")];
+    let actions = Action::load_all(&env);
+    let rounds = actions.len();
+
+    // start fuzz rounds
+    // ------------------
+    for round in 0..rounds {
+        let action = &actions[round];
+        test_round(&mut env.repo, action, round, rounds, &mut ctl_grp);
+    }
+}
+
+fn dir_fuzz_mt(rounds: usize) {
+    let env = common::TestEnv::new("dir_mt").into_ref();
+    let ctl_grp = Arc::new(RwLock::new(vec![PathBuf::from("/")]));
     let worker_cnt = 4;
-    let rounds = 30;
 
     let mut workers = Vec::new();
-    for _ in 0..worker_cnt {
+    for i in 0..worker_cnt {
         let env = env.clone();
         let ctl_grp = ctl_grp.clone();
-        workers.push(thread::spawn(move || {
-            let mut env = env.write().unwrap();
-            let repo = &mut env.repo;
-            let mut ctl_grp = ctl_grp.write().unwrap();
-            for round in 0..rounds {
-                test_round(repo, round, &mut ctl_grp);
-            }
-        }));
+        let name = format!("worker-{}", i);
+        let builder = thread::Builder::new().name(name);
+        workers.push(
+            builder
+                .spawn(move || for round in 0..rounds {
+                    let mut env = env.write().unwrap();
+                    let mut ctl_grp = ctl_grp.write().unwrap();
+                    let action = Action::new_random();
+                    test_round(
+                        &mut env.repo,
+                        &action,
+                        round,
+                        rounds,
+                        &mut ctl_grp,
+                    );
+                })
+                .unwrap(),
+        );
     }
     for w in workers {
         w.join().unwrap();
@@ -151,6 +247,7 @@ fn dir_fuzz_mt() {
 }
 
 fn main() {
-    dir_fuzz();
-    dir_fuzz_mt();
+    dir_fuzz(200);
+    //dir_fuzz_reproduce("dir-1513286719");
+    dir_fuzz_mt(200);
 }

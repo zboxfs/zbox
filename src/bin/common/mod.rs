@@ -4,11 +4,10 @@ extern crate zbox;
 use std::ptr;
 use std::fmt::{self, Debug};
 use std::cmp::min;
-use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::io::{Read, Write, Seek, SeekFrom, Cursor};
+use std::time::{SystemTime, UNIX_EPOCH};
+use std::io::{Read, Write, Cursor};
 use std::sync::{Arc, RwLock};
 
 use self::bytes::{Buf, BufMut, LittleEndian};
@@ -16,6 +15,28 @@ use zbox::{init_env, Repo, RepoOpener};
 
 const RND_DATA_LEN: usize = 2 * 1024 * 1024;
 const DATA_LEN: usize = 2 * RND_DATA_LEN;
+
+// print human readable integer number with thousand separator
+#[allow(dead_code)]
+pub fn readable(mut o_s: String) -> String {
+    let mut s = String::new();
+    let mut negative = false;
+    let values: Vec<char> = o_s.chars().collect();
+    if values[0] == '-' {
+        o_s.remove(0);
+        negative = true;
+    }
+    for (i, char) in o_s.chars().rev().enumerate() {
+        if i % 3 == 0 && i != 0 {
+            s.insert(0, ',');
+        }
+        s.insert(0, char);
+    }
+    if negative {
+        s.insert(0, '-');
+    }
+    s
+}
 
 // libsodium ffi
 extern "C" {
@@ -216,72 +237,13 @@ pub fn reprod_test_data(
 }
 
 #[derive(Debug)]
-pub struct TempDir {
-    path: PathBuf,
-}
-
-impl TempDir {
-    fn new() -> Self {
-        let mut buf = [0; 8];
-        random_buf(&mut buf);
-        let dirnames: Vec<String> =
-            buf.iter().map(|b| format!("{:x}", b)).collect();
-        let dirname = format!("zbox_test_{}", dirnames.join(""));
-
-        let mut dir = env::temp_dir();
-        dir.push(&dirname);
-
-        fs::create_dir(&dir).expect("Create temp dir failed");
-        TempDir { path: dir }
-    }
-}
-
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.path).unwrap();
-    }
-}
-
-#[derive(Debug)]
-#[allow(dead_code)]
 pub struct TestEnv {
-    pub repo: Repo,
-    pub tmpdir: TempDir,
-}
-
-impl TestEnv {
-    #[allow(dead_code)]
-    pub fn reopen(&mut self) {
-        let tmpdir = TempDir::new();
-        let dir = tmpdir.path.join("repo");
-        let path = "file://".to_string() + dir.to_str().unwrap();
-        let dummy_repo =
-            RepoOpener::new().create(true).open(&path, "pwd").unwrap();
-
-        let info = self.repo.info();
-        self.repo = dummy_repo;
-        self.repo = RepoOpener::new().open(info.uri(), "pwd").unwrap();
-    }
-}
-
-pub fn setup() -> TestEnv {
-    init_env();
-    let tmpdir = TempDir::new();
-    let dir = tmpdir.path.join("repo");
-    let path = "file://".to_string() + dir.to_str().unwrap();
-    let repo = RepoOpener::new().create(true).open(&path, "pwd").unwrap();
-    TestEnv { repo, tmpdir }
-}
-
-#[derive(Debug)]
-#[allow(dead_code)]
-pub struct TestEnv2 {
     pub path: PathBuf,
     pub repo: Repo,
     pub data: Vec<u8>,
 }
 
-impl TestEnv2 {
+impl TestEnv {
     pub fn new(name: &str) -> Self {
         init_env();
         let base = PathBuf::from("./fuzz_test/");
@@ -292,11 +254,11 @@ impl TestEnv2 {
                 .unwrap()
                 .as_secs()
         );
-        let path = base.join(name.to_string() + "-" + &tm);
+        let path = base.join(name.to_string() + "_" + &tm);
         fs::create_dir_all(&path).unwrap();
 
         // open repo
-        println!("Start fuzz test at {:?}", path);
+        println!("Create fuzz test env at {:?}.", path);
         let repo_path = "file://".to_string() +
             path.join("repo").to_str().unwrap();
         let repo = RepoOpener::new()
@@ -305,7 +267,7 @@ impl TestEnv2 {
             .unwrap();
 
         // create test environment
-        let mut ret = TestEnv2 {
+        let mut ret = TestEnv {
             path,
             repo,
             data: vec![0; DATA_LEN],
@@ -317,7 +279,7 @@ impl TestEnv2 {
         ret
     }
 
-    pub fn into_ref(self) -> TestEnv2Ref {
+    pub fn into_ref(self) -> TestEnvRef {
         Arc::new(RwLock::new(self))
     }
 
@@ -383,7 +345,7 @@ impl TestEnv2 {
         let mut buf = Vec::new();
         let permu_path = path.join("permu");
         let mut file = fs::File::open(&permu_path).unwrap();
-        let read = file.read_to_end(&mut buf).unwrap();
+        file.read_to_end(&mut buf).unwrap();
         let mut permu: Permu = Vec::new();
         for chunk in buf.chunks(3 * 8) {
             // chunk is 3 * u64 integers
@@ -408,7 +370,7 @@ impl TestEnv2 {
             );
         }
 
-        // open repo
+        // create and open repo
         let repo_path = path.join("repo");
         fs::remove_dir_all(&repo_path).unwrap();
         let repo_path = "file://".to_string() + repo_path.to_str().unwrap();
@@ -417,11 +379,22 @@ impl TestEnv2 {
             .open(&repo_path, "pwd")
             .unwrap();
 
-        println!("Fuzz test loaded {:?}", path);
+        println!("Fuzz test env loaded {:?}.", path);
 
         // create test environment
-        TestEnv2 { path, repo, data }
+        TestEnv { path, repo, data }
+    }
+
+    #[allow(dead_code)]
+    pub fn reopen(&mut self) {
+        let dummy_repo = RepoOpener::new()
+            .create(true)
+            .open("mem://foo", "pwd")
+            .unwrap();
+        let info = self.repo.info();
+        self.repo = dummy_repo;
+        self.repo = RepoOpener::new().open(info.uri(), "pwd").unwrap();
     }
 }
 
-pub type TestEnv2Ref = Arc<RwLock<TestEnv2>>;
+pub type TestEnvRef = Arc<RwLock<TestEnv>>;

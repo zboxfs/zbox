@@ -1,17 +1,17 @@
+extern crate bytes;
 extern crate zbox;
 
 mod common;
 
-use std::io::{Read, Write, Seek, SeekFrom};
+use std::io::{Read, Write, Seek, SeekFrom, Cursor};
 use std::path::{Path, PathBuf};
 use std::fmt::{self, Debug};
 use std::sync::{Arc, RwLock};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
-use zbox::{Error, OpenOptions, Repo, File};
+use std::fs;
 
-const RND_DATA_LEN: usize = 2 * 1024 * 1024;
-const DATA_LEN: usize = 2 * RND_DATA_LEN;
+use bytes::{Buf, BufMut, LittleEndian};
+use zbox::{Error, OpenOptions, Repo, File};
 
 #[derive(Debug, Clone, Copy)]
 enum FileType {
@@ -32,6 +32,21 @@ impl FileType {
         match *self {
             FileType::Dir => true,
             _ => false,
+        }
+    }
+
+    fn to_u64(&self) -> u64 {
+        match *self {
+            FileType::File => 0,
+            FileType::Dir => 1,
+        }
+    }
+
+    fn from_u64(val: u64) -> Self {
+        match val {
+            0 => FileType::File,
+            1 => FileType::Dir,
+            _ => unreachable!(),
         }
     }
 }
@@ -75,6 +90,37 @@ impl Action {
             last += *w;
         }
         match idx {
+            0 => Action::New,
+            1 => Action::Read,
+            2 => Action::Update,
+            3 => Action::Truncate,
+            4 => Action::Delete,
+            5 => Action::DeleteAll,
+            6 => Action::Rename,
+            7 => Action::Move,
+            8 => Action::Copy,
+            9 => Action::Reopen,
+            _ => unreachable!(),
+        }
+    }
+
+    fn to_u64(&self) -> u64 {
+        match *self {
+            Action::New => 0,
+            Action::Read => 1,
+            Action::Update => 2,
+            Action::Truncate => 3,
+            Action::Delete => 4,
+            Action::DeleteAll => 5,
+            Action::Rename => 6,
+            Action::Move => 7,
+            Action::Copy => 8,
+            Action::Reopen => 9,
+        }
+    }
+
+    fn from_u64(val: u64) -> Self {
+        match val {
             0 => Action::New,
             1 => Action::Read,
             2 => Action::Update,
@@ -137,7 +183,7 @@ impl Debug for Node {
 }
 
 // round step
-struct Step<'a> {
+struct Step {
     round: usize,
     action: Action,
     node_idx: usize,
@@ -147,13 +193,15 @@ struct Step<'a> {
     file_pos: usize,
     data_pos: usize,
     data_len: usize,
-    data: &'a [u8],
 }
 
-impl<'a> Step<'a> {
-    fn new(round: usize, nodes: &Vec<Node>, test_data: &'a [u8]) -> Self {
+impl Step {
+    const BYTES_LEN: usize = 8 * 8 + 32;
+
+    fn new_random(round: usize, nodes: &Vec<Node>, data: &[u8]) -> Self {
         let node_idx = common::random_usize(nodes.len());
-        let (data_pos, data) = common::random_slice(&test_data);
+        let (data_pos, buf) = common::random_slice(&data);
+        let file_pos = common::random_usize(nodes[node_idx].data.len());
         Step {
             round,
             action: Action::new_random(),
@@ -161,20 +209,83 @@ impl<'a> Step<'a> {
             tgt_idx: common::random_usize(nodes.len()),
             ftype: FileType::random(),
             name: format!("{}", common::random_usize(round)),
-            file_pos: common::random_usize(nodes[node_idx].data.len()),
+            file_pos,
             data_pos,
-            data_len: data.len(),
-            data,
+            data_len: buf.len(),
         }
+    }
+
+    // append single step
+    fn save(&self, env: &common::TestEnv) {
+        let mut buf = Vec::new();
+        let path = env.path.join("steps");
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .open(&path)
+            .unwrap();
+        buf.put_u64::<LittleEndian>(self.round as u64);
+        buf.put_u64::<LittleEndian>(self.action.to_u64());
+        buf.put_u64::<LittleEndian>(self.node_idx as u64);
+        buf.put_u64::<LittleEndian>(self.tgt_idx as u64);
+        buf.put_u64::<LittleEndian>(self.ftype.to_u64());
+        buf.put_u64::<LittleEndian>(self.file_pos as u64);
+        buf.put_u64::<LittleEndian>(self.data_pos as u64);
+        buf.put_u64::<LittleEndian>(self.data_len as u64);
+        let mut s = self.name.clone().into_bytes();
+        s.resize(32, 0);
+        buf.put(s);
+        file.write_all(&buf).unwrap();
+    }
+
+    // load all steps
+    fn load_all(env: &common::TestEnv) -> Vec<Self> {
+        let mut buf = Vec::new();
+        let path = env.path.join("steps");
+        let mut file = fs::File::open(&path).unwrap();
+        let read = file.read_to_end(&mut buf).unwrap();
+        let mut ret = Vec::new();
+        let round = read / Self::BYTES_LEN;
+
+        let mut cur = Cursor::new(buf);
+        for _ in 0..round {
+            let round = cur.get_u64::<LittleEndian>() as usize;
+            let action = Action::from_u64(cur.get_u64::<LittleEndian>());
+            let node_idx = cur.get_u64::<LittleEndian>() as usize;
+            let tgt_idx = cur.get_u64::<LittleEndian>() as usize;
+            let ftype = FileType::from_u64(cur.get_u64::<LittleEndian>());
+            let file_pos = cur.get_u64::<LittleEndian>() as usize;
+            let data_pos = cur.get_u64::<LittleEndian>() as usize;
+            let data_len = cur.get_u64::<LittleEndian>() as usize;
+            let mut s = vec![0u8; 32];
+            cur.copy_to_slice(&mut s);
+            let name = String::from_utf8(s).unwrap();
+            let step = Step {
+                round,
+                action,
+                node_idx,
+                tgt_idx,
+                ftype,
+                name,
+                file_pos,
+                data_pos,
+                data_len,
+            };
+            ret.push(step);
+        }
+
+        println!("Loaded {} steps", round);
+
+        ret
     }
 }
 
-impl<'a> Debug for Step<'a> {
+impl Debug for Step {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Step {{ round: {}, action: Action::{:?}, node_idx: {}, \
                 tgt_idx: {}, ftype: FileType::{:?}, name: String::from({:?}), \
-                file_pos: {}, data_pos: {}, data_len: {}, \
-                data: &test_data[{}..{}] }},",
+                file_pos: {}, data_pos: {}, data_len: {}}}",
             self.round,
             self.action,
             self.node_idx,
@@ -184,8 +295,6 @@ impl<'a> Debug for Step<'a> {
             self.file_pos,
             self.data_pos,
             self.data_len,
-            self.data_pos,
-            self.data_pos + self.data_len,
         )
     }
 }
@@ -201,26 +310,19 @@ fn compare_file_content(repo: &mut Repo, node: &Node) {
 }
 
 // write data to file at random position
-fn write_data_to_file(f: &mut File, step: &Step) {
+fn write_data_to_file(f: &mut File, step: &Step, data: &[u8]) {
     let meta = f.metadata();
     let file_size = meta.len();
     assert!(step.file_pos <= file_size);
     f.seek(SeekFrom::Start(step.file_pos as u64)).unwrap();
-    f.write_all(&step.data[..]).unwrap();
+    f.write_all(&data[..]).unwrap();
     f.finish().unwrap();
 }
 
-fn test_round(
-    round: usize,
-    env: &mut common::TestEnv,
-    step: &Step,
-    nodes: &mut Vec<Node>,
-) {
-    let _ = round;
+fn test_round(env: &mut common::TestEnv, step: &Step, nodes: &mut Vec<Node>) {
+    //println!("step: {:?}", step);
 
-    //println!("nodes: {:#?}", nodes);
     let node = nodes[step.node_idx].clone();
-    //println!("node: {:?}", node);
 
     match step.action {
         Action::New => {
@@ -258,12 +360,15 @@ fn test_round(
                         return;
                     }
 
+                    let data = &env.data[step.data_pos..
+                                             step.data_pos + step.data_len];
+
                     // write initial data to the new file
                     let mut f = result.unwrap();
-                    write_data_to_file(&mut f, &step);
+                    write_data_to_file(&mut f, &step, data);
 
                     // add new control node
-                    nodes.push(Node::new_file(&path, &step.data[..]));
+                    nodes.push(Node::new_file(&path, &data[..]));
                 }
                 FileType::Dir => {
                     let result = env.repo.create_dir(&path);
@@ -308,8 +413,9 @@ fn test_round(
                 assert_eq!(result.unwrap_err(), Error::IsDir);
                 return;
             }
+            let data = &env.data[step.data_pos..step.data_pos + step.data_len];
             let mut f = result.unwrap();
-            write_data_to_file(&mut f, &step);
+            write_data_to_file(&mut f, &step, data);
 
             // update control group node
             let nd = nodes.iter_mut().find(|n| &n.path == &node.path).unwrap();
@@ -317,12 +423,10 @@ fn test_round(
             let pos = step.file_pos;
             let new_len = pos + step.data_len;
             if new_len > old_len {
-                nd.data[pos..].copy_from_slice(&step.data[..old_len - pos]);
-                nd.data.extend_from_slice(&step.data[old_len - pos..]);
+                nd.data[pos..].copy_from_slice(&data[..old_len - pos]);
+                nd.data.extend_from_slice(&data[old_len - pos..]);
             } else {
-                nd.data[pos..pos + step.data_len].copy_from_slice(
-                    &step.data[..],
-                );
+                nd.data[pos..pos + step.data_len].copy_from_slice(&data[..]);
             }
         }
 
@@ -478,8 +582,7 @@ fn test_round(
 }
 
 fn verify(env: &mut common::TestEnv, nodes: &mut Vec<Node>) {
-    //println!("===verify===");
-    //println!("{:#?}", nodes);
+    println!("Start verifying...");
     nodes.sort_by(|a, b| a.path.cmp(&b.path));
     for (idx, node) in nodes.iter().enumerate() {
         if node.is_dir() {
@@ -519,85 +622,97 @@ fn verify(env: &mut common::TestEnv, nodes: &mut Vec<Node>) {
             compare_file_content(&mut env.repo, &node);
         }
     }
+    println!("Completed.");
 }
 
-//#[cfg_attr(rustfmt, rustfmt_skip)]
-fn fuzz_fs() {
-    let mut env = common::setup();
-    let (seed, permu, test_data) =
-        common::make_test_data(RND_DATA_LEN, DATA_LEN);
+fn fuzz_fs(rounds: usize) {
+    let mut env = common::TestEnv::new("fs");
     let mut nodes: Vec<Node> = vec![Node::new_dir("/")]; // control group
-    let rounds = 300;
-    let steps = vec![0; rounds];
 
-    //println!("seed: {:?}", seed);
-    //println!("permu: {:?}", permu);
-    let _ = seed;
-    let _ = permu;
-
-    // uncomment below to reproduce the bug found during fuzzing
-    /*use common::Span;
-    let seed = common::RandomSeed();
-    let permu = vec![];
-    let test_data = common::reprod_test_data(seed, permu, RND_DATA_LEN, DATA_LEN);
-    let steps = [];*/
+    let curr = thread::current();
+    let worker = curr.name().unwrap();
+    println!("{}: Start {} fs fuzz test rounds...", worker, rounds);
 
     // start fuzz rounds
     // ------------------
-    for round in 0..steps.len() {
-        let step = Step::new(round, &nodes, &test_data);
-        //let step = &steps[round];
-        //println!("{:?}", step);
-
-        test_round(round, &mut env, &step, &mut nodes);
+    for round in 0..rounds {
+        let step = Step::new_random(round, &nodes, &env.data);
+        step.save(&env);
+        test_round(&mut env, &step, &mut nodes);
+        if round % 10 == 0 {
+            println!("{}: {}/{}...", worker, round, rounds);
+        }
     }
+    println!("{}: Finished.", worker);
 
     // verify
     // ------------------
     verify(&mut env, &mut nodes);
 }
 
-fn fuzz_fs_mt() {
-    let env_ref = Arc::new(RwLock::new(common::setup()));
-    let (seed, permu, test_data) =
-        common::make_test_data(RND_DATA_LEN, DATA_LEN);
-    let test_data_ref = Arc::new(test_data);
+#[allow(dead_code)]
+fn fuzz_fs_reproduce(batch_id: &str) {
+    let mut env = common::TestEnv::load(batch_id);
+    let mut nodes: Vec<Node> = vec![Node::new_dir("/")]; // control group
+    let steps = Step::load_all(&env);
+    let rounds = steps.len();
+
+    let curr = thread::current();
+    let worker = curr.name().unwrap();
+    println!("{}: Start {} fs fuzz test rounds...", worker, rounds);
+
+    // start fuzz rounds
+    // ------------------
+    for round in 0..rounds {
+        let step = &steps[round];
+        test_round(&mut env, &step, &mut nodes);
+        if round % 10 == 0 {
+            println!("{}: {}/{}...", worker, round, rounds);
+        }
+    }
+    println!("{}: Finished.", worker);
+
+    // verify
+    // ------------------
+    verify(&mut env, &mut nodes);
+}
+
+fn fuzz_fs_mt(rounds: usize) {
+    let env = common::TestEnv::new("fs_mt").into_ref();
     // control group
     let nodes = Arc::new(RwLock::new(vec![Node::new_dir("/")]));
     let worker_cnt = 4;
-    let rounds = 30;
-    let round_idx_ref = Arc::new(AtomicUsize::new(0));
-
-    //println!("seed: {:?}", seed);
-    //println!("permu: {:?}", permu);
-    let _ = seed;
-    let _ = permu;
-
-    // uncomment below to reproduce the bug found during fuzzing
-    /*use common::Span;
-    let seed = common::RandomSeed();
-    let permu = vec![];
-    let test_data = common::reprod_test_data(seed, permu, RND_DATA_LEN, DATA_LEN);
-    let steps = [];*/
 
     // start fuzz rounds
     // ------------------
     let mut workers = Vec::new();
-    for _ in 0..worker_cnt {
-        let env = env_ref.clone();
+    for i in 0..worker_cnt {
+        let env = env.clone();
         let nodes = nodes.clone();
-        let test_data = test_data_ref.clone();
-        let round_idx = round_idx_ref.clone();
+        let name = format!("worker-{}", i);
+        let builder = thread::Builder::new().name(name);
 
-        workers.push(thread::spawn(move || for _ in 0..rounds {
-            let mut env = env.write().unwrap();
-            let mut nodes = nodes.write().unwrap();
-            let round = round_idx.fetch_add(1, Ordering::SeqCst);
-            let step = Step::new(round, &nodes, &test_data);
-            //println!("{:?}", step);
+        workers.push(
+            builder
+                .spawn(move || {
+                    let curr = thread::current();
+                    let worker = curr.name().unwrap();
 
-            test_round(round, &mut env, &step, &mut nodes);
-        }));
+                    for round in 0..rounds {
+                        let mut env = env.write().unwrap();
+                        let mut nodes = nodes.write().unwrap();
+                        let step = Step::new_random(round, &nodes, &env.data);
+
+                        test_round(&mut env, &step, &mut nodes);
+
+                        if round % 10 == 0 {
+                            println!("{}: {}/{}...", worker, round, rounds);
+                        }
+                    }
+                    println!("{}: Finished.", worker);
+                })
+                .unwrap(),
+        );
     }
     for w in workers {
         w.join().unwrap();
@@ -606,13 +721,14 @@ fn fuzz_fs_mt() {
     // verify
     // ------------------
     {
-        let mut env = env_ref.write().unwrap();
+        let mut env = env.write().unwrap();
         let mut nodes = nodes.write().unwrap();
         verify(&mut env, &mut nodes);
     }
 }
 
 fn main() {
-    fuzz_fs();
-    fuzz_fs_mt();
+    fuzz_fs(30);
+    //fuzz_fs_reproduce("fs_1513717382");
+    fuzz_fs_mt(30);
 }

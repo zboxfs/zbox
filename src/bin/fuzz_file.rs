@@ -1,5 +1,3 @@
-#[macro_use]
-extern crate serde_derive;
 extern crate serde;
 extern crate rmp_serde;
 extern crate bytes;
@@ -15,10 +13,8 @@ use std::cmp::min;
 use std::fs;
 
 use bytes::{Buf, BufMut, LittleEndian};
-use zbox::{OpenOptions, Repo, File};
 
-const RND_DATA_LEN: usize = 2 * 1024 * 1024;
-const DATA_LEN: usize = 2 * RND_DATA_LEN;
+use zbox::{OpenOptions, Repo, File};
 
 #[derive(Default)]
 struct Step {
@@ -37,7 +33,7 @@ impl Step {
         let file_pos = common::random_usize(old_len);
         let (data_pos, buf) = common::random_slice(data);
         let do_set_len = common::random_u32(4) == 1;
-        let new_len = common::random_usize(old_len * 2);
+        let new_len = common::random_usize((old_len as f32 * 1.2) as usize);
         Step {
             round,
             do_set_len,
@@ -49,14 +45,14 @@ impl Step {
     }
 
     // append single step
-    fn save(&self, env: &common::TestEnv2) {
+    fn save(&self, env: &common::TestEnv) {
         let mut buf = Vec::new();
-        let steps_path = env.path.join("steps");
+        let path = env.path.join("steps");
         let mut file = fs::OpenOptions::new()
             .write(true)
             .create(true)
             .append(true)
-            .open(&steps_path)
+            .open(&path)
             .unwrap();
         buf.put_u64::<LittleEndian>(self.round as u64);
         buf.put_u64::<LittleEndian>(self.do_set_len as u64);
@@ -68,19 +64,13 @@ impl Step {
     }
 
     // load all steps
-    fn load_all(env: &common::TestEnv2) -> Vec<Self> {
+    fn load_all(env: &common::TestEnv) -> Vec<Self> {
         let mut buf = Vec::new();
-        let steps_path = env.path.join("steps");
-        let mut file = fs::File::open(&steps_path).unwrap();
+        let path = env.path.join("steps");
+        let mut file = fs::File::open(&path).unwrap();
         let read = file.read_to_end(&mut buf).unwrap();
         let mut ret = Vec::new();
         let round = read / Self::BYTES_LEN;
-        println!(
-            "read: {}, size: {}, round: {}",
-            read,
-            Self::BYTES_LEN,
-            round
-        );
 
         let mut cur = Cursor::new(buf);
         for _ in 0..round {
@@ -100,6 +90,8 @@ impl Step {
             };
             ret.push(step);
         }
+
+        println!("Loaded {} steps", round);
 
         ret
     }
@@ -123,17 +115,34 @@ impl Debug for Step {
 }
 
 fn verify(repo: &mut Repo, ctl: &[u8]) {
+    println!("Start verifying...");
     let mut f = repo.open_file("/file").unwrap();
     let mut dst = Vec::new();
     f.seek(SeekFrom::Start(0)).unwrap();
     let file_len = f.read_to_end(&mut dst).unwrap();
     assert_eq!(file_len, ctl.len());
     assert_eq!(&dst[..], &ctl[..]);
+    println!("Completed.");
 }
 
-fn test_round(f: &mut File, step: &Step, src_data: &[u8], ctl: &mut Vec<u8>) {
+fn test_round(
+    f: &mut File,
+    step: &Step,
+    src_data: &[u8],
+    round: usize,
+    rounds: usize,
+    ctl: &mut Vec<u8>,
+) {
+    let curr = thread::current();
+    let worker = curr.name().unwrap();
+
+    if round == 0 {
+        println!("{}: Start {} file fuzz test rounds...", worker, rounds);
+    }
+
     let old_len = f.metadata().len();
     let data = &src_data[step.data_pos..step.data_pos + step.data_len];
+    //println!("step: {:?}", step);
 
     if step.do_set_len {
         f.set_len(step.new_len).unwrap();
@@ -159,26 +168,39 @@ fn test_round(f: &mut File, step: &Step, src_data: &[u8], ctl: &mut Vec<u8>) {
             ctl.extend_from_slice(&data[overlap..]);
         }
     }
+
+    if round % 10 == 0 {
+        let meta = f.metadata();
+        println!(
+            "{}: {}/{}, file len: {}, ...",
+            worker,
+            round,
+            rounds,
+            common::readable(meta.len().to_string())
+        );
+    }
+    if round == rounds - 1 {
+        println!("{}: Finished.", worker);
+    }
 }
 
-fn fuzz_file_read_write() {
-    let mut env = common::TestEnv2::new("file_io");
+fn fuzz_file_read_write(rounds: usize) {
+    let mut env = common::TestEnv::new("file");
     let mut file = OpenOptions::new()
         .create(true)
+        .version_limit(1)
         .open(&mut env.repo, "/file")
         .unwrap();
     let mut ctl = Vec::new();
-    let rounds = 5;
-    let steps = vec![0; rounds];
 
     // start fuzz rounds
     // ------------------
-    for round in 0..steps.len() {
+    for round in 0..rounds {
         let meta = file.metadata();
         let old_len = meta.len();
         let step = Step::new_random(round, old_len, &env.data);
         step.save(&env);
-        test_round(&mut file, &step, &env.data, &mut ctl);
+        test_round(&mut file, &step, &env.data, round, rounds, &mut ctl);
     }
 
     // verify
@@ -186,20 +208,23 @@ fn fuzz_file_read_write() {
     verify(&mut env.repo, &ctl);
 }
 
+#[allow(dead_code)]
 fn fuzz_file_read_write_reproduce(batch_id: &str) {
-    let mut env = common::TestEnv2::load(batch_id);
+    let mut env = common::TestEnv::load(batch_id);
     let mut file = OpenOptions::new()
         .create(true)
+        .version_limit(1)
         .open(&mut env.repo, "/file")
         .unwrap();
     let mut ctl = Vec::new();
     let steps = Step::load_all(&env);
+    let rounds = steps.len();
 
     // start fuzz rounds
     // ------------------
-    for round in 0..steps.len() {
+    for round in 0..rounds {
         let step = &steps[round];
-        test_round(&mut file, step, &env.data, &mut ctl);
+        test_round(&mut file, step, &env.data, round, rounds, &mut ctl);
     }
 
     // verify
@@ -207,54 +232,53 @@ fn fuzz_file_read_write_reproduce(batch_id: &str) {
     verify(&mut env.repo, &ctl);
 }
 
-/*fn fuzz_file_read_write_mt() {
-    let env_ref = Arc::new(RwLock::new(common::setup()));
-    let (seed, permu, test_data) =
-        common::make_test_data(RND_DATA_LEN, DATA_LEN);
-    let test_data_ref = Arc::new(test_data);
-    let ctl_ref = Arc::new(RwLock::new(Vec::new()));
+fn fuzz_file_read_write_mt(rounds: usize) {
+    let env = common::TestEnv::new("file_mt").into_ref();
+    let ctl_grp = Arc::new(RwLock::new(Vec::new()));
     let worker_cnt = 4;
-    let rounds = 30;
 
+    // create empty file
     {
-        let mut env = env_ref.write().unwrap();
+        let mut env = env.write().unwrap();
         OpenOptions::new()
             .create(true)
             .open(&mut env.repo, "/file")
             .unwrap();
     }
 
-    //println!("seed: {:?}", seed);
-    //println!("permu: {:?}", permu);
-    let _ = seed;
-    let _ = permu;
-
-    // uncomment below to reproduce the bug found during fuzzing
-    /*let seed = common::RandomSeed;
-    let permu = vec!;
-    let test_data = common::reprod_test_data(seed, permu);
-    let steps = [];*/
-
     // start fuzz rounds
     // ------------------
     let mut workers = Vec::new();
-    for _ in 0..worker_cnt {
-        let mut env = env_ref.write().unwrap();
-        let mut f = OpenOptions::new()
-            .write(true)
-            .open(&mut env.repo, "/file")
-            .unwrap();
-        let test_data = test_data_ref.clone();
-        let ctl = ctl_ref.clone();
+    for i in 0..worker_cnt {
+        let env = env.clone();
+        let ctl = ctl_grp.clone();
+        let name = format!("worker-{}", i);
+        let builder = thread::Builder::new().name(name);
 
-        workers.push(thread::spawn(move || for round in 0..rounds {
-            // randomly skip some rounds
-            if common::random_u32(5) == 1 {
-                continue;
-            }
-            let mut ctl = ctl.write().unwrap();
-            test_round(round, &mut f, &test_data, &mut ctl);
-        }));
+        workers.push(
+            builder
+                .spawn(move || for round in 0..rounds {
+                    let mut env = env.write().unwrap();
+                    let mut file = OpenOptions::new()
+                        .write(true)
+                        .open(&mut env.repo, "/file")
+                        .unwrap();
+                    let mut ctl = ctl.write().unwrap();
+                    let old_len = file.metadata().len();
+                    let step = Step::new_random(round, old_len, &env.data);
+
+                    test_round(
+                        &mut file,
+                        &step,
+                        &env.data,
+                        round,
+                        rounds,
+                        &mut ctl,
+                    );
+
+                })
+                .unwrap(),
+        );
     }
     for w in workers {
         w.join().unwrap();
@@ -263,14 +287,14 @@ fn fuzz_file_read_write_reproduce(batch_id: &str) {
     // verify
     // ------------------
     {
-        let mut env = env_ref.write().unwrap();
-        let ctl = ctl_ref.read().unwrap();
+        let mut env = env.write().unwrap();
+        let ctl = ctl_grp.read().unwrap();
         verify(&mut env.repo, &ctl);
     }
-}*/
+}
 
 fn main() {
-    //fuzz_file_read_write();
-    fuzz_file_read_write_reproduce("file_io-1513211014");
-    //fuzz_file_read_write_mt();
+    fuzz_file_read_write(30);
+    //fuzz_file_read_write_reproduce("file_1513641767");
+    fuzz_file_read_write_mt(30);
 }
