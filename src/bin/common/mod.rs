@@ -182,60 +182,6 @@ pub struct Span {
 //   (span in random data buffer, position in data buffer)
 type Permu = Vec<(Span, usize)>;
 
-// make random test data
-// return: (random seed, permutation sequence, data buffer)
-#[allow(dead_code)]
-pub fn make_test_data(
-    rnd_data_len: usize,
-    data_len: usize,
-) -> (RandomSeed, Vec<(Span, usize)>, Vec<u8>) {
-    let mut rnd_data = vec![0u8; rnd_data_len];
-    let seed = RandomSeed::new();
-    random_buf_deterministic(&mut rnd_data, &seed);
-
-    // init data buffer
-    let mut data = vec![0u8; data_len];
-    let mut permu = Vec::new();
-    for _ in 0..5 {
-        let pos = random_usize(data_len);
-        let rnd_pos = random_usize(rnd_data_len);
-        let max_len = min(data_len - pos, rnd_data_len - rnd_pos);
-        let len = random_u32(max_len as u32) as usize;
-        permu.push((Span { pos: rnd_pos, len }, pos));
-        &mut data[pos..pos + len].copy_from_slice(
-            &rnd_data[rnd_pos..rnd_pos + len],
-        );
-    }
-
-    (seed, permu, data)
-}
-
-// reproduce test data
-#[allow(dead_code)]
-pub fn reprod_test_data(
-    seed: RandomSeed,
-    permu: Permu,
-    rnd_data_len: usize,
-    data_len: usize,
-) -> Vec<u8> {
-    // init random data buffer
-    let mut rnd_data = vec![0u8; rnd_data_len];
-    random_buf_deterministic(&mut rnd_data, &seed);
-
-    // init data buffer
-    let mut data = vec![0u8; data_len];
-    for opr in permu {
-        let pos = opr.1;
-        let rnd_pos = opr.0.pos;
-        let len = opr.0.len;
-        &mut data[pos..pos + len].copy_from_slice(
-            &rnd_data[rnd_pos..rnd_pos + len],
-        );
-    }
-
-    data
-}
-
 #[derive(Debug)]
 pub struct TestEnv {
     pub path: PathBuf,
