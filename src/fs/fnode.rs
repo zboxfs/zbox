@@ -533,7 +533,7 @@ impl Fnode {
             store.make_mut()?.deref_content(&ver.content_id)?
         }
         {
-            Content::unlink(ctn, &mut self.chk_map, self.store.clone())?;
+            Content::unlink(ctn.clone(), &mut self.chk_map, &self.store)?;
         }
 
         Ok(())
@@ -556,8 +556,9 @@ impl Fnode {
         // dedup content and add the new version
         let is_deduped = {
             let ctn = content.read().unwrap();
-            let mut store = self.store.write().unwrap();
-            let deduped_id = store.make_mut()?.dedup_content(ctn.id(), &hash)?;
+            let mut store_cow = self.store.write().unwrap();
+            let store = store_cow.make_mut()?;
+            let deduped_id = store.dedup_content(ctn.id(), &hash)?;
             let ver =
                 Version::new(self.curr_ver_num() + 1, &deduped_id, ctn.len());
             self.mtime = ver.ctime;
@@ -611,24 +612,30 @@ impl Fnode {
 
         } else if curr_len > len {
             // truncate
-            let mut fnode = handle.fnode.write().unwrap();
+            let mut fnode_cow = handle.fnode.write().unwrap();
             let ctn = {
                 let store = handle.store.read().unwrap();
-                let curr_ctn = store.get_content(&fnode.curr_ver().content_id)?;
+                let curr_ctn =
+                    store.get_content(&fnode_cow.curr_ver().content_id)?;
                 let mut new_ctn = curr_ctn.read().unwrap().clone_new();
                 new_ctn.split_off(len);
                 new_ctn.into_cow(&handle.txmgr)?
             };
 
-            // dedup content and add deduped content as a new version
-            // if content is not duplicated, then link the content
-            if fnode.make_mut()?.add_ver(ctn.clone())?.is_none() {
-                Content::link(ctn, handle.store.clone())?;
+            // link the new content first
+            Content::link(ctn.clone(), &handle.store)?;
+
+            // then dedup content and add deduped content as a new version
+            // if content is duplicated, then unlink the content
+            let fnode = fnode_cow.make_mut()?;
+            if let Some(ctn) = fnode.add_ver(ctn)? {
+                Content::unlink(ctn, &mut fnode.chk_map, &handle.store)?;
             }
+
             Ok(())
 
         } else {
-            // do nothing
+            // if new length is equal to old length, do nothing
             Ok(())
         }
     }
@@ -743,7 +750,7 @@ impl Writer {
         // dedup content and add deduped content as a new version
         if let Some(ctn) = fnode.add_ver(ctn)? {
             // content is duplicated
-            Content::unlink(ctn, &mut fnode.chk_map, handle.store.clone())?;
+            Content::unlink(ctn, &mut fnode.chk_map, &handle.store)?;
         }
 
         Ok(())

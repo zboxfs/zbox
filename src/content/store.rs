@@ -134,7 +134,7 @@ impl Store {
             if refcnt > 0 {
                 return Ok(None);
             }
-            let _ = self.content_map.remove(ctn.hash()).unwrap();
+            self.content_map.remove(ctn.hash()).unwrap();
         }
 
         Ok(self.content_cache.remove(content_id))

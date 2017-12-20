@@ -69,7 +69,7 @@ impl Content {
         store: &StoreRef,
     ) -> Result<Hash> {
         let mut rdr = Reader::new(content, store);
-        let mut buf = vec![0u8; 8 * 1024];
+        let mut buf = vec![0u8; 64 * 1024];
 
         let mut state = Crypto::hash_init();
         loop {
@@ -87,7 +87,7 @@ impl Content {
         Ok(hash)
     }
 
-    pub fn link(ctn: ContentRef, store: StoreRef) -> Result<()> {
+    pub fn link(ctn: ContentRef, store: &StoreRef) -> Result<()> {
         let ctn = ctn.read().unwrap();
         let mut store = store.write().unwrap();
         ctn.ents.link(&mut store)
@@ -96,11 +96,16 @@ impl Content {
     pub fn unlink(
         content: ContentRef,
         chk_map: &mut ChunkMap,
-        store: StoreRef,
+        store: &StoreRef,
     ) -> Result<()> {
         let mut ctn = content.write().unwrap();
         let mut st = store.write().unwrap();
-        ctn.make_mut()?.ents.unlink(chk_map, st.make_mut()?)
+
+        // unlink entries
+        ctn.ents.unlink(chk_map, st.make_mut()?)?;
+
+        // content is not used anymore, remove content
+        ctn.make_del()
     }
 }
 

@@ -24,7 +24,9 @@ fn file_open_close() {
 
 fn verify_content(f: &mut File, buf: &[u8]) {
     let mut dst = Vec::new();
-    let result = f.read_to_end(&mut dst).unwrap();
+    let ver_num = f.history().last().unwrap().num();
+    let mut rdr = f.version_reader(ver_num).unwrap();
+    let result = rdr.read_to_end(&mut dst).unwrap();
     assert_eq!(result, buf.len());
     assert_eq!(&dst[..], &buf[..]);
 }
@@ -283,6 +285,30 @@ fn file_read_write() {
         f.write_once(&buf[..]).unwrap();
         let mut dst = Vec::new();
         assert!(f.read_to_end(&mut dst).is_err());
+    }
+
+    // #14, write and set_len
+    {
+        let mut f = OpenOptions::new()
+            .create(true)
+            .version_limit(1)
+            .open(&mut repo, "/file14")
+            .unwrap();
+        let mut f2 = OpenOptions::new()
+            .create(true)
+            .version_limit(1)
+            .open(&mut repo, "/file14-1")
+            .unwrap();
+
+        f2.write_once(&buf[..1]).unwrap();
+        verify_content(&mut f2, &buf[..1]);
+
+        f.write_once(&buf[..]).unwrap();
+        verify_content(&mut f, &buf[..]);
+        f.set_len(1).unwrap();
+        verify_content(&mut f, &buf[..1]);
+        f.write_once(&buf[..]).unwrap();
+        verify_content(&mut f, &buf[..]);
     }
 }
 

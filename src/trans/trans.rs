@@ -68,7 +68,11 @@ impl Trans {
 
     // commit transaction
     pub fn commit(&mut self, vol: &VolumeRef) -> Result<()> {
-        debug!("commit tx: entity_cnt: {}", self.cohorts.len());
+        debug!(
+            "commit tx#{}: entity_cnt: {}",
+            self.txid,
+            self.cohorts.len()
+        );
 
         // commit each entity
         for cohort in self.cohorts.values() {

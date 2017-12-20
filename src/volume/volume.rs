@@ -350,7 +350,7 @@ impl IntoRef for Volume {}
 pub type VolumeRef = Arc<RwLock<Volume>>;
 
 // encrypt/decrypt frame size
-const CRYPT_FRAME_SIZE: usize = 16 * 1024;
+const CRYPT_FRAME_SIZE: usize = 32 * 1024;
 
 /// Crypto Reader
 struct CryptoReader {

@@ -219,9 +219,21 @@ impl Debug for Segment {
             self.used,
             self.data_id
         ).unwrap();
-        for val in self.chunks.iter() {
-            Debug::fmt(val, f).unwrap();
-            writeln!(f, ",").unwrap();
+        if self.chunks.len() > 10 {
+            for val in self.chunks[..3].iter() {
+                Debug::fmt(val, f).unwrap();
+                writeln!(f, ",").unwrap();
+            }
+            writeln!(f, "...").unwrap();
+            for val in self.chunks[self.chunks.len() - 3..].iter() {
+                Debug::fmt(val, f).unwrap();
+                writeln!(f, ",").unwrap();
+            }
+        } else {
+            for val in self.chunks.iter() {
+                Debug::fmt(val, f).unwrap();
+                writeln!(f, ",").unwrap();
+            }
         }
         write!(f, "]")
     }

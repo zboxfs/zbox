@@ -392,8 +392,6 @@ impl SectorMgr {
         space: &Space,
         offset: u64,
     ) -> IoResult<()> {
-        let padding_len = BLK_SIZE -
-            align_offset(offset as usize + buf.len(), BLK_SIZE);
         let mut start = offset;
 
         for &(sec_id, ref spans) in
@@ -415,9 +413,14 @@ impl SectorMgr {
 
             for span in spans.iter().skip_while(|s| offset >= s.end_offset()) {
                 let sec_offset = span.offset_in_sec(start);
-                let ubound =
-                    align_offset_u64(span.end, SECTOR_BLK_CNT as u64) *
-                        BLK_SIZE as u64;
+                let ubound = {
+                    let mut blk_align =
+                        align_offset_u64(span.end, SECTOR_BLK_CNT as u64);
+                    if blk_align == 0 {
+                        blk_align = SECTOR_BLK_CNT as u64;
+                    }
+                    blk_align * BLK_SIZE as u64
+                };
                 if sec_offset == ubound {
                     continue;
                 }
@@ -431,7 +434,9 @@ impl SectorMgr {
 
                 // write padding if necessary
                 if buf.is_empty() {
-                    if padding_len > 0 {
+                    let padding_len = BLK_SIZE -
+                        align_offset(start as usize, BLK_SIZE);
+                    if padding_len != BLK_SIZE {
                         let mut padding = vec![0u8; padding_len];
                         Crypto::random_buf(&mut padding);
                         data_file.write_all(&padding)?;

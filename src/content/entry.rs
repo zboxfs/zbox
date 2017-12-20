@@ -222,7 +222,7 @@ impl EntryList {
     }
 
     pub fn unlink(
-        &mut self,
+        &self,
         chk_map: &mut ChunkMap,
         store: &mut Store,
     ) -> Result<()> {
