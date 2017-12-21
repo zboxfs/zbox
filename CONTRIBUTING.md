@@ -107,7 +107,7 @@ cargo run --bin fuzz_fs
 Run fuzz test for file read and write
 
 ```bash
-cargo run --bin fuzz_io
+cargo run --bin fuzz_file
 ```
 
 Run fuzz test for directory.
