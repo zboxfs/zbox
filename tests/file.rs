@@ -1,4 +1,5 @@
 extern crate tempdir;
+extern crate rand;
 extern crate zbox;
 
 mod common;
@@ -6,6 +7,7 @@ mod common;
 use std::io::{Read, Write, Seek, SeekFrom};
 use std::sync::{Arc, RwLock};
 use std::thread;
+use rand::{Rng, XorShiftRng};
 use zbox::{Error, OpenOptions, File};
 
 #[test]
@@ -29,6 +31,25 @@ fn verify_content(f: &mut File, buf: &[u8]) {
     let result = rdr.read_to_end(&mut dst).unwrap();
     assert_eq!(result, buf.len());
     assert_eq!(&dst[..], &buf[..]);
+}
+
+#[test]
+fn file_shrink() {
+    let mut env = common::setup();
+    let mut repo = &mut env.repo;
+
+    let mut rng = XorShiftRng::new_unseeded();
+    let mut buf = vec![0; 128 * 1024];
+    rng.fill_bytes(&mut buf);
+
+    let mut f = OpenOptions::new()
+        .create(true)
+        .version_limit(1)
+        .open(&mut repo, "/file")
+        .unwrap();
+    f.write_once(&buf[..]).unwrap();
+
+    f.set_len(13172).unwrap();
 }
 
 #[test]

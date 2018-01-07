@@ -22,11 +22,11 @@ crate-type = ["rlib", "dylib"]
 [dependencies]
 bytes = "^0.4"
 env_logger = "~0.4"
-log = "~0.3"
+log = "~0.4"
 rmp-serde = "~0.13"
 serde = "~1.0"
 serde_derive = "~1.0"
-lz4 = "~1.21"
+lz4 = "~1.22"
 
 [dependencies.linked-hash-map]
 version = "~0.5"
@@ -34,6 +34,7 @@ features = ["serde_impl"]
 
 [dev-dependencies]
 tempdir = "~0.3"
+rand = "~0.4"
 
 [build-dependencies]
 pkg-config = "~0.3"

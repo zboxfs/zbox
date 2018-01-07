@@ -253,6 +253,14 @@ impl IndexMut<usize> for Segment {
     }
 }
 
+impl Index<Range<usize>> for Segment {
+    type Output = [Chunk];
+
+    fn index(&self, index: Range<usize>) -> &[Chunk] {
+        &self.chunks[index]
+    }
+}
+
 impl Id for Segment {
     fn id(&self) -> &Eid {
         &self.id
@@ -337,3 +345,302 @@ impl Write for Writer {
 
 /// Segment cache
 pub type Cache = CowCache<Segment>;
+
+#[cfg(test)]
+mod tests {
+    use content::span::{Extent, Span};
+    use content::entry::{CutableList, EntryList};
+    use super::*;
+
+    fn test_split_off(
+        elst: &EntryList,
+        seg_begin: &Segment,
+        seg_end: &Segment,
+    ) {
+        // split at the beginning
+        let mut dst = elst.clone();
+        let split = dst.split_off(0, seg_begin);
+        dst.check();
+        split.check();
+        assert!(dst.is_empty());
+        assert_eq!(split.len(), elst.len());
+        if !split.is_empty() {
+            assert_eq!(split[0].seg_id(), elst[0].seg_id());
+        }
+
+        // split at the end
+        let mut dst = elst.clone();
+        let split = dst.split_off(elst.len(), seg_end);
+        dst.check();
+        split.check();
+        assert_eq!(dst.len(), elst.len());
+        assert!(split.is_empty());
+        assert_eq!(split.offset(), elst.len());
+    }
+
+    fn test_split_to(elst: &EntryList, seg_begin: &Segment, seg_end: &Segment) {
+        // split at the beginning
+        let mut dst = elst.clone();
+        let split = dst.split_to(0, seg_begin);
+        dst.check();
+        split.check();
+        assert!(split.is_empty());
+        assert_eq!(dst.len(), elst.len());
+
+        // split at the end
+        let mut dst = elst.clone();
+        let split = dst.split_to(elst.len(), seg_end);
+        dst.check();
+        split.check();
+        assert_eq!(split.len(), elst.len());
+        assert!(dst.is_empty());
+        assert_eq!(dst.offset(), elst.len());
+    }
+
+    fn single_span() {
+        let mut seg = Segment::new();
+        seg.append_chunk(10);
+        let mut elst = EntryList::new();
+        elst.append(seg.id(), &Span::new(0, 1, 0, 10, 0));
+        test_split_off(&elst, &seg, &seg);
+        test_split_to(&elst, &seg, &seg);
+
+        // split off in the middle
+        let half = elst.len() / 2;
+        let mut dst = elst.clone();
+        let split = dst.split_off(half, &seg);
+        dst.check();
+        split.check();
+        assert_eq!(dst.len(), half);
+        assert!(split.is_empty());
+        assert_eq!(split.offset(), elst.len());
+
+        // split off again
+        let at = elst.len() / 3;
+        let split = dst.split_off(at, &seg);
+        dst.check();
+        split.check();
+        assert_eq!(dst.len(), at);
+        assert!(split.is_empty());
+        assert_eq!(split.offset(), elst.len());
+
+        // split to in the middle
+        let half = elst.len() / 2;
+        let mut dst = elst.clone();
+        let split = dst.split_to(half, &seg);
+        dst.check();
+        split.check();
+        assert_eq!(dst.len(), half);
+        assert_eq!(dst.offset(), half);
+        assert!(split.is_empty());
+        assert_eq!(split.offset(), 0);
+
+        // split to again
+        let at = half + elst.len() / 3;
+        let split = dst.split_to(at, &seg);
+        dst.check();
+        split.check();
+        assert_eq!(dst.offset(), at);
+        assert_eq!(dst.len(), elst.len() - at);
+        assert!(split.is_empty());
+        assert_eq!(split.offset(), half);
+    }
+
+    fn multiple_spans() {
+        let mut seg = Segment::new();
+        seg.append_chunk(5);
+        seg.append_chunk(5);
+        seg.append_chunk(5);
+        let mut elst = EntryList::new();
+        elst.append(seg.id(), &Span::new(0, 1, 0, 5, 0));
+        elst.append(seg.id(), &Span::new(2, 3, 10, 5, 5));
+        test_split_off(&elst, &seg, &seg);
+        test_split_to(&elst, &seg, &seg);
+
+        // split off in the middle
+        let half = elst.len() / 2;
+        let mut dst = elst.clone();
+        let split = dst.split_off(half, &seg);
+        dst.check();
+        split.check();
+        assert_eq!(dst.len(), half);
+        assert_eq!(dst.offset(), 0);
+        assert_eq!(split.len(), half);
+        assert_eq!(split.offset(), half);
+
+        // split off at 1/3
+        let at = elst.len() / 3;
+        let mut dst = elst.clone();
+        let split = dst.split_off(at, &seg);
+        dst.check();
+        split.check();
+        assert_eq!(dst.len(), at);
+        assert_eq!(dst.offset(), 0);
+        assert_eq!(dst.iter().nth(0).unwrap().iter().count(), 1);
+        assert_eq!(split.len(), 5);
+        assert_eq!(split.offset(), 5);
+
+        // split off at 2/3
+        let at = elst.len() * 2 / 3;
+        let mut dst = elst.clone();
+        let split = dst.split_off(at, &seg);
+        dst.check();
+        split.check();
+        assert_eq!(dst.len(), at);
+        assert_eq!(dst.offset(), 0);
+        assert_eq!(dst.iter().nth(0).unwrap().iter().count(), 2);
+        assert_eq!(split.len(), 0);
+        assert_eq!(split.offset(), elst.len());
+        assert_eq!(split.iter().count(), 0);
+
+        // split to in the middle
+        let half = elst.len() / 2;
+        let mut dst = elst.clone();
+        let split = dst.split_to(half, &seg);
+        dst.check();
+        split.check();
+        assert_eq!(dst.len(), half);
+        assert_eq!(dst.offset(), half);
+        assert_eq!(split.len(), half);
+        assert_eq!(split.offset(), 0);
+
+        // split to at 1/3
+        let at = elst.len() / 3;
+        let mut dst = elst.clone();
+        let split = dst.split_to(at, &seg);
+        dst.check();
+        split.check();
+        assert_eq!(dst.len(), elst.len() - at);
+        assert_eq!(dst.offset(), at);
+        assert_eq!(dst.iter().nth(0).unwrap().iter().count(), 2);
+        assert_eq!(split.len(), 0);
+        assert_eq!(split.offset(), 0);
+        assert_eq!(split.iter().count(), 0);
+
+        // split to at 2/3
+        let at = elst.len() * 2 / 3;
+        let mut dst = elst.clone();
+        let split = dst.split_to(at, &seg);
+        dst.check();
+        split.check();
+        assert_eq!(dst.len(), elst.len() - at);
+        assert_eq!(dst.offset(), at);
+        assert_eq!(dst.iter().nth(0).unwrap().iter().count(), 1);
+        assert_eq!(split.len(), 5);
+        assert_eq!(split.offset(), 0);
+        assert_eq!(split.iter().nth(0).unwrap().iter().count(), 1);
+    }
+
+    fn multiple_segs_spans() {
+        let mut seg = Segment::new();
+        seg.append_chunk(5);
+        seg.append_chunk(5);
+        seg.append_chunk(5);
+        let mut seg2 = Segment::new();
+        seg2.append_chunk(5);
+        seg2.append_chunk(5);
+        seg2.append_chunk(5);
+        seg2.append_chunk(5);
+        let mut elst = EntryList::new();
+        elst.append(seg.id(), &Span::new(0, 1, 0, 5, 0));
+        elst.append(seg.id(), &Span::new(2, 3, 10, 5, 5));
+        elst.append(seg2.id(), &Span::new(1, 2, 5, 5, 10));
+        elst.append(seg2.id(), &Span::new(3, 4, 15, 5, 15));
+        test_split_off(&elst, &seg, &seg2);
+        test_split_to(&elst, &seg, &seg2);
+
+        // split off in the middle
+        let half = elst.len() / 2;
+        let mut dst = elst.clone();
+        let split = dst.split_off(half, &seg);
+        dst.check();
+        split.check();
+        assert_eq!(dst.len(), half);
+        assert_eq!(dst.offset(), 0);
+        assert_eq!(dst.iter().count(), 1);
+        assert_eq!(dst.iter().nth(0).unwrap().iter().count(), 2);
+        assert_eq!(split.len(), half);
+        assert_eq!(split.offset(), half);
+        assert_eq!(split.iter().count(), 1);
+        assert_eq!(split.iter().nth(0).unwrap().iter().count(), 2);
+
+        // split off at 1/3
+        let at = elst.len() / 3;
+        let mut dst = elst.clone();
+        let split = dst.split_off(at, &seg);
+        dst.check();
+        split.check();
+        assert_eq!(dst.len(), at);
+        assert_eq!(dst.offset(), 0);
+        assert_eq!(dst.iter().count(), 1);
+        assert_eq!(dst.iter().nth(0).unwrap().iter().count(), 2);
+        assert_eq!(split.len(), 10);
+        assert_eq!(split.offset(), 10);
+        assert_eq!(split.iter().count(), 1);
+        assert_eq!(split.iter().nth(0).unwrap().iter().count(), 2);
+
+        // split off at 2/3
+        let at = elst.len() * 2 / 3;
+        let mut dst = elst.clone();
+        let split = dst.split_off(at, &seg2);
+        dst.check();
+        split.check();
+        assert_eq!(dst.len(), at);
+        assert_eq!(dst.offset(), 0);
+        assert_eq!(dst.iter().count(), 2);
+        assert_eq!(dst.iter().nth(0).unwrap().iter().count(), 2);
+        assert_eq!(dst.iter().nth(1).unwrap().iter().count(), 1);
+        assert_eq!(split.len(), 5);
+        assert_eq!(split.offset(), 15);
+        assert_eq!(split.iter().count(), 1);
+        assert_eq!(split.iter().nth(0).unwrap().iter().count(), 1);
+
+        // split to in the middle
+        let half = elst.len() / 2;
+        let mut dst = elst.clone();
+        let split = dst.split_to(half, &seg);
+        dst.check();
+        split.check();
+        assert_eq!(dst.len(), half);
+        assert_eq!(dst.offset(), half);
+        assert_eq!(split.len(), half);
+        assert_eq!(split.offset(), 0);
+
+        // split to at 1/3
+        let at = elst.len() / 3;
+        let mut dst = elst.clone();
+        let split = dst.split_to(at, &seg);
+        dst.check();
+        split.check();
+        assert_eq!(dst.len(), elst.len() - at);
+        assert_eq!(dst.offset(), at);
+        assert_eq!(dst.iter().count(), 2);
+        assert_eq!(dst.iter().nth(0).unwrap().iter().count(), 1);
+        assert_eq!(dst.iter().nth(1).unwrap().iter().count(), 2);
+        assert_eq!(split.len(), 5);
+        assert_eq!(split.offset(), 0);
+        assert_eq!(split.iter().count(), 1);
+
+        // split to at 2/3
+        let at = elst.len() * 2 / 3;
+        let mut dst = elst.clone();
+        let split = dst.split_to(at, &seg2);
+        dst.check();
+        split.check();
+        assert_eq!(dst.len(), elst.len() - at);
+        assert_eq!(dst.offset(), at);
+        assert_eq!(dst.iter().nth(0).unwrap().iter().count(), 2);
+        assert_eq!(dst.iter().nth(0).unwrap().seg_id(), seg2.id());
+        assert_eq!(split.len(), 10);
+        assert_eq!(split.offset(), 0);
+        assert_eq!(split.iter().nth(0).unwrap().iter().count(), 2);
+        assert_eq!(split.iter().nth(0).unwrap().seg_id(), seg.id());
+    }
+
+    #[test]
+    fn split_entry_list() {
+        single_span();
+        multiple_spans();
+        multiple_segs_spans();
+    }
+}

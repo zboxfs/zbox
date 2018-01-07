@@ -11,8 +11,8 @@ use trans::{Eid, Id, CloneNew, TxMgrRef, Txid};
 use trans::cow::{CowRef, IntoCow, CowCache};
 use super::{Store, StoreRef};
 use super::chunk::ChunkMap;
-use super::span::Span;
-use super::entry::EntryList;
+use super::span::{Extent, Span};
+use super::entry::{EntryList, CutableList};
 use super::segment::Writer as SegWriter;
 
 /// Content
@@ -39,7 +39,7 @@ impl Content {
 
     #[inline]
     pub fn len(&self) -> usize {
-        self.ents.len
+        self.ents.len()
     }
 
     #[inline]
@@ -47,19 +47,25 @@ impl Content {
         self.ents.end_offset()
     }
 
-    pub fn split_off(&mut self, at: usize) {
+    #[inline]
+    pub fn split_off(&mut self, at: usize, store: &Store) -> Result<()> {
         assert!(at <= self.len());
-        self.ents.split_off(at);
+        let pos = self.ents.locate(at);
+        let seg_ref = store.get_seg(self.ents[pos].seg_id())?;
+        let seg = seg_ref.read().unwrap();
+        self.ents.split_off(at, &seg);
+        Ok(())
     }
 
     // append chunk to content
+    #[inline]
     fn append(&mut self, seg_id: &Eid, span: &Span) {
         self.ents.append(seg_id, span);
     }
 
     /// Write into self with another content
     pub fn write_with(&mut self, other: &Content, store: &Store) -> Result<()> {
-        let (head, tail) = self.ents.write_with(&other.ents);
+        let (head, tail) = self.ents.write_with(&other.ents, store)?;
         head.link(store).and(tail.link(store))
     }
 
@@ -110,6 +116,7 @@ impl Content {
 }
 
 impl Seek for Content {
+    #[inline]
     fn seek(&mut self, pos: SeekFrom) -> IoResult<u64> {
         self.ents.seek(pos)
     }
@@ -126,10 +133,12 @@ impl Debug for Content {
 }
 
 impl Id for Content {
+    #[inline]
     fn id(&self) -> &Eid {
         &self.id
     }
 
+    #[inline]
     fn id_mut(&mut self) -> &mut Eid {
         &mut self.id
     }
@@ -173,20 +182,14 @@ impl Read for Reader {
         let start = self.pos as usize;
         let mut buf_read = 0;
 
-        for ent in ctn.ents.ents.iter().skip_while(
-            |e| e.end_offset() <= start,
-        )
-        {
-            let seg_ref = map_io_err!(store.get_seg(&ent.seg_id))?;
+        for ent in ctn.ents.iter().skip_while(|e| e.end_offset() <= start) {
+            let seg_ref = map_io_err!(store.get_seg(ent.seg_id()))?;
             let seg = seg_ref.read().unwrap();
             let segdata_ref =
                 map_io_err!(store.get_segdata(seg.seg_data_id()))?;
             let segdata = segdata_ref.read().unwrap();
 
-            for span in ent.spans.iter().skip_while(
-                |s| s.end_offset() <= start,
-            )
-            {
+            for span in ent.iter().skip_while(|s| s.end_offset() <= start) {
                 let over_span = self.pos as usize - span.offset;
                 let mut seg_offset = span.seg_offset + over_span;
                 let mut span_left = span.len - over_span;

@@ -618,7 +618,7 @@ impl Fnode {
                 let curr_ctn =
                     store.get_content(&fnode_cow.curr_ver().content_id)?;
                 let mut new_ctn = curr_ctn.read().unwrap().clone_new();
-                new_ctn.split_off(len);
+                new_ctn.split_off(len, &store)?;
                 new_ctn.into_cow(&handle.txmgr)?
             };
 

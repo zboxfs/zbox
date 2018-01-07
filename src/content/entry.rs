@@ -1,18 +1,101 @@
 use std::io::{Result as IoResult, Seek, SeekFrom};
+use std::ops::Index;
+use std::slice::Iter;
 
 use error::Result;
 use trans::{Eid, Id};
 use super::Store;
-use super::span::Span;
+use super::span::{Extent, Cutable, Span};
 use super::chunk::ChunkMap;
+use super::segment::Segment;
+
+pub(super) trait CutableList: Clone + Extent {
+    type Item: Extent + Cutable;
+
+    fn items(&self) -> &Vec<Self::Item>;
+    fn items_mut(&mut self) -> &mut Vec<Self::Item>;
+    fn set_items(&mut self, items: Vec<Self::Item>);
+
+    fn locate(&self, at: usize) -> usize {
+        assert!(self.offset() <= at && at <= self.end_offset());
+        self.items()
+            .iter()
+            .position(|i| i.offset() <= at && at <= i.end_offset())
+            .unwrap_or(0)
+    }
+
+    fn split_off(&mut self, at: usize, seg: &Segment) -> Self {
+        assert!(self.offset() <= at && at <= self.end_offset());
+        let mut pos = self.locate(at);
+        let split = {
+            let item = &mut self.items_mut()[pos];
+            item.cut_off(at, seg)
+        };
+
+        if self.items()[pos].is_empty() {
+            self.items_mut().remove(pos);
+        } else {
+            pos += 1;
+        }
+
+        let mut ret = self.clone();
+        ret.set_offset(split.offset());
+        let mut tail = self.items_mut().split_off(pos);
+        if !split.is_empty() {
+            tail.insert(0, split);
+        }
+        ret.set_len(tail.iter().fold(0, |sum, ref i| sum + i.len()));
+        ret.set_items(tail);
+
+        let new_len = at - self.offset();
+        self.set_len(new_len);
+        if self.is_empty() {
+            self.items_mut().clear();
+        }
+
+        ret
+    }
+
+    fn split_to(&mut self, at: usize, seg: &Segment) -> Self {
+        assert!(self.offset() <= at && at <= self.end_offset());
+        let pos = self.locate(at);
+        let split = {
+            let item = &mut self.items_mut()[pos];
+            item.cut_to(at, seg)
+        };
+
+        if self.items()[pos].is_empty() {
+            self.items_mut().remove(pos);
+        }
+        let tail = self.items_mut().split_off(pos);
+        if !split.is_empty() {
+            self.items_mut().push(split);
+        }
+
+        let mut ret = self.clone();
+        ret.set_items(self.items().to_vec());
+        let head_len = ret.items().iter().fold(0, |sum, ref i| sum + i.len());
+        ret.set_len(head_len);
+
+        self.set_items(tail);
+        let new_len = self.end_offset() - at;
+        self.set_len(new_len);
+        self.set_offset(at);
+        if self.is_empty() {
+            self.items_mut().clear();
+        }
+
+        ret
+    }
+}
 
 /// An entry in content entry list, one entry per segment
-#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Entry {
-    pub(super) seg_id: Eid,
-    pub(super) len: usize,
-    pub(super) offset: usize, // offset in content
-    pub(super) spans: Vec<Span>,
+    seg_id: Eid,
+    len: usize,
+    offset: usize, // offset in content
+    spans: Vec<Span>,
 }
 
 impl Entry {
@@ -26,13 +109,13 @@ impl Entry {
     }
 
     #[inline]
-    fn is_empty(&self) -> bool {
-        self.len == 0
+    pub fn seg_id(&self) -> &Eid {
+        &self.seg_id
     }
 
     #[inline]
-    pub fn end_offset(&self) -> usize {
-        self.offset + self.len
+    pub fn iter(&self) -> Iter<Span> {
+        self.spans.iter()
     }
 
     pub fn append(&mut self, span: &Span) {
@@ -48,34 +131,58 @@ impl Entry {
         self.spans.push(span.clone());
         self.len += span.len;
     }
+}
 
-    fn split_off(&mut self, at: usize) -> Entry {
-        assert!(self.offset <= at && at < self.end_offset());
-        let split_len = at - self.offset;
-        let mut pos = self.spans
-            .iter()
-            .position(|s| s.offset <= at && at < s.end_offset())
-            .unwrap();
-        let split = self.spans[pos].split_off(at);
-        if self.spans[pos].is_empty() {
-            self.spans.remove(pos);
-        } else {
-            pos += 1;
-        }
-        self.spans.insert(pos, split);
-        let spans = self.spans.split_off(pos);
-        let ent = Entry {
-            seg_id: self.seg_id.clone(),
-            len: self.len - split_len,
-            offset: self.offset + split_len,
-            spans,
-        };
-        self.len = split_len;
-        if self.is_empty() {
-            self.spans.clear();
-        }
+impl Extent for Entry {
+    #[inline]
+    fn offset(&self) -> usize {
+        self.offset
+    }
 
-        ent
+    #[inline]
+    fn set_offset(&mut self, offset: usize) {
+        self.offset = offset;
+    }
+
+    #[inline]
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    #[inline]
+    fn set_len(&mut self, len: usize) {
+        self.len = len;
+    }
+}
+
+impl Cutable for Entry {
+    #[inline]
+    fn cut_off(&mut self, at: usize, seg: &Segment) -> Self {
+        self.split_off(at, seg)
+    }
+
+    #[inline]
+    fn cut_to(&mut self, at: usize, seg: &Segment) -> Self {
+        self.split_to(at, seg)
+    }
+}
+
+impl CutableList for Entry {
+    type Item = Span;
+
+    #[inline]
+    fn items(&self) -> &Vec<Self::Item> {
+        &self.spans
+    }
+
+    #[inline]
+    fn items_mut(&mut self) -> &mut Vec<Self::Item> {
+        &mut self.spans
+    }
+
+    #[inline]
+    fn set_items(&mut self, items: Vec<Self::Item>) {
+        self.spans = items;
     }
 }
 
@@ -110,9 +217,9 @@ impl Seek for Entry {
 /// Entry list
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct EntryList {
-    pub(super) len: usize,
-    pub(super) offset: usize,
-    pub(super) ents: Vec<Entry>,
+    len: usize,
+    offset: usize,
+    ents: Vec<Entry>,
 }
 
 impl EntryList {
@@ -121,13 +228,8 @@ impl EntryList {
     }
 
     #[inline]
-    fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
-    #[inline]
-    pub fn end_offset(&self) -> usize {
-        self.offset + self.len
+    pub fn iter(&self) -> Iter<Entry> {
+        self.ents.iter()
     }
 
     // append span
@@ -147,33 +249,6 @@ impl EntryList {
         self.len += span.len;
     }
 
-    pub fn split_off(&mut self, at: usize) -> EntryList {
-        assert!(self.offset <= at && at < self.end_offset());
-        let split_len = at - self.offset;
-        let mut pos = self.ents
-            .iter()
-            .position(|e| e.offset <= at && at < e.end_offset())
-            .unwrap();
-        let split = self.ents[pos].split_off(at);
-        if self.ents[pos].is_empty() {
-            self.ents.remove(pos);
-        } else {
-            pos += 1;
-        }
-        self.ents.insert(pos, split);
-        let ents = self.ents.split_off(pos);
-        let ret = EntryList {
-            len: self.len - split_len,
-            offset: self.offset + split_len,
-            ents,
-        };
-        self.len = split_len;
-        if self.is_empty() {
-            self.ents.clear();
-        }
-        ret
-    }
-
     fn join(&mut self, other: &EntryList) {
         assert_eq!(self.end_offset(), other.offset);
         self.len += other.len;
@@ -182,31 +257,41 @@ impl EntryList {
 
     // Write another entry list to self
     // return the excluded head and tail entry list by the other
-    pub fn write_with(&mut self, other: &EntryList) -> (EntryList, EntryList) {
-        // if the write position is at the end of this entry list
-        if self.end_offset() == other.offset {
-            let head = self.clone();
-            self.join(other);
-            return (head, EntryList::new());
+    pub fn write_with(
+        &mut self,
+        other: &EntryList,
+        store: &Store,
+    ) -> Result<(EntryList, EntryList)> {
+        let at = other.offset;
+        let end_at = other.end_offset();
+
+        assert!(self.offset <= at && at <= self.end_offset());
+
+        let mut tail = if end_at < self.end_offset() {
+            self.clone()
+        } else {
+            EntryList::new()
+        };
+
+        if at < self.end_offset() {
+            let pos = self.locate(at);
+            let seg_ref = store.get_seg(&self[pos].seg_id)?;
+            let seg = seg_ref.read().unwrap();
+            self.split_off(at, &seg);
         }
 
-        // cannot write beyond EOF
-        assert!(
-            self.offset <= other.offset && other.offset < self.end_offset()
-        );
-
-        let mut split = self.split_off(other.offset);
         let head = self.clone();
-        let mut tail = EntryList::new();
         self.join(other);
 
-        let end_offset = self.end_offset();
-        if end_offset < split.end_offset() {
-            tail = split.split_off(end_offset);
+        if end_at < tail.end_offset() {
+            let pos = tail.locate(end_at);
+            let seg_ref = store.get_seg(&tail[pos].seg_id)?;
+            let seg = seg_ref.read().unwrap();
+            tail.split_to(end_at, &seg);
             self.join(&tail);
         }
 
-        (head, tail)
+        Ok((head, tail))
     }
 
     pub fn link(&self, store: &Store) -> Result<()> {
@@ -250,7 +335,7 @@ impl EntryList {
 
     #[allow(dead_code)]
     #[cfg(debug_assertions)]
-    fn check(&self) {
+    pub fn check(&self) {
         let mut ents_len = 0;
         let mut offset = self.offset;
 
@@ -261,28 +346,68 @@ impl EntryList {
             offset += ent.len;
 
             let mut spans_len = 0;
-            let mut idx = 0;
             let mut span_offset = ent.offset;
-            let mut seg_offset = 0;
             for span in ent.spans.iter() {
                 assert!(!span.is_empty());
                 spans_len += span.len;
                 assert_eq!(span.offset, span_offset);
                 span_offset += span.len;
-                if span.begin > 0 {
-                    assert!(span.begin > idx);
-                }
-                if span.seg_offset > 0 {
-                    assert!(span.seg_offset > seg_offset);
-                }
-                seg_offset = span.seg_offset;
-                idx = span.end;
             }
 
             assert_eq!(spans_len, ent.len);
         }
 
         assert_eq!(ents_len, self.len);
+    }
+}
+
+impl Extent for EntryList {
+    #[inline]
+    fn offset(&self) -> usize {
+        self.offset
+    }
+
+    #[inline]
+    fn set_offset(&mut self, offset: usize) {
+        self.offset = offset;
+    }
+
+    #[inline]
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    #[inline]
+    fn set_len(&mut self, len: usize) {
+        self.len = len;
+    }
+}
+
+impl CutableList for EntryList {
+    type Item = Entry;
+
+    #[inline]
+    fn items(&self) -> &Vec<Self::Item> {
+        &self.ents
+    }
+
+    #[inline]
+    fn items_mut(&mut self) -> &mut Vec<Self::Item> {
+        &mut self.ents
+    }
+
+    #[inline]
+    fn set_items(&mut self, items: Vec<Self::Item>) {
+        self.ents = items;
+    }
+}
+
+impl Index<usize> for EntryList {
+    type Output = Entry;
+
+    #[inline]
+    fn index(&self, index: usize) -> &Entry {
+        &self.ents[index]
     }
 }
 
@@ -315,7 +440,6 @@ impl Seek for EntryList {
 }
 
 #[cfg(test)]
-#[cfg(debug_assertions)]
 mod tests {
     use super::*;
 
@@ -359,81 +483,5 @@ mod tests {
         assert_eq!(elst.ents.last().unwrap().spans.len(), 1);
 
         elst.check();
-    }
-
-    fn mock_entry_list(offset: usize, len: usize) -> EntryList {
-        let mut ret = EntryList::new();
-        ret.offset = offset;
-        ret.append(&Eid::new_empty(), &Span::new(0, 1, 0, len, offset));
-        ret
-    }
-
-    fn check_result(
-        dst: &EntryList,
-        head: &EntryList,
-        tail: &EntryList,
-        other: &EntryList,
-    ) {
-        dst.check();
-        head.check();
-        tail.check();
-        assert_eq!(dst.len, head.len + other.len + tail.len);
-        assert_eq!(head.end_offset(), other.offset);
-        if !tail.is_empty() {
-            assert_eq!(tail.offset, other.end_offset());
-        }
-    }
-
-    fn test_write_with(elst: &EntryList) {
-        let oth_len = elst.len / 3;
-
-        // write at the beginning
-        let other = mock_entry_list(0, oth_len);
-        let mut dst = elst.clone();
-        let (head, tail) = dst.write_with(&other);
-        check_result(&dst, &head, &tail, &other);
-
-        // write inside
-        let other = mock_entry_list(elst.len / 2, oth_len);
-        let mut dst = elst.clone();
-        let (head, tail) = dst.write_with(&other);
-        check_result(&dst, &head, &tail, &other);
-
-        // write in the middle, and over the end
-        let other = mock_entry_list(elst.len * 4 / 5, oth_len);
-        let mut dst = elst.clone();
-        let (head, tail) = dst.write_with(&other);
-        check_result(&dst, &head, &tail, &other);
-
-        // write at the end
-        let other = mock_entry_list(elst.len, oth_len);
-        let mut dst = elst.clone();
-        let (head, tail) = dst.write_with(&other);
-        check_result(&dst, &head, &tail, &other);
-    }
-
-    #[test]
-    fn entry_list_write_with() {
-        let id = Eid::new();
-        let id2 = Eid::new();
-
-        // #1, single span
-        let mut elst = EntryList::new();
-        elst.append(&id, &Span::new(0, 1, 0, 10, 0));
-        test_write_with(&mut elst);
-
-        // #2, multiple spans
-        let mut elst = EntryList::new();
-        elst.append(&id, &Span::new(0, 1, 0, 5, 0));
-        elst.append(&id, &Span::new(2, 3, 10, 5, 5));
-        test_write_with(&mut elst);
-
-        // #3, multiple segments and spans
-        let mut elst = EntryList::new();
-        elst.append(&id, &Span::new(0, 1, 0, 5, 0));
-        elst.append(&id, &Span::new(2, 3, 10, 5, 5));
-        elst.append(&id2, &Span::new(0, 1, 0, 5, 10));
-        elst.append(&id2, &Span::new(2, 3, 10, 5, 15));
-        test_write_with(&mut elst);
     }
 }

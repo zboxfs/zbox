@@ -38,6 +38,11 @@ impl Chunk {
     pub fn dec_ref(&mut self) -> Result<u32> {
         self.refcnt.dec_ref()
     }
+
+    #[inline]
+    pub fn end_pos(&self) -> usize {
+        self.pos + self.len
+    }
 }
 
 impl Debug for Chunk {
