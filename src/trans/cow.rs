@@ -19,6 +19,7 @@ enum Switch {
 }
 
 impl Switch {
+    #[inline]
     fn other(&self) -> Switch {
         match *self {
             Switch::Left => Switch::Right,
@@ -33,6 +34,7 @@ impl Switch {
 }
 
 impl Default for Switch {
+    #[inline]
     fn default() -> Self {
         Switch::Left
     }
@@ -230,10 +232,12 @@ where
         panic!("Cow slot is empty");
     }
 
+    #[inline]
     fn slot(&self) -> &Slot<T> {
         self.slot_by(self.switch)
     }
 
+    #[inline]
     fn other_slot(&self) -> &Slot<T> {
         self.slot_by(self.switch.other())
     }
@@ -338,10 +342,12 @@ impl<T> Id for Cow<T>
 where
     T: Debug + Default + Send + Sync + CloneNew,
 {
+    #[inline]
     fn id(&self) -> &Eid {
         &self.id
     }
 
+    #[inline]
     fn id_mut(&mut self) -> &mut Eid {
         &mut self.id
     }

@@ -121,7 +121,9 @@ fn verify(repo: &mut Repo, ctl: &[u8]) {
     f.seek(SeekFrom::Start(0)).unwrap();
     let file_len = f.read_to_end(&mut dst).unwrap();
     assert_eq!(file_len, ctl.len());
-    assert_eq!(&dst[..], &ctl[..]);
+    if &dst[..] != &ctl[..] {
+        panic!("content not match");
+    }
     println!("Completed.");
 }
 
@@ -188,7 +190,6 @@ fn fuzz_file_read_write(rounds: usize) {
     let mut env = common::TestEnv::new("file");
     let mut file = OpenOptions::new()
         .create(true)
-        .version_limit(1)
         .open(&mut env.repo, "/file")
         .unwrap();
     let mut ctl = Vec::new();
@@ -213,7 +214,6 @@ fn fuzz_file_read_write_reproduce(batch_id: &str) {
     let mut env = common::TestEnv::load(batch_id);
     let mut file = OpenOptions::new()
         .create(true)
-        .version_limit(1)
         .open(&mut env.repo, "/file")
         .unwrap();
     let mut ctl = Vec::new();

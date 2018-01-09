@@ -34,25 +34,6 @@ fn verify_content(f: &mut File, buf: &[u8]) {
 }
 
 #[test]
-fn file_shrink() {
-    let mut env = common::setup();
-    let mut repo = &mut env.repo;
-
-    let mut rng = XorShiftRng::new_unseeded();
-    let mut buf = vec![0; 128 * 1024];
-    rng.fill_bytes(&mut buf);
-
-    let mut f = OpenOptions::new()
-        .create(true)
-        .version_limit(1)
-        .open(&mut repo, "/file")
-        .unwrap();
-    f.write_once(&buf[..]).unwrap();
-
-    f.set_len(13172).unwrap();
-}
-
-#[test]
 fn file_read_write() {
     let mut env = common::setup();
     let mut repo = &mut env.repo;
@@ -511,6 +492,29 @@ fn file_truncate() {
 }
 
 #[test]
+fn file_shrink() {
+    let mut env = common::setup();
+    let mut repo = &mut env.repo;
+
+    let mut rng = XorShiftRng::new_unseeded();
+    let mut buf = vec![0; 16 * 1024 * 1024];
+    rng.fill_bytes(&mut buf);
+
+    let mut f = OpenOptions::new()
+        .create(true)
+        .version_limit(1)
+        .open(&mut repo, "/file")
+        .unwrap();
+    f.write_once(&buf[..]).unwrap();
+
+    // those operations will shrink the segment, turn on debug log
+    // and watch the output
+    f.set_len(3).unwrap();
+    f.set_len(2).unwrap();
+    f.set_len(1).unwrap();
+}
+
+#[test]
 fn file_copy() {
     let mut env = common::setup();
     let mut repo = &mut env.repo;
@@ -666,8 +670,7 @@ fn file_delete() {
                 .create(true)
                 .open(&mut repo, "/file")
                 .unwrap();
-            f.write_all(&[1u8, 2u8, 3u8]).unwrap();
-            f.finish().unwrap();
+            f.write_once(&[1u8, 2u8, 3u8]).unwrap();
         }
 
         // write #2
@@ -676,12 +679,10 @@ fn file_delete() {
                 .write(true)
                 .open(&mut repo, "/file")
                 .unwrap();
-            f.write_all(&[4u8, 5u8, 6u8, 7u8]).unwrap();
-            f.finish().unwrap();
+            f.write_once(&[4u8, 5u8, 6u8, 7u8]).unwrap();
         }
 
-        let result = repo.remove_file("/file");
-        assert!(result.is_ok());
+        repo.remove_file("/file").unwrap();
     }
 }
 

@@ -27,6 +27,9 @@ pub fn setup() -> TestEnv {
     let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
     let dir = tmpdir.path().join("repo");
     let path = "file://".to_string() + dir.to_str().unwrap();
-    let repo = RepoOpener::new().create(true).open(&path, "pwd").unwrap();
+    let repo = RepoOpener::new()
+        .create_new(true)
+        .open(&path, "pwd")
+        .unwrap();
     TestEnv { repo, tmpdir }
 }

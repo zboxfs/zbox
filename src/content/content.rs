@@ -47,7 +47,6 @@ impl Content {
         self.ents.end_offset()
     }
 
-    #[inline]
     pub fn split_off(&mut self, at: usize, store: &Store) -> Result<()> {
         assert!(at <= self.len());
         let pos = self.ents.locate(at);
@@ -100,7 +99,7 @@ impl Content {
     }
 
     pub fn unlink(
-        content: ContentRef,
+        content: &ContentRef,
         chk_map: &mut ChunkMap,
         store: &StoreRef,
     ) -> Result<()> {
@@ -185,13 +184,12 @@ impl Read for Reader {
         for ent in ctn.ents.iter().skip_while(|e| e.end_offset() <= start) {
             let seg_ref = map_io_err!(store.get_seg(ent.seg_id()))?;
             let seg = seg_ref.read().unwrap();
-            let segdata_ref =
-                map_io_err!(store.get_segdata(seg.seg_data_id()))?;
+            let segdata_ref = map_io_err!(store.get_segdata(seg.data_id()))?;
             let segdata = segdata_ref.read().unwrap();
 
             for span in ent.iter().skip_while(|s| s.end_offset() <= start) {
                 let over_span = self.pos as usize - span.offset;
-                let mut seg_offset = span.seg_offset + over_span;
+                let mut seg_offset = span.offset_in_seg(&seg) + over_span;
                 let mut span_left = span.len - over_span;
 
                 while span_left > 0 {
@@ -277,16 +275,11 @@ impl Writer {
         assert_eq!(written, chunk_len); // must written in whole
 
         // append chunk to content
-        let seg = self.seg_wtr.seg();
-        let seg = seg.read().unwrap();
+        let seg_ref = self.seg_wtr.seg();
+        let seg = seg_ref.read().unwrap();
         let begin = seg.chunk_cnt() - 1;
-        let span = Span::new(
-            begin,
-            begin + 1,
-            seg.len() - chunk_len,
-            chunk_len,
-            self.ctn.end_offset(),
-        );
+        let span =
+            Span::new(begin, begin + 1, 0, chunk_len, self.ctn.end_offset());
         self.ctn.append(seg.id(), &span);
 
         // and update chunk map
@@ -325,14 +318,14 @@ impl Write for Writer {
                 }
             };
 
-            // increase chunk reference
+            // increase chunk reference count and append the reference
             let mut ref_seg = rseg.write().unwrap();
             if map_io_err!(ref_seg.make_mut())?.ref_chunk(loc.idx).is_ok() {
                 let chunk = &ref_seg[loc.idx];
                 let span = Span::new(
                     loc.idx,
                     loc.idx + 1,
-                    chunk.pos,
+                    0,
                     chunk.len,
                     self.ctn.end_offset(),
                 );

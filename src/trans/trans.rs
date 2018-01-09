@@ -73,6 +73,7 @@ impl Trans {
             self.txid,
             self.cohorts.len()
         );
+        //debug!("trans.commit: cohorts: {:#?}", self.cohorts);
 
         // commit each entity
         for cohort in self.cohorts.values() {

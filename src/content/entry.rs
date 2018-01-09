@@ -121,7 +121,7 @@ impl Entry {
     pub fn append(&mut self, span: &Span) {
         // try to merge with the last span
         if let Some(last) = self.spans.last_mut() {
-            if last.end_seg_offset() == span.seg_offset {
+            if last.end == span.begin && span.seg_offset == 0 {
                 last.merge_up(span);
                 self.len += span.len;
                 return;
@@ -322,11 +322,18 @@ impl EntryList {
                 }
             }
 
-            // if segment is not used anymore, remove it
             if seg_cow.is_orphan() {
+                // if segment is not used anymore, remove it
                 seg_cow.make_del()?;
-                chk_map.remove(seg_cow.id());
-                store.remove_segment(seg_cow.id(), seg_cow.seg_data_id());
+                chk_map.remove_segment(seg_cow.id());
+                store.remove_segment(&seg_cow)?;
+            } else if seg_cow.is_shrinkable() {
+                // shrink segment if it is too small
+                let retired = {
+                    let mut seg = seg_cow.make_mut()?;
+                    store.shrink_segment(&mut seg)?
+                };
+                chk_map.remove_chunks(seg_cow.id(), &retired);
             }
         }
 
@@ -456,13 +463,13 @@ mod tests {
         assert_eq!(elst.ents.len(), 1);
 
         // append continuous span should merge
-        let span = Span::new(1, 2, 10, 20, 10);
+        let span = Span::new(1, 2, 0, 20, 10);
         elst.append(&id, &span);
         assert_eq!(elst.len, 30);
         assert_eq!(elst.ents.len(), 1);
 
         // append discontinuous span should not merge
-        let span = Span::new(4, 5, 20, 30, 30);
+        let span = Span::new(4, 5, 0, 30, 30);
         elst.append(&id, &span);
         assert_eq!(elst.len, 60);
         assert_eq!(elst.ents.len(), 1);
@@ -476,7 +483,7 @@ mod tests {
         assert_eq!(elst.ents.last().unwrap().spans.len(), 1);
 
         // append continuous span should merge
-        let span = Span::new(1, 2, 10, 20, 70);
+        let span = Span::new(1, 2, 0, 20, 70);
         elst.append(&id2, &span);
         assert_eq!(elst.len, 90);
         assert_eq!(elst.ents.len(), 2);

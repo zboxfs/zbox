@@ -579,7 +579,7 @@ impl SectorMgr {
             let next_size_lvl = size_level(next_size);
 
             debug!(
-                "recycle sector#{}.{} {}. curr: (size: {}, lv: {}),\
+                "recycle sector#{}.{} {}. curr: (size: {}, lv: {}), \
                 next: (size: {}, lv: {})",
                 sec_id.txid,
                 sec_id.idx,

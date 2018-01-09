@@ -33,10 +33,12 @@ impl SegData {
 }
 
 impl Id for SegData {
+    #[inline]
     fn id(&self) -> &Eid {
         &self.id
     }
 
+    #[inline]
     fn id_mut(&mut self) -> &mut Eid {
         &mut self.id
     }
@@ -140,18 +142,13 @@ impl Segment {
             len: 0,
             used: 0,
             data_id: Eid::new(),
-            chunks: Vec::with_capacity(MAX_CHUNKS),
+            chunks: Vec::new(),
         }
     }
 
     #[inline]
-    pub fn seg_data_id(&self) -> &Eid {
+    pub fn data_id(&self) -> &Eid {
         &self.data_id
-    }
-
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.len
     }
 
     #[inline]
@@ -167,6 +164,11 @@ impl Segment {
     #[inline]
     pub fn is_orphan(&self) -> bool {
         self.used == 0
+    }
+
+    #[inline]
+    pub fn is_shrinkable(&self) -> bool {
+        self.used < self.len >> 2
     }
 
     // create a new chunk and append to segment
@@ -193,7 +195,7 @@ impl Segment {
         Ok(())
     }
 
-    pub fn deref_chunk(&mut self, idx: usize) -> Result<u32> {
+    fn deref_chunk(&mut self, idx: usize) -> Result<u32> {
         let refcnt = self[idx].dec_ref()?;
         if refcnt == 0 {
             self.used -= self[idx].len;
@@ -206,6 +208,52 @@ impl Segment {
             self.deref_chunk(idx)?;
         }
         Ok(())
+    }
+
+    // shrink segment by creating a new segment data, return retired chunks
+    // indices
+    pub fn shrink(
+        &mut self,
+        seg_data_ref: &SegDataRef,
+        vol: &VolumeRef,
+    ) -> Result<Vec<usize>> {
+        let seg_data = seg_data_ref.write().unwrap();
+        let txid = Txid::current()?;
+        let mut buf = Vec::new();
+        let mut retired = Vec::new();
+
+        debug!(
+            "shrink segment {:#?} from {} to {}",
+            self.id,
+            self.len,
+            self.used
+        );
+
+        // re-position chunks
+        for (idx, chunk) in self.chunks.iter_mut().enumerate() {
+            if chunk.is_orphan() {
+                retired.push(idx);
+            } else {
+                buf.extend_from_slice(
+                    &seg_data.data[chunk.pos..chunk.end_pos()],
+                );
+                chunk.pos = buf.len() - chunk.len;
+            }
+        }
+
+        // write new segment data to volume
+        let new_data_id = Eid::new();
+        let mut data_wtr = Volume::writer(&new_data_id, txid, vol);
+        data_wtr.write_all(&buf)?;
+
+        // remove old segment data from volume
+        SegData::remove(seg_data.id(), txid, vol)?;
+
+        // update segment
+        self.len = self.used;
+        self.data_id = new_data_id;
+
+        Ok(retired)
     }
 }
 
@@ -224,7 +272,7 @@ impl Debug for Segment {
                 Debug::fmt(val, f).unwrap();
                 writeln!(f, ",").unwrap();
             }
-            writeln!(f, "...").unwrap();
+            writeln!(f, "...{} chunks..", self.chunks.len() - 6).unwrap();
             for val in self.chunks[self.chunks.len() - 3..].iter() {
                 Debug::fmt(val, f).unwrap();
                 writeln!(f, ",").unwrap();
@@ -242,12 +290,14 @@ impl Debug for Segment {
 impl Index<usize> for Segment {
     type Output = Chunk;
 
+    #[inline]
     fn index(&self, index: usize) -> &Chunk {
         &self.chunks[index]
     }
 }
 
 impl IndexMut<usize> for Segment {
+    #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Chunk {
         &mut self.chunks[index]
     }
@@ -256,16 +306,19 @@ impl IndexMut<usize> for Segment {
 impl Index<Range<usize>> for Segment {
     type Output = [Chunk];
 
+    #[inline]
     fn index(&self, index: Range<usize>) -> &[Chunk] {
         &self.chunks[index]
     }
 }
 
 impl Id for Segment {
+    #[inline]
     fn id(&self) -> &Eid {
         &self.id
     }
 
+    #[inline]
     fn id_mut(&mut self) -> &mut Eid {
         &mut self.id
     }
@@ -304,6 +357,7 @@ impl Writer {
         })
     }
 
+    #[inline]
     pub fn seg(&self) -> SegRef {
         self.seg.clone()
     }
@@ -453,7 +507,7 @@ mod tests {
         seg.append_chunk(5);
         let mut elst = EntryList::new();
         elst.append(seg.id(), &Span::new(0, 1, 0, 5, 0));
-        elst.append(seg.id(), &Span::new(2, 3, 10, 5, 5));
+        elst.append(seg.id(), &Span::new(2, 3, 0, 5, 5));
         test_split_off(&elst, &seg, &seg);
         test_split_to(&elst, &seg, &seg);
 
@@ -543,9 +597,9 @@ mod tests {
         seg2.append_chunk(5);
         let mut elst = EntryList::new();
         elst.append(seg.id(), &Span::new(0, 1, 0, 5, 0));
-        elst.append(seg.id(), &Span::new(2, 3, 10, 5, 5));
-        elst.append(seg2.id(), &Span::new(1, 2, 5, 5, 10));
-        elst.append(seg2.id(), &Span::new(3, 4, 15, 5, 15));
+        elst.append(seg.id(), &Span::new(2, 3, 0, 5, 5));
+        elst.append(seg2.id(), &Span::new(1, 2, 0, 5, 10));
+        elst.append(seg2.id(), &Span::new(3, 4, 0, 5, 15));
         test_split_off(&elst, &seg, &seg2);
         test_split_to(&elst, &seg, &seg2);
 

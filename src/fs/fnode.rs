@@ -533,7 +533,7 @@ impl Fnode {
             store.make_mut()?.deref_content(&ver.content_id)?
         }
         {
-            Content::unlink(ctn.clone(), &mut self.chk_map, &self.store)?;
+            Content::unlink(&ctn, &mut self.chk_map, &self.store)?;
         }
 
         Ok(())
@@ -590,6 +590,8 @@ impl Fnode {
     }
 
     /// Set file to specified length
+    ///
+    /// if new length is equal to old length, do nothing
     pub fn set_len(handle: Handle, len: usize, txid: Txid) -> Result<()> {
         let curr_len = {
             let fnode = handle.fnode.read().unwrap();
@@ -608,7 +610,7 @@ impl Fnode {
                 let written = wtr.write(&buf[..write_len])?;
                 size -= written;
             }
-            wtr.finish()
+            wtr.finish()?;
 
         } else if curr_len > len {
             // truncate
@@ -629,15 +631,11 @@ impl Fnode {
             // if content is duplicated, then unlink the content
             let fnode = fnode_cow.make_mut()?;
             if let Some(ctn) = fnode.add_ver(ctn)? {
-                Content::unlink(ctn, &mut fnode.chk_map, &handle.store)?;
+                Content::unlink(&ctn, &mut fnode.chk_map, &handle.store)?;
             }
-
-            Ok(())
-
-        } else {
-            // if new length is equal to old length, do nothing
-            Ok(())
         }
+
+        Ok(())
     }
 }
 
@@ -657,10 +655,12 @@ impl Debug for Fnode {
 }
 
 impl Id for Fnode {
+    #[inline]
     fn id(&self) -> &Eid {
         &self.id
     }
 
+    #[inline]
     fn id_mut(&mut self) -> &mut Eid {
         &mut self.id
     }
@@ -750,7 +750,7 @@ impl Writer {
         // dedup content and add deduped content as a new version
         if let Some(ctn) = fnode.add_ver(ctn)? {
             // content is duplicated
-            Content::unlink(ctn, &mut fnode.chk_map, &handle.store)?;
+            Content::unlink(&ctn, &mut fnode.chk_map, &handle.store)?;
         }
 
         Ok(())

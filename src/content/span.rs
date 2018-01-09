@@ -30,7 +30,7 @@ pub(super) trait Cutable: Clone {
 pub struct Span {
     pub(super) begin: usize, // begin chunk index
     pub(super) end: usize, // end chunk index, exclusive
-    pub(super) seg_offset: usize, // offset in segment, in bytes
+    pub(super) seg_offset: usize, // offset from begin chunk in segment
     pub(super) len: usize, // span length, in bytes
     pub(super) offset: usize, // offset in content, in bytes
 }
@@ -53,14 +53,14 @@ impl Span {
     }
 
     #[inline]
-    pub fn end_seg_offset(&self) -> usize {
-        self.seg_offset + self.len
+    pub fn offset_in_seg(&self, seg: &Segment) -> usize {
+        seg[self.begin].pos + self.seg_offset
     }
 
     fn locate(&self, at: usize, seg: &Segment) -> (usize, usize) {
         assert!(self.offset <= at && at <= self.end_offset());
         let chunks = &seg[self.begin..self.end];
-        let seg_at = self.seg_offset + at - self.offset;
+        let seg_at = self.offset_in_seg(seg) + at - self.offset;
         let idx = chunks
             .iter()
             .position(|c| c.pos <= seg_at && seg_at <= c.end_pos())
@@ -88,7 +88,7 @@ impl Span {
 
     #[inline]
     pub fn merge_up(&mut self, up: &Span) {
-        assert!(self.end_seg_offset() == up.seg_offset);
+        assert!(self.end == up.begin && up.seg_offset == 0);
         self.end = up.end;
         self.len += up.len;
     }
@@ -121,7 +121,7 @@ impl Cutable for Span {
         let (align_idx, align_at) = self.align_up(at, seg);
         let mut ret = self.clone();
         ret.begin = align_idx;
-        ret.seg_offset += align_at - self.offset;
+        ret.seg_offset = 0;
         ret.len = if self.end_offset() > align_at {
             self.end_offset() - align_at
         } else {
@@ -138,7 +138,7 @@ impl Cutable for Span {
         let delta = at - self.offset;
         let mut ret = self.clone();
         self.begin = align_idx;
-        self.seg_offset += delta;
+        self.seg_offset = at - align_at;
         self.len -= delta;
         self.offset = at;
         ret.end = self.begin;

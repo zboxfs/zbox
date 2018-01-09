@@ -43,6 +43,11 @@ impl Chunk {
     pub fn end_pos(&self) -> usize {
         self.pos + self.len
     }
+
+    #[inline]
+    pub fn is_orphan(&self) -> bool {
+        self.refcnt.val() == 0
+    }
 }
 
 impl Debug for Chunk {
@@ -74,14 +79,14 @@ struct ChunkMapInner {
 }
 
 impl ChunkMapInner {
-    pub fn new() -> Self {
+    fn new() -> Self {
         ChunkMapInner {
             seg_ids: Vec::new(),
             map: HashMap::new(),
         }
     }
 
-    pub fn get(&self, hash: &Hash) -> Option<ChunkLoc> {
+    fn get(&self, hash: &Hash) -> Option<ChunkLoc> {
         self.map.get(hash).map(|&(seg_idx, chk_idx)| {
             ChunkLoc {
                 seg_id: self.seg_ids[seg_idx as usize].clone(),
@@ -90,7 +95,7 @@ impl ChunkMapInner {
         })
     }
 
-    pub fn insert(&mut self, chk_hash: &Hash, seg_id: &Eid, chk_idx: usize) {
+    fn insert(&mut self, chk_hash: &Hash, seg_id: &Eid, chk_idx: usize) {
         let idx = self.seg_ids
             .iter()
             .position(|s| s == seg_id)
@@ -101,7 +106,18 @@ impl ChunkMapInner {
         self.map.insert(chk_hash.clone(), (idx, chk_idx));
     }
 
-    pub fn remove(&mut self, seg_id: &Eid) {
+    fn remove_chunks(&mut self, seg_id: &Eid, chk_indices: &[usize]) {
+        self.seg_ids.iter().position(|s| s == seg_id).and_then(
+            |idx| -> Option<()> {
+                self.map.retain(
+                    |_, val| val.0 != idx || !chk_indices.contains(&val.1),
+                );
+                None
+            },
+        );
+    }
+
+    fn remove_segment(&mut self, seg_id: &Eid) {
         self.seg_ids.iter().position(|s| s == seg_id).and_then(
             |idx| -> Option<()> {
                 self.map.retain(|_, val| val.0 != idx);
@@ -130,9 +146,14 @@ impl ChunkMap {
         inner.insert(chk_hash, seg_id, chk_idx);
     }
 
-    pub fn remove(&mut self, seg_id: &Eid) {
+    pub fn remove_chunks(&mut self, seg_id: &Eid, chk_indices: &[usize]) {
         let mut inner = self.0.write().unwrap();
-        inner.remove(seg_id);
+        inner.remove_chunks(seg_id, chk_indices);
+    }
+
+    pub fn remove_segment(&mut self, seg_id: &Eid) {
+        let mut inner = self.0.write().unwrap();
+        inner.remove_segment(seg_id);
     }
 }
 

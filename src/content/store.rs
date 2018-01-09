@@ -13,7 +13,7 @@ use super::content::{ContentRef, Cache as ContentCache,
                      Writer as ContentWriter};
 use super::chunk::ChunkMap;
 use super::chunker::{ChunkerParams, Chunker};
-use super::segment::{SegRef, SegDataRef, Cache as SegCache,
+use super::segment::{Segment, SegData, SegRef, SegDataRef, Cache as SegCache,
                      DataCache as SegDataCache};
 
 // segment cache size
@@ -116,8 +116,9 @@ impl Store {
         Ok(ent.content_id.clone())
     }
 
-    /// Decrease content reference,
-    /// if the content is not used anymore, remove and return it
+    /// Decrease content reference in store
+    ///
+    /// If the content is not used anymore, remove and return it.
     pub fn deref_content(
         &mut self,
         content_id: &Eid,
@@ -141,9 +142,21 @@ impl Store {
     }
 
     /// Remove segment and its associated segment data
-    pub fn remove_segment(&mut self, seg_id: &Eid, segdata_id: &Eid) {
-        self.segdata_cache.remove(segdata_id);
-        self.seg_cache.remove(seg_id);
+    pub fn remove_segment(&mut self, seg_cow: &Cow<Segment>) -> Result<()> {
+        // remove seg and seg data from cache
+        self.segdata_cache.remove(seg_cow.data_id());
+        self.seg_cache.remove(seg_cow.id());
+
+        // as seg data is not included in transaction, we need to remove it
+        // directly from volume
+        SegData::remove(seg_cow.data_id(), Txid::current()?, &self.vol)?;
+
+        Ok(())
+    }
+
+    pub fn shrink_segment(&self, seg: &mut Segment) -> Result<Vec<usize>> {
+        let seg_data_ref = self.segdata_cache.get(seg.data_id(), &self.vol)?;
+        seg.shrink(&seg_data_ref, &self.vol)
     }
 }
 
@@ -157,10 +170,12 @@ impl Debug for Store {
 }
 
 impl Id for Store {
+    #[inline]
     fn id(&self) -> &Eid {
         &self.id
     }
 
+    #[inline]
     fn id_mut(&mut self) -> &mut Eid {
         &mut self.id
     }
