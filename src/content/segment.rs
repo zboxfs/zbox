@@ -8,6 +8,7 @@ use error::Result;
 use base::IntoRef;
 use base::lru::{Lru, Meter, PinChecker};
 use trans::{Eid, Id, CloneNew, TxMgrRef, Txid};
+use trans::trans::{Action, Transable};
 use trans::cow::{CowRef, IntoCow, CowCache};
 use volume::{Volume, VolumeRef, Persistable, Writer as VolWriter};
 use super::chunk::Chunk;
@@ -16,19 +17,52 @@ use super::chunk::Chunk;
 const MAX_CHUNKS: usize = 256;
 
 /// Segment Data
-#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[derive(Default, Clone, Deserialize, Serialize)]
 pub struct SegData {
     id: Eid,
     data: Vec<u8>,
 }
 
 impl SegData {
+    fn new(id: &Eid) -> Self {
+        SegData {
+            id: id.clone(),
+            data: Vec::new(),
+        }
+    }
+
     // Note: offset is in the segment data
+    #[inline]
     pub fn read(&self, dst: &mut [u8], offset: usize) -> usize {
         let read_len = dst.len();
         assert!(offset + read_len <= self.data.len());
         dst.copy_from_slice(&self.data[offset..(offset + read_len)]);
         read_len
+    }
+
+    pub fn add_to_trans(
+        seg_data_ref: &SegDataRef,
+        action: Action,
+        txid: Txid,
+        txmgr: &TxMgrRef,
+    ) -> Result<()> {
+        let id = {
+            let seg_data = seg_data_ref.read().unwrap();
+            seg_data.id().clone()
+        };
+        let mut txmgr = txmgr.write().unwrap();
+        txmgr.add_to_trans(&id, txid, seg_data_ref.clone(), action)
+    }
+
+    pub fn add_dummy_to_trans(
+        id: &Eid,
+        action: Action,
+        txid: Txid,
+        txmgr: &TxMgrRef,
+    ) -> Result<()> {
+        let seg_data = SegData::new(id).into_ref();
+        let mut txmgr = txmgr.write().unwrap();
+        txmgr.add_to_trans(id, txid, seg_data, action)
     }
 }
 
@@ -68,12 +102,41 @@ impl<'de> Persistable<'de> for SegData {
     }
 }
 
+impl Transable for SegData {
+    fn commit(&mut self, action: Action, vol: &VolumeRef) -> Result<()> {
+        let txid = Txid::current()?;
+
+        match action {
+            Action::New => {
+                // do nothing here, as segment data is already
+                // written to volume in direct write mode
+                Ok(())
+            }
+            Action::Update => unreachable!(),
+            Action::Delete => {
+                SegData::remove(&self.id, txid, vol)?;
+                Ok(())
+            }
+        }
+    }
+
+    fn complete_commit(&mut self, _action: Action) {}
+
+    fn abort(&mut self, _action: Action) {}
+}
+
+impl Debug for SegData {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("SegData").field("id", &self.id).finish()
+    }
+}
+
 /// Segment data reference type
 pub type SegDataRef = Arc<RwLock<SegData>>;
 
 // Segment data meter, measured by segment data bytes size
 #[derive(Debug)]
-pub struct SegDataMeter;
+struct SegDataMeter;
 
 impl Meter<SegDataRef> for SegDataMeter {
     fn measure(&self, item: &SegDataRef) -> isize {
@@ -136,7 +199,7 @@ pub struct Segment {
 }
 
 impl Segment {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Segment {
             id: Eid::new(),
             len: 0,
@@ -215,6 +278,7 @@ impl Segment {
     pub fn shrink(
         &mut self,
         seg_data_ref: &SegDataRef,
+        txmgr: &TxMgrRef,
         vol: &VolumeRef,
     ) -> Result<Vec<usize>> {
         let seg_data = seg_data_ref.write().unwrap();
@@ -240,14 +304,15 @@ impl Segment {
                 chunk.pos = buf.len() - chunk.len;
             }
         }
+        assert_eq!(buf.len(), self.used);
 
         // write new segment data to volume
         let new_data_id = Eid::new();
         let mut data_wtr = Volume::writer(&new_data_id, txid, vol);
         data_wtr.write_all(&buf)?;
 
-        // remove old segment data from volume
-        SegData::remove(seg_data.id(), txid, vol)?;
+        // add dummy segment data to transaction
+        SegData::add_dummy_to_trans(&new_data_id, Action::New, txid, txmgr)?;
 
         // update segment
         self.len = self.used;
@@ -347,6 +412,9 @@ impl Writer {
     pub fn new(txid: Txid, txmgr: &TxMgrRef, vol: &VolumeRef) -> Result<Self> {
         let seg = Segment::new();
         let data_wtr = Volume::writer(&seg.data_id, txid, vol);
+
+        // add dummy segment data to transaction
+        SegData::add_dummy_to_trans(&seg.data_id, Action::New, txid, txmgr)?;
 
         Ok(Writer {
             seg: seg.into_cow(&txmgr)?,

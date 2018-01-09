@@ -7,6 +7,7 @@ use base::RefCnt;
 use base::crypto::Hash;
 use trans::{Eid, Id, CloneNew, TxMgrRef, Txid};
 use trans::cow::{Cow, CowRef, IntoCow};
+use trans::trans::Action;
 use volume::{VolumeRef, Persistable};
 use super::Content;
 use super::content::{ContentRef, Cache as ContentCache,
@@ -58,6 +59,9 @@ pub struct Store {
     segdata_cache: SegDataCache,
 
     #[serde(skip_serializing, skip_deserializing, default)]
+    txmgr: TxMgrRef,
+
+    #[serde(skip_serializing, skip_deserializing, default)]
     vol: VolumeRef,
 }
 
@@ -70,6 +74,7 @@ impl Store {
             content_cache: ContentCache::new(CONTENT_CACHE_SIZE, txmgr),
             seg_cache: SegCache::new(SEG_CACHE_SIZE, txmgr),
             segdata_cache: SegDataCache::new(SEG_DATA_CACHE_SIZE),
+            txmgr: txmgr.clone(),
             vol: vol.clone(),
         }
     }
@@ -86,6 +91,7 @@ impl Store {
             store.content_cache = ContentCache::new(CONTENT_CACHE_SIZE, txmgr);
             store.seg_cache = SegCache::new(SEG_CACHE_SIZE, txmgr);
             store.segdata_cache = SegDataCache::new(SEG_DATA_CACHE_SIZE);
+            store.txmgr = txmgr.clone();
             store.vol = vol.clone();
         }
         Ok(store)
@@ -147,16 +153,34 @@ impl Store {
         self.segdata_cache.remove(seg_cow.data_id());
         self.seg_cache.remove(seg_cow.id());
 
-        // as seg data is not included in transaction, we need to remove it
-        // directly from volume
-        SegData::remove(seg_cow.data_id(), Txid::current()?, &self.vol)?;
+        // add dummy segment data to transaction for deletion
+        SegData::add_dummy_to_trans(
+            seg_cow.data_id(),
+            Action::Delete,
+            Txid::current()?,
+            &self.txmgr,
+        )?;
 
         Ok(())
     }
 
     pub fn shrink_segment(&self, seg: &mut Segment) -> Result<Vec<usize>> {
-        let seg_data_ref = self.segdata_cache.get(seg.data_id(), &self.vol)?;
-        seg.shrink(&seg_data_ref, &self.vol)
+        // load old segment data and then remove it from cache
+        let seg_data = {
+            self.segdata_cache.get(seg.data_id(), &self.vol)?;
+            self.segdata_cache.remove(seg.data_id()).unwrap()
+        };
+
+        // add old segment data to transaction for deletion
+        SegData::add_to_trans(
+            &seg_data,
+            Action::Delete,
+            Txid::current()?,
+            &self.txmgr,
+        )?;
+
+        // shrink segment
+        seg.shrink(&seg_data, &self.txmgr, &self.vol)
     }
 }
 
