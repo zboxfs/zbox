@@ -22,6 +22,7 @@
 //! Create and open a [`Repo`] using OS file system as storage.
 //!
 //! ```no_run
+//! #![allow(unused_mut, unused_variables)]
 //! use zbox::{init_env, RepoOpener};
 //!
 //! // initialise zbox environment, called first

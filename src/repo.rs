@@ -24,6 +24,7 @@ use super::{Result, File};
 /// Opening a repository and creating it if it doesn't exist.
 ///
 /// ```
+/// #![allow(unused_mut, unused_variables)]
 /// # use zbox::{init_env, Result};
 /// use zbox::RepoOpener;
 ///
@@ -38,6 +39,7 @@ use super::{Result, File};
 /// Specify parameters for creating a repository.
 ///
 /// ```
+/// #![allow(unused_mut, unused_variables)]
 /// # use zbox::{init_env, Result};
 /// use zbox::{RepoOpener, OpsLimit, MemLimit, Cipher};
 ///
@@ -211,6 +213,7 @@ impl Default for RepoOpener {
 /// doesn't exist.
 ///
 /// ```
+/// #![allow(unused_mut, unused_variables)]
 /// # use zbox::{init_env, Result, RepoOpener};
 /// # use zbox::OpenOptions;
 /// # fn foo() -> Result<()> {
@@ -426,6 +429,7 @@ impl RepoInfo {
 /// Create an OS file system based repository.
 ///
 /// ```no_run
+/// #![allow(unused_mut, unused_variables, dead_code)]
 /// # use zbox::Result;
 /// use zbox::{init_env, RepoOpener};
 ///
@@ -441,6 +445,7 @@ impl RepoInfo {
 /// Create a memory based repository.
 ///
 /// ```
+/// #![allow(unused_mut, unused_variables, dead_code)]
 /// # use zbox::{init_env, Result, RepoOpener};
 /// # fn foo() -> Result<()> {
 /// # init_env();
@@ -452,6 +457,7 @@ impl RepoInfo {
 /// Open a repository in read-only mode.
 ///
 /// ```no_run
+/// #![allow(unused_mut, unused_variables, dead_code)]
 /// # use zbox::{Result, RepoOpener};
 /// # fn foo() -> Result<()> {
 /// let mut repo = RepoOpener::new()
@@ -646,6 +652,7 @@ impl Repo {
     /// # Examples
     ///
     /// ```
+    /// #![allow(unused_mut, unused_variables, dead_code)]
     /// # use zbox::{init_env, Result, RepoOpener};
     /// # fn foo() -> Result<()> {
     /// # init_env();

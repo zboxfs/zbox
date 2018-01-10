@@ -150,6 +150,7 @@ impl<'a> Seek for VersionReader<'a> {
 ///
 ///   ## Examples
 ///   ```
+///   #![allow(unused_mut, unused_variables)]
 ///   # use zbox::{init_env, Result, RepoOpener};
 ///   use std::io::Read;
 ///   # use zbox::OpenOptions;
