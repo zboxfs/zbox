@@ -203,3 +203,58 @@ impl Storage for MemStorage {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, Instant};
+
+    use base::init_env;
+    use base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE, Cost, Cipher};
+    use super::*;
+
+    fn speed_str(duration: &Duration, data_len: usize) -> String {
+        let secs = duration.as_secs() as f32 +
+            duration.subsec_nanos() as f32 / 1_000_000_000.0;
+        let speed = data_len as f32 / (1024.0 * 1024.0) / secs;
+        format!("{} MB/s", speed)
+    }
+
+    #[test]
+    fn mem_storage_perf() {
+        init_env();
+
+        let crypto = Crypto::new(Cost::default(), Cipher::Xchacha).unwrap();
+        let mut storage = MemStorage::new();
+        storage.init(&Eid::new(), &crypto, &Key::new()).unwrap();
+
+        let id = Eid::new();
+        const DATA_LEN: usize = 10 * 1024 * 1024;
+        let mut buf = vec![0u8; DATA_LEN];
+        let seed = RandomSeed::from(&[0u8; RANDOM_SEED_SIZE]);
+        Crypto::random_buf_deterministic(&mut buf, &seed);
+
+        // write
+        let now = Instant::now();
+        {
+            let txid = Txid::from(100);
+            storage.begin_trans(txid).unwrap();
+            storage.write(&id, 0, &buf, txid).unwrap();
+            storage.commit_trans(txid).unwrap();
+        }
+        let write_time = now.elapsed();
+
+        // read
+        let now = Instant::now();
+        {
+            let txid = Txid::new_empty();
+            storage.read(&id, 0, &mut buf, txid).unwrap();
+        }
+        let read_time = now.elapsed();
+
+        println!(
+            "Memory storage perf: read: {}, write: {}",
+            speed_str(&read_time, DATA_LEN),
+            speed_str(&write_time, DATA_LEN)
+        );
+    }
+}

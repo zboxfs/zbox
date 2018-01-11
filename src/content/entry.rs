@@ -341,7 +341,6 @@ impl EntryList {
     }
 
     #[allow(dead_code)]
-    #[cfg(debug_assertions)]
     pub fn check(&self) {
         let mut ents_len = 0;
         let mut offset = self.offset;

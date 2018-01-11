@@ -350,7 +350,7 @@ impl IntoRef for Volume {}
 pub type VolumeRef = Arc<RwLock<Volume>>;
 
 // encrypt/decrypt frame size
-const CRYPT_FRAME_SIZE: usize = 32 * 1024;
+const CRYPT_FRAME_SIZE: usize = 64 * 1024;
 
 /// Crypto Reader
 struct CryptoReader {
@@ -627,13 +627,14 @@ pub trait Persistable<'de>: Id + Deserialize<'de> + Serialize {
 mod tests {
     extern crate tempdir;
 
+    use std::time::{Duration, Instant};
     use self::tempdir::TempDir;
 
     use base::init_env;
-    use base::crypto::{Crypto, RandomSeed, Hash, Cost};
+    use base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE, Hash, Cost};
     use super::*;
 
-    fn setup_mem() -> VolumeRef {
+    fn setup_mem_vol() -> VolumeRef {
         init_env();
         let uri = "mem://test".to_string();
         let cost = Cost::default();
@@ -642,7 +643,7 @@ mod tests {
         vol.into_ref()
     }
 
-    fn setup_file() -> (VolumeRef, TempDir) {
+    fn setup_file_vol() -> (VolumeRef, TempDir) {
         init_env();
         let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
         let dir = tmpdir.path().to_path_buf();
@@ -659,7 +660,7 @@ mod tests {
         (vol.into_ref(), tmpdir)
     }
 
-    fn read_write(vol: VolumeRef) {
+    fn read_write(vol: &VolumeRef) {
         // round #1
         let id = Eid::new();
         let buf = [1, 2, 3];
@@ -718,17 +719,77 @@ mod tests {
         }
     }
 
+    fn speed_str(duration: &Duration, data_len: usize) -> String {
+        let secs = duration.as_secs() as f32 +
+            duration.subsec_nanos() as f32 / 1_000_000_000.0;
+        let speed = data_len as f32 / (1024.0 * 1024.0) / secs;
+        format!("{} MB/s", speed)
+    }
+
+    fn print_result(
+        prefix: &str,
+        read_time: &Duration,
+        write_time: &Duration,
+        data_len: usize,
+    ) {
+        println!(
+            "{} perf: read: {}, write: {}",
+            prefix,
+            speed_str(&read_time, data_len),
+            speed_str(&write_time, data_len)
+        );
+    }
+
+    fn read_write_perf(vol: &VolumeRef, prefix: &str) {
+        let id = Eid::new();
+        const DATA_LEN: usize = 10 * 1024 * 1024;
+        let mut buf = vec![0u8; DATA_LEN];
+        let seed = RandomSeed::from(&[0u8; RANDOM_SEED_SIZE]);
+        Crypto::random_buf_deterministic(&mut buf, &seed);
+
+        // write
+        let now = Instant::now();
+        {
+            let txid = Txid::from(100);
+            let mut wtr = Volume::writer(&id, txid, &vol);
+            {
+                let mut vol = vol.write().unwrap();
+                vol.begin_trans(txid).unwrap();
+            }
+            wtr.write_all(&buf).unwrap();
+            drop(wtr);
+            {
+                let mut vol = vol.write().unwrap();
+                vol.commit_trans(txid).unwrap();
+            }
+        }
+        let write_time = now.elapsed();
+
+        // read
+        let now = Instant::now();
+        {
+            let txid = Txid::new_empty();
+            let mut rdr = Volume::reader(&id, txid, &vol);
+            let mut dst = Vec::new();
+            rdr.read_to_end(&mut dst).unwrap();
+        }
+        let read_time = now.elapsed();
+
+        print_result(prefix, &read_time, &write_time, DATA_LEN);
+    }
+
     #[test]
     fn read_write_mem() {
-        let vol = setup_mem();
-        read_write(vol);
+        let vol = setup_mem_vol();
+        read_write(&vol);
+        read_write_perf(&vol, "Volume (memory storage)");
     }
 
     #[test]
     fn read_write_file() {
-        let (vol, tmpdir) = setup_file();
-        read_write(vol);
-        drop(tmpdir);
+        let (vol, _tmpdir) = setup_file_vol();
+        read_write(&vol);
+        read_write_perf(&vol, "Volume (file storage)");
     }
 
     const RND_DATA_LEN: usize = 4 * 1024 * 1024;
@@ -828,7 +889,7 @@ mod tests {
 
     #[test]
     fn fuzz_read_write() {
-        let (vol, tmpdir) = setup_file();
+        let (vol, _tmpdir) = setup_file_vol();
 
         // setup
         // -----------
@@ -940,8 +1001,6 @@ mod tests {
                 }
             }
         }
-
-        drop(tmpdir);
     }
 
     // this function is to reproduce the bug found during fuzz testing.
@@ -951,7 +1010,7 @@ mod tests {
     #[cfg_attr(rustfmt, rustfmt_skip)]
     #[allow(dead_code)]
     fn reproduce_bug() {
-        let (vol, tmpdir) = setup_file();
+        let (vol, tmpdir) = setup_file_vol();
 
         // reproduce random data buffer
         let seed = RandomSeed::from(

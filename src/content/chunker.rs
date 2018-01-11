@@ -224,8 +224,10 @@ impl<W: Write + Seek> Seek for Chunker<W> {
 #[cfg(test)]
 mod tests {
     use std::io::{Write, Result as IoResult, Seek, SeekFrom, Cursor, copy};
+    use std::time::{Duration, Instant};
 
-    use base::crypto::Crypto;
+    use base::init_env;
+    use base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE};
     use content::chunk::Chunk;
     use super::*;
 
@@ -263,15 +265,35 @@ mod tests {
         }
     }
 
+    #[derive(Debug)]
+    struct VoidSinker {}
+
+    impl Write for VoidSinker {
+        fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> IoResult<()> {
+            Ok(())
+        }
+    }
+
+    impl Seek for VoidSinker {
+        fn seek(&mut self, _: SeekFrom) -> IoResult<u64> {
+            Ok(0)
+        }
+    }
+
     #[test]
     fn chunker() {
-        Crypto::init().unwrap();
+        init_env();
 
         // perpare test data
+        const DATA_LEN: usize = 765 * 1024;
         let params = ChunkerParams::new();
-        let mut data = [4u8; 765 * 1024];
+        let mut data = vec![0u8; DATA_LEN];
         Crypto::random_buf(&mut data);
-        let mut cur = Cursor::new(data.to_vec());
+        let mut cur = Cursor::new(data);
         let sinker = Sinker {
             len: 0,
             chks: Vec::new(),
@@ -281,8 +303,37 @@ mod tests {
         let mut ckr = Chunker::new(params, sinker);
         let result = copy(&mut cur, &mut ckr);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), data.len() as u64);
-        let result = ckr.flush();
-        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), DATA_LEN as u64);
+        ckr.flush().unwrap();
+    }
+
+    fn speed_str(duration: &Duration, data_len: usize) -> String {
+        let secs = duration.as_secs() as f32 +
+            duration.subsec_nanos() as f32 / 1_000_000_000.0;
+        let speed = data_len as f32 / (1024.0 * 1024.0) / secs;
+        format!("{} MB/s", speed)
+    }
+
+    #[test]
+    fn chunker_perf() {
+        init_env();
+
+        // perpare test data
+        const DATA_LEN: usize = 10 * 1024 * 1024;
+        let params = ChunkerParams::new();
+        let mut data = vec![0u8; DATA_LEN];
+        let seed = RandomSeed::from(&[0u8; RANDOM_SEED_SIZE]);
+        Crypto::random_buf_deterministic(&mut data, &seed);
+        let mut cur = Cursor::new(data);
+        let sinker = VoidSinker {};
+
+        // test chunker performance
+        let mut ckr = Chunker::new(params, sinker);
+        let now = Instant::now();
+        copy(&mut cur, &mut ckr).unwrap();
+        ckr.flush().unwrap();
+        let time = now.elapsed();
+
+        println!("Chunker perf: {}", speed_str(&time, DATA_LEN));
     }
 }
