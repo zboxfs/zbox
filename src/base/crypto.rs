@@ -345,7 +345,7 @@ pub const HASH_SIZE: usize = 32;
 pub struct Hash([u8; HASH_SIZE]);
 
 impl Hash {
-    pub fn new() -> Self {
+    pub fn new_empty() -> Self {
         Self::default()
     }
 
@@ -726,7 +726,7 @@ impl Crypto {
         key: *const u8,
         keylen: usize,
     ) -> Hash {
-        let mut ret = Hash::new();
+        let mut ret = Hash::new_empty();
         unsafe {
             match crypto_generichash(
                 ret.as_mut_ptr(),
@@ -757,20 +757,26 @@ impl Crypto {
         Crypto::hash_raw(inbuf.as_ptr(), inbuf.len(), ptr::null(), 0)
     }
 
-    /// Initialise hash state for multi-part hashing.
-    pub fn hash_init() -> HashState {
-        let mut state: HashState = [0u8; HASH_STATE_SIZE];
+    /// Initialise hash state for multi-part hashing (zero copy).
+    pub fn hash_init_to(state: &mut HashState) {
         unsafe {
             match crypto_generichash_init(
-                (&mut state).as_mut_ptr(),
+                state.as_mut_ptr(),
                 ptr::null(),
                 0,
                 HASH_SIZE,
             ) {
-                0 => state,
+                0 => {}
                 _ => unreachable!(),
             }
         }
+    }
+
+    /// Initialise hash state for multi-part hashing.
+    pub fn hash_init() -> HashState {
+        let mut state: HashState = [0u8; HASH_STATE_SIZE];
+        Crypto::hash_init_to(&mut state);
+        state
     }
 
     /// Processing a chunk of the message, update hash state.
@@ -788,18 +794,24 @@ impl Crypto {
     }
 
     /// Finanlise multi-part hashing.
-    pub fn hash_final(state: &mut HashState) -> Hash {
-        let mut ret = Hash::new();
+    pub fn hash_final_to(state: &mut HashState, hash: &mut Hash) {
         unsafe {
             match crypto_generichash_final(
                 state.as_mut_ptr(),
-                ret.as_mut_ptr(),
+                hash.as_mut_ptr(),
                 HASH_SIZE,
             ) {
-                0 => ret,
+                0 => (),
                 _ => unreachable!(),
             }
         }
+    }
+
+    /// Finanlise multi-part hashing.
+    pub fn hash_final(state: &mut HashState) -> Hash {
+        let mut ret = Hash::new_empty();
+        Crypto::hash_final_to(state, &mut ret);
+        ret
     }
 
     // -------------

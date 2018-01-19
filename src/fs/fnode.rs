@@ -12,9 +12,8 @@ use base::lru::{Lru, CountMeter, PinChecker};
 use trans::{Eid, Id, CloneNew, Txid, TxMgrRef};
 use trans::cow::{Cow, CowRef, IntoCow, CowWeakRef, CowCache};
 use volume::{VolumeRef, Persistable};
-use content::{StoreRef, Writer as StoreWriter, Content, ContentRef};
-use content::content::Reader as ContentReader;
-use content::chunk::ChunkMap;
+use content::{StoreRef, Writer as StoreWriter, Content, ContentRef,
+              ContentReader, ChunkMap};
 use super::Handle;
 
 // maximum sub nodes for a fnode

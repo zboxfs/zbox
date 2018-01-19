@@ -1,9 +1,7 @@
 use std::fmt::{self, Debug};
 use std::io::{Write, Result as IoResult, Seek, SeekFrom};
-use std::collections::HashMap;
 
 use error::{Error, Result};
-use base::RefCnt;
 use base::crypto::Hash;
 use trans::{Eid, Id, CloneNew, TxMgrRef, Txid};
 use trans::cow::{Cow, CowRef, IntoCow};
@@ -12,6 +10,7 @@ use volume::{VolumeRef, Persistable};
 use super::Content;
 use super::content::{ContentRef, Cache as ContentCache,
                      Writer as ContentWriter};
+use super::content_map::{ContentMapEntry, ContentMap};
 use super::chunk::ChunkMap;
 use super::chunker::{ChunkerParams, Chunker};
 use super::segment::{Segment, SegData, SegRef, SegDataRef, Cache as SegCache,
@@ -26,28 +25,12 @@ const SEG_DATA_CACHE_SIZE: usize = 16 * 1024 * 1024;
 // default content cache size
 const CONTENT_CACHE_SIZE: usize = 16;
 
-// Content map entry
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct ContentMapEntry {
-    content_id: Eid,
-    refcnt: RefCnt,
-}
-
-impl ContentMapEntry {
-    fn new(content_id: &Eid) -> Self {
-        ContentMapEntry {
-            content_id: content_id.clone(),
-            refcnt: RefCnt::new(),
-        }
-    }
-}
-
 /// Content Store
 #[derive(Default, Clone, Deserialize, Serialize)]
 pub struct Store {
     id: Eid,
     chunker_params: ChunkerParams,
-    content_map: HashMap<Hash, ContentMapEntry>,
+    content_map: ContentMap,
 
     #[serde(skip_serializing, skip_deserializing, default)]
     content_cache: ContentCache,
@@ -70,7 +53,7 @@ impl Store {
         Store {
             id: Eid::new(),
             chunker_params: ChunkerParams::new(),
-            content_map: HashMap::new(),
+            content_map: ContentMap::new(),
             content_cache: ContentCache::new(CONTENT_CACHE_SIZE, txmgr),
             seg_cache: SegCache::new(SEG_CACHE_SIZE, txmgr),
             segdata_cache: SegDataCache::new(SEG_DATA_CACHE_SIZE),
@@ -118,8 +101,8 @@ impl Store {
         let ent = self.content_map.entry(hash.clone()).or_insert_with(|| {
             ContentMapEntry::new(&content_id)
         });
-        ent.refcnt.inc_ref()?;
-        Ok(ent.content_id.clone())
+        ent.inc_ref()?;
+        Ok(ent.content_id().clone())
     }
 
     /// Decrease content reference in store
@@ -132,12 +115,11 @@ impl Store {
         {
             let ctn_ref = self.get_content(content_id)?;
             let ctn = ctn_ref.read().unwrap();
-            let refcnt = self.content_map
-                .get_mut(ctn.hash())
-                .ok_or(Error::NoContent)
-                .and_then(
-                    |ent| ent.refcnt.dec_ref().map_err(|e| Error::from(e)),
-                )?;
+            let refcnt =
+                self.content_map
+                    .get_mut(ctn.hash())
+                    .ok_or(Error::NoContent)
+                    .and_then(|ent| ent.dec_ref().map_err(|e| Error::from(e)))?;
             if refcnt > 0 {
                 return Ok(None);
             }
@@ -159,9 +141,7 @@ impl Store {
             Action::Delete,
             Txid::current()?,
             &self.txmgr,
-        )?;
-
-        Ok(())
+        )
     }
 
     pub fn shrink_segment(&self, seg: &mut Segment) -> Result<Vec<usize>> {

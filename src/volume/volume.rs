@@ -967,7 +967,7 @@ mod tests {
                     }
                     let ent = random_ent(&mut ents);
                     ent.acts.push((act, round, Span { pos: 0, len: 0 }));
-                    ent.hash = Hash::new();
+                    ent.hash = Hash::new_empty();
                     let mut v = vol.write().unwrap();
                     v.del(&ent.id, txid).unwrap();
                 }
@@ -1028,7 +1028,7 @@ mod tests {
         // entities and actions
         let mut ents = vec![Entry { id: Eid::new(),
         acts: vec![(Action::New, 2, Span { pos: 6441525, len: 69696  })],
-        hash: Hash::new()  }];
+        hash: Hash::new_empty()  }];
         let mut rounds: Vec<u64> = ents.iter()
             .flat_map(|e| e.acts.iter().map(|a| a.1))
             .collect();

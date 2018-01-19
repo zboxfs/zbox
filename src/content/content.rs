@@ -27,7 +27,7 @@ impl Content {
     pub fn new() -> Self {
         Content {
             id: Eid::new(),
-            hash: Hash::new(),
+            hash: Hash::new_empty(),
             ents: EntryList::new(),
         }
     }
