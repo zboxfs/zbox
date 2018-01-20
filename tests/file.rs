@@ -47,8 +47,7 @@ fn file_read_write() {
             .create(true)
             .open(&mut repo, "/file")
             .unwrap();
-        f.write_all(&buf[..]).unwrap();
-        f.finish().unwrap();
+        f.write_once(&buf[..]).unwrap();
 
         verify_content(&mut f, &buf);
 
@@ -66,8 +65,7 @@ fn file_read_write() {
             .write(true)
             .open(&mut repo, "/file")
             .unwrap();
-        f.write_all(&buf2[..]).unwrap();
-        f.finish().unwrap();
+        f.write_once(&buf2[..]).unwrap();
 
         verify_content(&mut f, &buf2);
 
@@ -84,8 +82,7 @@ fn file_read_write() {
             .append(true)
             .open(&mut repo, "/file")
             .unwrap();
-        f.write_all(&buf[..]).unwrap();
-        f.finish().unwrap();
+        f.write_once(&buf[..]).unwrap();
 
         let mut combo = Vec::new();
         combo.extend_from_slice(&buf2);
@@ -157,8 +154,7 @@ fn file_read_write() {
             .write(true)
             .open(&mut repo, "/file")
             .unwrap();
-        f.write_all(&buf[..]).unwrap();
-        f.finish().unwrap();
+        f.write_once(&buf[..]).unwrap();
     }
 
     // #8, finish without in writing
@@ -206,11 +202,9 @@ fn file_read_write() {
             .open(&mut repo, "/file10")
             .unwrap();
 
-        f.write_all(&buf[..]).unwrap();
-        f.finish().unwrap();
+        f.write_once(&buf[..]).unwrap();
 
-        f.write_all(&buf2[..]).unwrap();
-        f.finish().unwrap();
+        f.write_once(&buf2[..]).unwrap();
 
         verify_content(&mut f, &buf2);
 
@@ -227,11 +221,9 @@ fn file_read_write() {
             .open(&mut repo, "/file11")
             .unwrap();
 
-        f.write_all(&buf[..]).unwrap();
-        f.finish().unwrap();
+        f.write_once(&buf[..]).unwrap();
 
-        f.write_all(&buf2[..]).unwrap();
-        f.finish().unwrap();
+        f.write_once(&buf2[..]).unwrap();
 
         verify_content(&mut f, &buf2);
 
@@ -334,8 +326,7 @@ fn file_read_write_mt() {
                     .create(true)
                     .open(&mut env.repo, &path)
                     .unwrap();
-                f.write_all(&buf[..]).unwrap();
-                f.finish().unwrap();
+                f.write_once(&buf[..]).unwrap();
             }
         }));
     }
@@ -376,8 +367,7 @@ fn file_read_write_mt() {
                 .create(true)
                 .open(&mut env.repo, "/99")
                 .unwrap();
-            f.write_all(&buf[..]).unwrap();
-            f.finish().unwrap();
+            f.write_once(&buf[..]).unwrap();
         }));
     }
     for w in workers {
@@ -393,8 +383,7 @@ fn file_read_write_mt() {
             .write(true)
             .open(&mut env.repo, "/99")
             .unwrap();
-        f.write_all(&buf[..]).unwrap();
-        f.finish().unwrap();
+        f.write_once(&buf[..]).unwrap();
     }
     let mut workers = Vec::new();
     for _ in 0..worker_cnt {
@@ -461,8 +450,7 @@ fn file_truncate() {
             .create(true)
             .open(&mut repo, "/file")
             .unwrap();
-        f.write_all(&buf[..]).unwrap();
-        f.finish().unwrap();
+        f.write_once(&buf[..]).unwrap();
     }
 
     // open file in truncate mode
@@ -477,8 +465,7 @@ fn file_truncate() {
         assert_eq!(meta.curr_version(), 3);
 
         // write some data
-        f.write_all(&buf[..]).unwrap();
-        f.finish().unwrap();
+        f.write_once(&buf[..]).unwrap();
         let meta = f.metadata();
         assert_eq!(meta.len(), 3);
         assert_eq!(meta.curr_version(), 4);
@@ -526,8 +513,7 @@ fn file_copy() {
             .create(true)
             .open(&mut repo, "/file")
             .unwrap();
-        f.write_all(&buf[..]).unwrap();
-        f.finish().unwrap();
+        f.write_once(&buf[..]).unwrap();
     }
 
     // #1, copy to non-existing file
@@ -567,8 +553,7 @@ fn file_seek() {
             .create(true)
             .open(&mut repo, "/file")
             .unwrap();
-        f.write_all(&buf[..]).unwrap();
-        f.finish().unwrap();
+        f.write_once(&buf[..]).unwrap();
     }
 
     // #1: seek and read
@@ -628,8 +613,7 @@ fn file_seek() {
             .create(true)
             .open(&mut repo, "/file3")
             .unwrap();
-        f.write_all(&buf[..]).unwrap();
-        f.finish().unwrap();
+        f.write_once(&buf[..]).unwrap();
 
         // seek beyond EOF and write
         let mut f = OpenOptions::new()
@@ -637,8 +621,7 @@ fn file_seek() {
             .open(&mut repo, "/file3")
             .unwrap();
         f.seek(SeekFrom::Start(buf.len() as u64 + 1)).unwrap();
-        f.write_all(&buf[..]).unwrap();
-        f.finish().unwrap();
+        f.write_once(&buf[..]).unwrap();
 
         // verify
         let mut dst = Vec::new();

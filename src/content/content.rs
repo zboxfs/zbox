@@ -9,32 +9,33 @@ use base::crypto::{Crypto, Hash};
 use volume::{VolumeRef, Persistable};
 use trans::{Eid, Id, CloneNew, TxMgrRef, Txid};
 use trans::cow::{CowRef, IntoCow, CowCache};
-use super::{Store, StoreRef};
+use super::StoreRef;
 use super::chunk::ChunkMap;
 use super::span::{Extent, Span};
 use super::entry::{EntryList, CutableList};
 use super::segment::Writer as SegWriter;
+use super::merkle_tree::{MerkleTree, Leaves, Writer as MerkleTreeWriter};
 
 /// Content
 #[derive(Default, Clone, Deserialize, Serialize)]
 pub struct Content {
     id: Eid,
-    hash: Hash,
+    mtree: MerkleTree,
     ents: EntryList,
+
+    // merkle tree leaves
+    #[serde(skip_serializing, skip_deserializing, default)]
+    leaves: Leaves,
 }
 
 impl Content {
     pub fn new() -> Self {
         Content {
             id: Eid::new(),
-            hash: Hash::new_empty(),
+            mtree: MerkleTree::new(),
             ents: EntryList::new(),
+            leaves: Leaves::new(),
         }
-    }
-
-    #[inline]
-    pub fn hash(&self) -> &Hash {
-        &self.hash
     }
 
     #[inline]
@@ -47,13 +48,9 @@ impl Content {
         self.ents.end_offset()
     }
 
-    pub fn split_off(&mut self, at: usize, store: &Store) -> Result<()> {
-        assert!(at <= self.len());
-        let pos = self.ents.locate(at);
-        let seg_ref = store.get_seg(self.ents[pos].seg_id())?;
-        let seg = seg_ref.read().unwrap();
-        self.ents.split_off(at, &seg);
-        Ok(())
+    #[inline]
+    pub fn hash(&self) -> &Hash {
+        self.mtree.root_hash()
     }
 
     // append chunk to content
@@ -62,34 +59,62 @@ impl Content {
         self.ents.append(seg_id, span);
     }
 
-    /// Write into self with another content
-    pub fn write_with(&mut self, other: &Content, store: &Store) -> Result<()> {
-        let (head, tail) = self.ents.write_with(&other.ents, store)?;
-        head.link(store).and(tail.link(store))
+    /// Write into content with another content
+    pub fn replace(
+        dst: &ContentRef,
+        other: &Content,
+        store: &StoreRef,
+    ) -> Result<()> {
+        let mut new_mtree;
+
+        // write other content into destination content
+        {
+            let store = store.read().unwrap();
+            let mut ctn_cow = dst.write().unwrap();
+            let ctn = ctn_cow.make_mut()?;
+            let (head, tail) = ctn.ents.write_with(&other.ents, &store)?;
+            head.link(&store).and(tail.link(&store))?;
+            new_mtree = ctn.mtree.clone();
+        }
+
+        // merge merkle tree
+        let mut rdr = Reader::new(dst, store);
+        new_mtree.merge(&other.leaves, &mut rdr)?;
+        let mut ctn_cow = dst.write().unwrap();
+        let ctn = ctn_cow.make_mut()?;
+        ctn.mtree = new_mtree;
+
+        Ok(())
     }
 
-    /// Calculate content hash
-    pub fn calculate_hash(
-        content: &ContentRef,
+    pub fn truncate(
+        ctn: &ContentRef,
+        at: usize,
         store: &StoreRef,
-    ) -> Result<Hash> {
-        let mut rdr = Reader::new(content, store);
-        let mut buf = vec![0u8; 64 * 1024];
+    ) -> Result<()> {
+        let mut new_mtree;
 
-        let mut state = Crypto::hash_init();
-        loop {
-            let read = rdr.read(&mut buf[..])?;
-            if read == 0 {
-                break;
-            }
-            Crypto::hash_update(&mut state, &buf[..read]);
+        // truncate content
+        {
+            let store = store.read().unwrap();
+            let mut ctn_cow = ctn.write().unwrap();
+            let ctn = ctn_cow.make_mut()?;
+            assert!(at <= ctn.len());
+            let pos = ctn.ents.locate(at);
+            let seg_ref = store.get_seg(ctn.ents[pos].seg_id())?;
+            let seg = seg_ref.read().unwrap();
+            ctn.ents.split_off(at, &seg);
+            new_mtree = ctn.mtree.clone();
         }
-        let hash = Crypto::hash_final(&mut state);
 
-        let mut ctn = content.write().unwrap();
-        ctn.make_mut()?.hash = hash.clone();
+        // truncate merkle tree
+        let mut rdr = Reader::new(ctn, store);
+        new_mtree.truncate(at, &mut rdr)?;
+        let mut ctn_cow = ctn.write().unwrap();
+        let ctn = ctn_cow.make_mut()?;
+        ctn.mtree = new_mtree;
 
-        Ok(hash)
+        Ok(())
     }
 
     pub fn link(ctn: ContentRef, store: &StoreRef) -> Result<()> {
@@ -125,7 +150,7 @@ impl Debug for Content {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Content")
             .field("id", &self.id)
-            .field("hash", &self.hash)
+            .field("hash", self.hash())
             .field("ents", &self.ents)
             .finish()
     }
@@ -238,6 +263,7 @@ pub struct Writer {
     ctn: Content,
     chk_map: ChunkMap,
     seg_wtr: SegWriter,
+    mtree_wtr: MerkleTreeWriter,
     txid: Txid,
     store: StoreRef,
 }
@@ -254,6 +280,7 @@ impl Writer {
             ctn: Content::new(),
             chk_map,
             seg_wtr: SegWriter::new(txid, txmgr, vol)?,
+            mtree_wtr: MerkleTreeWriter::new(),
             txid,
             store: store.clone(),
         })
@@ -288,9 +315,12 @@ impl Writer {
         Ok(())
     }
 
-    pub fn finish(self) -> Result<Content> {
+    pub fn finish(mut self) -> Result<Content> {
         // save current segment
         self.seg_wtr.save_seg()?;
+
+        // finish merkel tree
+        self.ctn.leaves = self.mtree_wtr.finish();
 
         Ok(self.ctn)
     }
@@ -302,6 +332,9 @@ impl Write for Writer {
 
         // calculate chunk hash
         let hash = Crypto::hash(chunk);
+
+        // update merkel tree
+        self.mtree_wtr.write(chunk)?;
 
         // if duplicate chunk is found
         if let Some(ref loc) = self.chk_map.get(&hash) {
@@ -342,13 +375,13 @@ impl Write for Writer {
     }
 
     fn flush(&mut self) -> IoResult<()> {
-        self.seg_wtr.flush()
+        self.seg_wtr.flush().and(self.mtree_wtr.flush())
     }
 }
 
 impl Seek for Writer {
     fn seek(&mut self, pos: SeekFrom) -> IoResult<u64> {
-        self.ctn.seek(pos)
+        self.ctn.seek(pos).and(self.mtree_wtr.seek(pos))
     }
 }
 

@@ -549,15 +549,12 @@ impl Fnode {
     // add a new version
     // return content if it is duplicated, none if not
     fn add_ver(&mut self, content: ContentRef) -> Result<Option<ContentRef>> {
-        // calculate content hash
-        let hash = Content::calculate_hash(&content, &self.store)?;
-
         // dedup content and add the new version
         let is_deduped = {
             let ctn = content.read().unwrap();
             let mut store_cow = self.store.write().unwrap();
             let store = store_cow.make_mut()?;
-            let deduped_id = store.dedup_content(ctn.id(), &hash)?;
+            let deduped_id = store.dedup_content(ctn.id(), ctn.hash())?;
             let ver =
                 Version::new(self.curr_ver_num() + 1, &deduped_id, ctn.len());
             self.mtime = ver.ctime;
@@ -588,6 +585,16 @@ impl Fnode {
         Ok(ContentReader::new(&content, &self.store))
     }
 
+    // clone a new current content
+    fn clone_current_content(&self, txmgr: &TxMgrRef) -> Result<ContentRef> {
+        let curr_ctn = {
+            let store = self.store.read().unwrap();
+            store.get_content(&self.curr_ver().content_id)?
+        };
+        let new_ctn = curr_ctn.read().unwrap();
+        new_ctn.clone_new().into_cow(txmgr)
+    }
+
     /// Set file to specified length
     ///
     /// if new length is equal to old length, do nothing
@@ -615,12 +622,9 @@ impl Fnode {
             // truncate
             let mut fnode_cow = handle.fnode.write().unwrap();
             let ctn = {
-                let store = handle.store.read().unwrap();
-                let curr_ctn =
-                    store.get_content(&fnode_cow.curr_ver().content_id)?;
-                let mut new_ctn = curr_ctn.read().unwrap().clone_new();
-                new_ctn.split_off(len, &store)?;
-                new_ctn.into_cow(&handle.txmgr)?
+                let new_ctn = fnode_cow.clone_current_content(&handle.txmgr)?;
+                Content::truncate(&new_ctn, len, &handle.store)?;
+                new_ctn
             };
 
             // link the new content first
@@ -734,19 +738,16 @@ impl Writer {
         let handle = &self.handle;
 
         let mut fnode_cow = handle.fnode.write().unwrap();
-        let fnode = fnode_cow.make_mut()?;
 
-        // merge content
+        // merge stage content to current content
         let ctn = {
-            let ver = fnode.curr_ver();
-            let store = handle.store.read().unwrap();
-            let curr_ctn = store.get_content(&ver.content_id)?;
-            let mut new_ctn = curr_ctn.read().unwrap().clone_new();
-            new_ctn.write_with(&stg_ctn, &store)?;
-            new_ctn.into_cow(&handle.txmgr)?
+            let new_ctn = fnode_cow.clone_current_content(&handle.txmgr)?;
+            Content::replace(&new_ctn, &stg_ctn, &handle.store)?;
+            new_ctn
         };
 
         // dedup content and add deduped content as a new version
+        let fnode = fnode_cow.make_mut()?;
         if let Some(ctn) = fnode.add_ver(ctn)? {
             // content is duplicated
             Content::unlink(&ctn, &mut fnode.chk_map, &handle.store)?;

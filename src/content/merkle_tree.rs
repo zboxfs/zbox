@@ -31,6 +31,9 @@ fn align_piece_ceil_chunk(n: usize) -> usize {
 
 // get parent node index
 fn parent(n: usize, lvl_begin: usize, lvl_node_cnt: usize) -> usize {
+    if lvl_node_cnt == 0 {
+        return 0;
+    }
     let upper_lvl_node_cnt = (lvl_node_cnt + 1) / 2;
     let upper_lvl_begin = lvl_begin - upper_lvl_node_cnt;
     upper_lvl_begin + (n - lvl_begin) / 2
@@ -66,13 +69,37 @@ fn tree_node_cnt(leaf_cnt: usize) -> usize {
     s
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone)]
+pub struct Leaves {
+    offset: usize,
+    len: usize,
+    nodes: Vec<Hash>,
+}
+
+impl Leaves {
+    #[inline]
+    pub fn new() -> Self {
+        Leaves::default()
+    }
+
+    #[inline]
+    fn end_offset(&self) -> usize {
+        self.offset + self.len
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MerkleTree {
     len: usize,
     nodes: Vec<Hash>,
 }
 
 impl MerkleTree {
+    #[inline]
+    pub fn new() -> Self {
+        MerkleTree::default()
+    }
+
     #[inline]
     pub fn root_hash(&self) -> &Hash {
         &self.nodes.first().unwrap()
@@ -111,18 +138,19 @@ impl MerkleTree {
     }
 
     // build merkle tree from bottom up
-    fn build(len: usize, leaves: &[Hash]) -> MerkleTree {
-        let leaf_cnt = leaves.len();
+    fn build(leaves: &Leaves) -> MerkleTree {
+        assert_eq!(leaves.offset, 0);
+        let leaf_cnt = leaves.nodes.len();
         let total_node_cnt = tree_node_cnt(leaf_cnt);
         let inner_node_cnt = total_node_cnt - leaf_cnt;
 
         let mut mtree = MerkleTree {
-            len,
+            len: leaves.len,
             nodes: vec![Hash::new_empty(); inner_node_cnt],
         };
 
         // append leaf nodes
-        mtree.nodes.extend_from_slice(leaves);
+        mtree.nodes.extend_from_slice(&leaves.nodes[..]);
 
         // calculate inner nodes hash from bottom up
         let mut begin = inner_node_cnt;
@@ -144,22 +172,21 @@ impl MerkleTree {
     // merge other merkle tree to self
     pub fn merge<R: Read + Seek>(
         &mut self,
-        offset: usize,
-        len: usize,
-        leaves: &[Hash],
+        leaves: &Leaves,
         rdr: &mut R,
     ) -> Result<()> {
-        assert!(offset <= self.len);
+        assert!(leaves.offset <= self.len);
 
-        let end_offset = max(self.len, offset + len);
+        let end_offset = max(self.len, leaves.end_offset());
         let leaf_cnt = align_piece_ceil_chunk(end_offset);
         let node_cnt = tree_node_cnt(leaf_cnt);
         let leaves_begin = node_cnt - leaf_cnt;
         let mut old_begin = self.inner_cnt();
         let old_leaf_cnt = self.leaf_cnt();
 
-        let mut overlap_begin = leaves_begin + align_piece_floor_chunk(offset);
-        let overlap_end_offset = min(self.len, offset + len);
+        let mut overlap_begin = leaves_begin +
+            align_piece_floor_chunk(leaves.offset);
+        let overlap_end_offset = min(self.len, leaves.end_offset());
         let mut overlap_end = leaves_begin +
             align_piece_ceil_chunk(overlap_end_offset);
 
@@ -170,13 +197,13 @@ impl MerkleTree {
             .clone_from_slice(&old_leaves[..]);
 
         // copy in leave nodes
-        &self.nodes[overlap_begin..overlap_begin + leaves.len()]
-            .clone_from_slice(&leaves[..]);
+        &self.nodes[overlap_begin..overlap_begin + leaves.nodes.len()]
+            .clone_from_slice(&leaves.nodes[..]);
 
         // re-hash head and tail overlapping pieces
         let mut head_is_rehashed = false;
-        if align_piece_offset(offset) != 0 {
-            self.nodes[overlap_begin] = piece_hash(offset, rdr)?;
+        if align_piece_offset(leaves.offset) != 0 {
+            self.nodes[overlap_begin] = piece_hash(leaves.offset, rdr)?;
             head_is_rehashed = true;
         }
         if align_piece_offset(overlap_end_offset) != 0 &&
@@ -296,40 +323,35 @@ impl MerkleTree {
     }
 }
 
-// merkle tree builder
+impl Default for MerkleTree {
+    fn default() -> Self {
+        let wtr = Writer::new();
+        let leaves = wtr.finish();
+        MerkleTree::build(&leaves)
+    }
+}
+
+// merkle tree pieces writer
 pub struct Writer {
-    offset: usize,
-    len: usize,
-    state: HashState,
     hash_offset: usize,
-    nodes: Vec<Hash>,
+    state: HashState,
+    leaves: Leaves,
 }
 
 impl Writer {
-    pub fn new(offset: usize) -> Self {
+    pub fn new() -> Self {
         Writer {
-            offset,
-            len: 0,
+            hash_offset: 0,
             state: Crypto::hash_init(),
-            hash_offset: offset,
-            nodes: Vec::new(),
+            leaves: Leaves::new(),
         }
     }
 
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    #[inline]
-    pub fn nodes(&self) -> &[Hash] {
-        &self.nodes
-    }
-
-    pub fn finish(&mut self) {
-        if self.len == 0 || align_piece_offset(self.hash_offset) != 0 {
-            self.nodes.push(Crypto::hash_final(&mut self.state));
+    pub fn finish(mut self) -> Leaves {
+        if self.leaves.len == 0 || align_piece_offset(self.hash_offset) != 0 {
+            self.leaves.nodes.push(Crypto::hash_final(&mut self.state));
         }
+        self.leaves
     }
 }
 
@@ -350,7 +372,7 @@ impl Write for Writer {
             // reached piece boundary, finish its hash and start a new round
             if align_piece_offset(self.hash_offset + hash_len) <= pos {
                 let hash = Crypto::hash_final(&mut self.state);
-                self.nodes.push(hash);
+                self.leaves.nodes.push(hash);
                 self.state = Crypto::hash_init();
             }
 
@@ -358,7 +380,7 @@ impl Write for Writer {
             self.hash_offset += hash_len;
         }
 
-        self.len += data_len;
+        self.leaves.len += data_len;
 
         Ok(data_len)
     }
@@ -368,12 +390,25 @@ impl Write for Writer {
     }
 }
 
+impl Seek for Writer {
+    fn seek(&mut self, pos: SeekFrom) -> IoResult<u64> {
+        assert_eq!(self.leaves.offset, 0);
+        match pos {
+            SeekFrom::Start(offset) => {
+                self.leaves.offset = offset as usize;
+                self.hash_offset = offset as usize;
+                Ok(offset)
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
 impl Debug for Writer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("MerkleTreeBuilder")
-            .field("offset", &self.offset)
-            .field("len", &self.len)
-            .field("nodes", &self.nodes)
+        f.debug_struct("Writer")
+            .field("hash_offset", &self.hash_offset)
+            .field("leaves", &self.leaves)
             .finish()
     }
 }
@@ -414,21 +449,20 @@ mod tests {
         children[0].clone()
     }
 
-    fn make_writer(offset: usize, buf: &[u8]) -> Writer {
-        let mut wtr = Writer::new(offset);
+    fn make_leaves(offset: usize, buf: &[u8]) -> Leaves {
+        let mut wtr = Writer::new();
+        wtr.seek(SeekFrom::Start(offset as u64)).unwrap();
         for chunk in buf.chunks(PIECE_SIZE) {
             wtr.write(&chunk[..]).unwrap();
         }
-        wtr.finish();
-        wtr
+        wtr.finish()
     }
 
     fn build_mtree(buf: &[u8]) -> MerkleTree {
-        let wtr = make_writer(0, buf);
-        MerkleTree::build(wtr.len(), wtr.nodes())
+        MerkleTree::build(&make_leaves(0, buf))
     }
 
-    fn test_builder(len: usize) {
+    fn test_build(len: usize) {
         let mut buf = vec![0u8; len];
         Crypto::random_buf_deterministic(&mut buf, &RandomSeed::default());
         let mtree = build_mtree(&buf);
@@ -440,9 +474,13 @@ mod tests {
     fn build_merkle_tree() {
         init_env();
 
+        let mtree = MerkleTree::new();
+        assert_eq!(mtree.len, 0);
+        assert_eq!(mtree.nodes.len(), 1);
+
         for i in 0..35 {
-            test_builder(PIECE_SIZE * i);
-            test_builder(PIECE_SIZE * i + 3);
+            test_build(PIECE_SIZE * i);
+            test_build(PIECE_SIZE * i + 3);
         }
     }
 
@@ -453,12 +491,13 @@ mod tests {
         Crypto::random_buf_deterministic(&mut dst, &RandomSeed::default());
 
         let mut mtree = build_mtree(&dst[..]);
-        let wtr = make_writer(offset, &src[..]);
+
         dst.resize(max(dst_len, offset + src_len), 0);
         &dst[offset..offset + src_len].copy_from_slice(&src[..]);
 
         let mut rdr = Cursor::new(&dst);
-        mtree.merge(offset, src_len, wtr.nodes(), &mut rdr).unwrap();
+        let leaves = make_leaves(offset, &src[..]);
+        mtree.merge(&leaves, &mut rdr).unwrap();
 
         let ctl = calculate_merkle_hash(&dst);
         assert_eq!(mtree.len, dst.len());
@@ -469,6 +508,8 @@ mod tests {
     fn merge_merkle_tree() {
         init_env();
 
+        test_merge(0, 0, 0);
+        test_merge(0, 2, 0);
         test_merge(3, 2, 0);
         test_merge(3, 2, 1);
         test_merge(3, 2, 3);
@@ -520,6 +561,7 @@ mod tests {
     fn truncate_merkle_tree() {
         init_env();
 
+        test_truncate(0, 0);
         test_truncate(2, 0);
         test_truncate(2, 1);
         test_truncate(2, 2);
