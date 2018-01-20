@@ -99,7 +99,7 @@ Add the following dependency to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-zbox = "~0.2.0"
+zbox = "0.2.0"
 ```
 
 ## Example
