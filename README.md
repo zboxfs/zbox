@@ -65,6 +65,7 @@ Below is the feature comparison list.
 | Shared access for processes | :heavy_multiplication_x: | :heavy_check_mark:       | :heavy_check_mark:       |
 | Deduplication               | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
 | Compression                 | :heavy_check_mark:       | partial                  | :heavy_multiplication_x: |
+| Versioning                  | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
 | COW semantics               | :heavy_check_mark:       | partial                  | :heavy_multiplication_x: |
 | ACID Transaction            | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
 | Multiple storage layers     | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
@@ -98,7 +99,7 @@ Add the following dependency to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-zbox = "~0.1"
+zbox = "~0.2.0"
 ```
 
 ## Example
