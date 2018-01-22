@@ -1,3 +1,5 @@
+#![cfg(feature = "fuzz-test")]
+
 extern crate bytes;
 extern crate zbox;
 
@@ -11,6 +13,7 @@ use std::io::{Read, Write, Cursor};
 
 use bytes::{Buf, BufMut};
 
+use common::fuzz;
 use zbox::Repo;
 
 #[derive(Debug, Clone)]
@@ -25,7 +28,7 @@ enum Action {
 impl Action {
     // pick a random action
     fn new_random() -> Self {
-        match common::random_u32(5) {
+        match fuzz::random_u32(5) {
             0 => Action::New,
             1 => Action::Read,
             2 => Action::Delete,
@@ -57,7 +60,7 @@ impl Action {
     }
 
     // append single action
-    fn save(&self, env: &common::TestEnv) {
+    fn save(&self, env: &fuzz::TestEnv) {
         let mut buf = Vec::new();
         let path = env.path.join("actions");
         let mut file = fs::OpenOptions::new()
@@ -71,7 +74,7 @@ impl Action {
     }
 
     // load all actions
-    fn load_all(env: &common::TestEnv) -> Vec<Self> {
+    fn load_all(env: &fuzz::TestEnv) -> Vec<Self> {
         let mut buf = Vec::new();
         let path = env.path.join("actions");
         let mut file = fs::File::open(&path).unwrap();
@@ -103,11 +106,11 @@ fn test_round(
     let root = PathBuf::from("/");
 
     // randomly pick up a dir node from control group
-    let node = ctl_grp[common::random_usize(ctl_grp.len())].clone();
+    let node = ctl_grp[fuzz::random_usize(ctl_grp.len())].clone();
 
     match *action {
         Action::New => {
-            let name = format!("{}", common::random_usize(round));
+            let name = format!("{}", fuzz::random_usize(round));
             let path = node.join(name);
             if ctl_grp.iter().find(|&p| p == &path).is_none() {
                 ctl_grp.push(path.clone());
@@ -155,9 +158,8 @@ fn test_round(
             }
         }
         Action::Rename => {
-            let name = format!("{}", common::random_usize(round));
-            let tgt_parent = ctl_grp[common::random_usize(ctl_grp.len())]
-                .clone();
+            let name = format!("{}", fuzz::random_usize(round));
+            let tgt_parent = ctl_grp[fuzz::random_usize(ctl_grp.len())].clone();
             let path = tgt_parent.join(name);
             //println!("rename to path: {}", path.display());
             if node == root || path.starts_with(&node) ||
@@ -185,8 +187,8 @@ fn test_round(
     }
 }
 
-fn dir_fuzz(rounds: usize) {
-    let mut env = common::TestEnv::new("dir");
+fn dir_fuzz_st(rounds: usize) {
+    let mut env = fuzz::TestEnv::new("dir");
     let mut ctl_grp: Vec<PathBuf> = vec![PathBuf::from("/")];
 
     // start fuzz rounds
@@ -200,7 +202,7 @@ fn dir_fuzz(rounds: usize) {
 
 #[allow(dead_code)]
 fn dir_fuzz_reproduce(batch_id: &str) {
-    let mut env = common::TestEnv::load(batch_id);
+    let mut env = fuzz::TestEnv::load(batch_id);
     let mut ctl_grp: Vec<PathBuf> = vec![PathBuf::from("/")];
     let actions = Action::load_all(&env);
     let rounds = actions.len();
@@ -214,7 +216,7 @@ fn dir_fuzz_reproduce(batch_id: &str) {
 }
 
 fn dir_fuzz_mt(rounds: usize) {
-    let env = common::TestEnv::new("dir_mt").into_ref();
+    let env = fuzz::TestEnv::new("dir_mt").into_ref();
     let ctl_grp = Arc::new(RwLock::new(vec![PathBuf::from("/")]));
     let worker_cnt = 4;
 
@@ -246,8 +248,9 @@ fn dir_fuzz_mt(rounds: usize) {
     }
 }
 
-fn main() {
-    dir_fuzz(200);
+#[test]
+fn fuzz_dir() {
+    dir_fuzz_st(200);
     //dir_fuzz_reproduce("dir-1513286719");
     dir_fuzz_mt(200);
 }

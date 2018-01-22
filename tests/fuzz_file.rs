@@ -1,3 +1,5 @@
+#![cfg(feature = "fuzz-test")]
+
 extern crate serde;
 extern crate rmp_serde;
 extern crate bytes;
@@ -14,6 +16,7 @@ use std::fs;
 
 use bytes::{Buf, BufMut, LittleEndian};
 
+use common::fuzz;
 use zbox::{OpenOptions, Repo, File};
 
 #[derive(Default)]
@@ -30,10 +33,10 @@ impl Step {
     const BYTES_LEN: usize = 6 * 8;
 
     fn new_random(round: usize, old_len: usize, data: &[u8]) -> Self {
-        let file_pos = common::random_usize(old_len);
-        let (data_pos, buf) = common::random_slice(data);
-        let do_set_len = common::random_u32(4) == 1;
-        let new_len = common::random_usize((old_len as f32 * 1.2) as usize);
+        let file_pos = fuzz::random_usize(old_len);
+        let (data_pos, buf) = fuzz::random_slice(data);
+        let do_set_len = fuzz::random_u32(4) == 1;
+        let new_len = fuzz::random_usize((old_len as f32 * 1.2) as usize);
         Step {
             round,
             do_set_len,
@@ -45,7 +48,7 @@ impl Step {
     }
 
     // append single step
-    fn save(&self, env: &common::TestEnv) {
+    fn save(&self, env: &fuzz::TestEnv) {
         let mut buf = Vec::new();
         let path = env.path.join("steps");
         let mut file = fs::OpenOptions::new()
@@ -64,7 +67,7 @@ impl Step {
     }
 
     // load all steps
-    fn load_all(env: &common::TestEnv) -> Vec<Self> {
+    fn load_all(env: &fuzz::TestEnv) -> Vec<Self> {
         let mut buf = Vec::new();
         let path = env.path.join("steps");
         let mut file = fs::File::open(&path).unwrap();
@@ -100,17 +103,17 @@ impl Step {
 impl Debug for Step {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Step {{ round: {}, do_set_len: {}, new_len: {}, \
-                file_pos: {}, data_pos: {}, data_len: {}, \
-                data: &test_data[{}..{}] }},",
-            self.round,
-            self.do_set_len,
-            self.new_len,
-            self.file_pos,
-            self.data_pos,
-            self.data_len,
-            self.data_pos,
-            self.data_pos + self.data_len,
-        )
+            file_pos: {}, data_pos: {}, data_len: {}, \
+            data: &test_data[{}..{}] }},",
+        self.round,
+        self.do_set_len,
+        self.new_len,
+        self.file_pos,
+        self.data_pos,
+        self.data_len,
+        self.data_pos,
+        self.data_pos + self.data_len,
+    )
     }
 }
 
@@ -178,7 +181,7 @@ fn test_round(
             worker,
             round,
             rounds,
-            common::readable(meta.len().to_string())
+            fuzz::readable(meta.len().to_string())
         );
     }
     if round == rounds - 1 {
@@ -187,7 +190,7 @@ fn test_round(
 }
 
 fn fuzz_file_read_write(rounds: usize) {
-    let mut env = common::TestEnv::new("file");
+    let mut env = fuzz::TestEnv::new("file");
     let mut file = OpenOptions::new()
         .create(true)
         .open(&mut env.repo, "/file")
@@ -211,7 +214,7 @@ fn fuzz_file_read_write(rounds: usize) {
 
 #[allow(dead_code)]
 fn fuzz_file_read_write_reproduce(batch_id: &str) {
-    let mut env = common::TestEnv::load(batch_id);
+    let mut env = fuzz::TestEnv::load(batch_id);
     let mut file = OpenOptions::new()
         .create(true)
         .open(&mut env.repo, "/file")
@@ -233,7 +236,7 @@ fn fuzz_file_read_write_reproduce(batch_id: &str) {
 }
 
 fn fuzz_file_read_write_mt(rounds: usize) {
-    let env = common::TestEnv::new("file_mt").into_ref();
+    let env = fuzz::TestEnv::new("file_mt").into_ref();
     let ctl_grp = Arc::new(RwLock::new(Vec::new()));
     let worker_cnt = 4;
 
@@ -293,7 +296,8 @@ fn fuzz_file_read_write_mt(rounds: usize) {
     }
 }
 
-fn main() {
+#[test]
+fn fuzz_file() {
     fuzz_file_read_write(30);
     //fuzz_file_read_write_reproduce("file_1513641767");
     fuzz_file_read_write_mt(30);

@@ -12,7 +12,7 @@ use zbox::{Error, OpenOptions, File};
 
 #[test]
 fn file_open_close() {
-    let mut env = common::setup();
+    let mut env = common::TestEnv::new();
     let mut repo = &mut env.repo;
 
     let f = OpenOptions::new()
@@ -35,7 +35,7 @@ fn verify_content(f: &mut File, buf: &[u8]) {
 
 #[test]
 fn file_read_write() {
-    let mut env = common::setup();
+    let mut env = common::TestEnv::new();
     let mut repo = &mut env.repo;
 
     let buf = [1u8, 2u8, 3u8];
@@ -308,7 +308,7 @@ fn file_read_write() {
 
 #[test]
 fn file_read_write_mt() {
-    let env_ref = Arc::new(RwLock::new(common::setup()));
+    let env_ref = Arc::new(RwLock::new(common::TestEnv::new()));
     let worker_cnt = 4;
     let task_cnt = 8;
 
@@ -404,7 +404,7 @@ fn file_read_write_mt() {
 
 #[test]
 fn file_content_dedup() {
-    let mut env = common::setup();
+    let mut env = common::TestEnv::new();
     let mut repo = &mut env.repo;
 
     let buf = [42u8; 16];
@@ -439,7 +439,7 @@ fn file_content_dedup() {
 
 #[test]
 fn file_truncate() {
-    let mut env = common::setup();
+    let mut env = common::TestEnv::new();
     let mut repo = &mut env.repo;
 
     let buf = [1u8, 2u8, 3u8];
@@ -480,7 +480,7 @@ fn file_truncate() {
 
 #[test]
 fn file_shrink() {
-    let mut env = common::setup();
+    let mut env = common::TestEnv::new();
     let mut repo = &mut env.repo;
 
     let mut rng = XorShiftRng::new_unseeded();
@@ -503,7 +503,7 @@ fn file_shrink() {
 
 #[test]
 fn file_copy() {
-    let mut env = common::setup();
+    let mut env = common::TestEnv::new();
     let mut repo = &mut env.repo;
 
     let buf = [1u8, 2u8, 3u8];
@@ -542,7 +542,7 @@ fn file_copy() {
 
 #[test]
 fn file_seek() {
-    let mut env = common::setup();
+    let mut env = common::TestEnv::new();
     let mut repo = &mut env.repo;
 
     let buf = [1u8, 2u8, 3u8];
@@ -633,7 +633,7 @@ fn file_seek() {
 
 #[test]
 fn file_delete() {
-    let mut env = common::setup();
+    let mut env = common::TestEnv::new();
     let mut repo = &mut env.repo;
 
     // create empty file then delete
@@ -671,7 +671,7 @@ fn file_delete() {
 
 #[test]
 fn file_rename() {
-    let mut env = common::setup();
+    let mut env = common::TestEnv::new();
     let mut repo = &mut env.repo;
 
     {

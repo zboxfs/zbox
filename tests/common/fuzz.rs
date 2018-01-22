@@ -1,3 +1,5 @@
+#![cfg(feature = "fuzz-test")]
+
 extern crate bytes;
 extern crate zbox;
 

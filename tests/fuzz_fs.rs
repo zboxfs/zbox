@@ -1,3 +1,5 @@
+#![cfg(feature = "fuzz-test")]
+
 extern crate bytes;
 extern crate zbox;
 
@@ -11,6 +13,8 @@ use std::thread;
 use std::fs;
 
 use bytes::{Buf, BufMut, LittleEndian};
+
+use common::fuzz;
 use zbox::{Error, OpenOptions, Repo, File};
 
 #[derive(Debug, Clone, Copy)]
@@ -21,7 +25,7 @@ enum FileType {
 
 impl FileType {
     fn random() -> Self {
-        match common::random_u32(2) {
+        match fuzz::random_u32(2) {
             0 => FileType::File,
             1 => FileType::Dir,
             _ => unreachable!(),
@@ -80,7 +84,7 @@ impl Action {
             10, // Copy,
             10, // Reopen,
         ];
-        let rnd = common::random_u32(weight.iter().sum());
+        let rnd = fuzz::random_u32(weight.iter().sum());
         let (mut idx, mut last) = (0, 0);
         for (i, w) in weight.iter().enumerate() {
             if last <= rnd && rnd < last + *w {
@@ -199,16 +203,16 @@ impl Step {
     const BYTES_LEN: usize = 8 * 8 + 32;
 
     fn new_random(round: usize, nodes: &Vec<Node>, data: &[u8]) -> Self {
-        let node_idx = common::random_usize(nodes.len());
-        let (data_pos, buf) = common::random_slice(&data);
-        let file_pos = common::random_usize(nodes[node_idx].data.len());
+        let node_idx = fuzz::random_usize(nodes.len());
+        let (data_pos, buf) = fuzz::random_slice(&data);
+        let file_pos = fuzz::random_usize(nodes[node_idx].data.len());
         Step {
             round,
             action: Action::new_random(),
             node_idx,
-            tgt_idx: common::random_usize(nodes.len()),
+            tgt_idx: fuzz::random_usize(nodes.len()),
             ftype: FileType::random(),
-            name: format!("{}", common::random_usize(round)),
+            name: format!("{}", fuzz::random_usize(round)),
             file_pos,
             data_pos,
             data_len: buf.len(),
@@ -216,7 +220,7 @@ impl Step {
     }
 
     // append single step
-    fn save(&self, env: &common::TestEnv) {
+    fn save(&self, env: &fuzz::TestEnv) {
         let mut buf = Vec::new();
         let path = env.path.join("steps");
         let mut file = fs::OpenOptions::new()
@@ -240,7 +244,7 @@ impl Step {
     }
 
     // load all steps
-    fn load_all(env: &common::TestEnv) -> Vec<Self> {
+    fn load_all(env: &fuzz::TestEnv) -> Vec<Self> {
         let mut buf = Vec::new();
         let path = env.path.join("steps");
         let mut file = fs::File::open(&path).unwrap();
@@ -319,7 +323,7 @@ fn write_data_to_file(f: &mut File, step: &Step, data: &[u8]) {
     f.finish().unwrap();
 }
 
-fn test_round(env: &mut common::TestEnv, step: &Step, nodes: &mut Vec<Node>) {
+fn test_round(env: &mut fuzz::TestEnv, step: &Step, nodes: &mut Vec<Node>) {
     //println!("step: {:?}", step);
 
     let node = nodes[step.node_idx].clone();
@@ -581,7 +585,7 @@ fn test_round(env: &mut common::TestEnv, step: &Step, nodes: &mut Vec<Node>) {
     }
 }
 
-fn verify(env: &mut common::TestEnv, nodes: &mut Vec<Node>) {
+fn verify(env: &mut fuzz::TestEnv, nodes: &mut Vec<Node>) {
     println!("Start verifying...");
     nodes.sort_by(|a, b| a.path.cmp(&b.path));
     for (idx, node) in nodes.iter().enumerate() {
@@ -625,8 +629,8 @@ fn verify(env: &mut common::TestEnv, nodes: &mut Vec<Node>) {
     println!("Completed.");
 }
 
-fn fuzz_fs(rounds: usize) {
-    let mut env = common::TestEnv::new("fs");
+fn fuzz_fs_st(rounds: usize) {
+    let mut env = fuzz::TestEnv::new("fs");
     let mut nodes: Vec<Node> = vec![Node::new_dir("/")]; // control group
 
     let curr = thread::current();
@@ -652,7 +656,7 @@ fn fuzz_fs(rounds: usize) {
 
 #[allow(dead_code)]
 fn fuzz_fs_reproduce(batch_id: &str) {
-    let mut env = common::TestEnv::load(batch_id);
+    let mut env = fuzz::TestEnv::load(batch_id);
     let mut nodes: Vec<Node> = vec![Node::new_dir("/")]; // control group
     let steps = Step::load_all(&env);
     let rounds = steps.len();
@@ -678,7 +682,7 @@ fn fuzz_fs_reproduce(batch_id: &str) {
 }
 
 fn fuzz_fs_mt(rounds: usize) {
-    let env = common::TestEnv::new("fs_mt").into_ref();
+    let env = fuzz::TestEnv::new("fs_mt").into_ref();
     // control group
     let nodes = Arc::new(RwLock::new(vec![Node::new_dir("/")]));
     let worker_cnt = 4;
@@ -727,8 +731,9 @@ fn fuzz_fs_mt(rounds: usize) {
     }
 }
 
-fn main() {
-    fuzz_fs(30);
+#[test]
+fn fuzz_fs() {
+    fuzz_fs_st(30);
     //fuzz_fs_reproduce("fs_1513717382");
     fuzz_fs_mt(30);
 }

@@ -19,6 +19,18 @@ travis-ci = { repository = "zboxfs/zbox" }
 name = "zbox"
 crate-type = ["rlib", "dylib"]
 
+[features]
+default = []
+
+# fuzz test compilation flag
+fuzz-test = []
+
+# performance test compilation flag
+perf-test = []
+
+# virtual I/O test compilation flag
+vio-test = []
+
 [dependencies]
 bytes = "0.4.6"
 env_logger = "0.5.2"

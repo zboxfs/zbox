@@ -8,7 +8,7 @@ use std::sync::{Arc, RwLock};
 
 #[test]
 fn dir_create() {
-    let mut env = common::setup();
+    let mut env = common::TestEnv::new();
     let repo = &mut env.repo;
 
     // #1: basic test
@@ -35,7 +35,7 @@ fn dir_create() {
 
 #[test]
 fn dir_create_mt() {
-    let env = Arc::new(RwLock::new(common::setup()));
+    let env = Arc::new(RwLock::new(common::TestEnv::new()));
     let worker_cnt = 4;
     let task_cnt = 8;
 
@@ -63,7 +63,7 @@ fn dir_create_mt() {
 
 #[test]
 fn dir_read() {
-    let mut env = common::setup();
+    let mut env = common::TestEnv::new();
     let repo = &mut env.repo;
 
     repo.create_dir_all("/aaa/aaa1/aaa11").unwrap();
@@ -86,7 +86,7 @@ fn dir_read() {
 
 #[test]
 fn dir_remove() {
-    let mut env = common::setup();
+    let mut env = common::TestEnv::new();
     let repo = &mut env.repo;
 
     repo.create_dir_all("/aaa/bbb/ccc").unwrap();
@@ -102,7 +102,7 @@ fn dir_remove() {
 
 #[test]
 fn dir_rename() {
-    let mut env = common::setup();
+    let mut env = common::TestEnv::new();
     let repo = &mut env.repo;
 
     assert!(repo.rename("/", "/xxx").is_err());

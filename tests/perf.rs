@@ -1,8 +1,8 @@
 #![allow(dead_code)]
+#![cfg(feature = "perf-test")]
 
+extern crate rand;
 extern crate zbox;
-
-mod common;
 
 use std::fs;
 use std::io::{self, Read, Write};
@@ -11,6 +11,7 @@ use std::path::Path;
 use std::env;
 use std::ptr;
 
+use rand::{XorShiftRng, Rng, SeedableRng};
 use zbox::{init_env, Repo, RepoOpener, OpenOptions, File};
 
 const DATA_LEN: usize = 60 * 1024 * 1024;
@@ -40,9 +41,9 @@ fn print_result(read_time: &Duration, write_time: &Duration) {
 fn make_test_data() -> Vec<u8> {
     print!("\nMaking {}MB test data...", DATA_LEN / 1024 / 1024);
     io::stdout().flush().unwrap();
-    let seed = common::RandomSeed::from(&[0u8; 32]);
     let mut buf = vec![0u8; DATA_LEN];
-    common::random_buf_deterministic(&mut buf, &seed);
+    let mut rng = XorShiftRng::from_seed([42u32; 4]);
+    rng.fill_bytes(&mut buf);
     println!("done\n");
     buf
 }
@@ -160,7 +161,8 @@ fn test_file_perf(data: &[u8], dir: &Path) {
     test_perf(&mut files, data);
 }
 
-fn main() {
+#[test]
+fn perf_test() {
     init_env();
 
     let mut dir = env::temp_dir();
