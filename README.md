@@ -48,7 +48,7 @@ Features
 
 Many OS-level file systems support encryption, such as [EncFS], [APFS] and
 [ZFS]. Some disk encryption tools also provide virtual file system, such as
-[TrueCrypt] and [VeraCrypt].
+[TrueCrypt], [LUKS] and [VeraCrypt].
 
 This diagram shows the difference between Zbox and them.
 
@@ -217,5 +217,6 @@ file for details.
 [APFS]: https://en.wikipedia.org/wiki/Apple_File_System
 [ZFS]: https://en.wikipedia.org/wiki/ZFS
 [TrueCrypt]: http://truecrypt.sourceforge.net
+[LUKS]: https://gitlab.com/cryptsetup/cryptsetup/
 [VeraCrypt]: https://veracrypt.codeplex.com
 [rust:latest]: https://hub.docker.com/_/rust/
