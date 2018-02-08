@@ -1,16 +1,16 @@
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
 use std::path::{Path, PathBuf};
-use std::fs;
 
 use error::Result;
 use base::crypto::{Crypto, Key};
 use trans::{Eid, Txid};
 use super::{remove_dir_all, save_obj, load_obj};
 use super::sector::Space;
+use super::vio::imp as vio_imp;
 
 // entity map bucket count
-const BUCKET_CNT: usize = 8;
+const BUCKET_CNT: usize = 4;
 const BUCKET_MASK: usize = BUCKET_CNT - 1;
 
 // entity map bucket
@@ -50,7 +50,7 @@ impl Emap {
     }
 
     pub fn init(&self) -> Result<()> {
-        fs::create_dir(self.base.join(Emap::DIR_NAME))?;
+        vio_imp::create_dir(self.base.join(Emap::DIR_NAME))?;
         Ok(())
     }
 
@@ -103,7 +103,7 @@ impl Emap {
         let src = self.bucket_file_path(self.txid, bucket_id);
         let dst = self.bucket_file_path(txid, bucket_id);
         if src.exists() {
-            fs::copy(src, dst)?;
+            vio_imp::copy(src, dst)?;
         } else {
             self.save_bucket(bucket_id, txid)?;
         }
@@ -136,7 +136,7 @@ impl Emap {
         }
 
         // save buckets
-        fs::create_dir(Emap::path(&self.base, other.txid))?;
+        vio_imp::create_dir(Emap::path(&self.base, other.txid))?;
         for (bucket_id, is_changed) in changed.into_iter().enumerate() {
             if *is_changed {
                 self.save_bucket(bucket_id, other.txid)?;

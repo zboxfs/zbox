@@ -2,7 +2,6 @@ use std::error::Error as StdError;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fmt::{self, Debug};
-use std::fs::{self, OpenOptions, File};
 use std::io::{Read, Write, Seek, SeekFrom, Error as IoError, ErrorKind,
               Result as IoResult};
 use std::slice;
@@ -18,6 +17,7 @@ use base::utils::{align_offset, align_offset_u64};
 use trans::Txid;
 use super::remove_file;
 use super::span::SpanList;
+use super::vio::imp as vio_imp;
 
 // block size, in bytes
 pub const BLK_SIZE: usize = 4 * 1024;
@@ -198,7 +198,7 @@ impl SectorMgr {
     }
 
     pub fn init(&self) -> Result<()> {
-        fs::create_dir(&self.base)?;
+        vio_imp::create_dir(&self.base)?;
         Ok(())
     }
 
@@ -228,7 +228,10 @@ impl SectorMgr {
 
     fn load_sec(&self, path: &Path) -> IoResult<Sector> {
         // read from file
-        let mut file = OpenOptions::new().read(true).write(true).open(&path)?;
+        let mut file = vio_imp::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&path)?;
         let mut buf = vec![0u8; self.crypto.encrypted_len(Sector::BYTES_LEN)];
         file.read_exact(&mut buf)?;
 
@@ -279,7 +282,7 @@ impl SectorMgr {
             map_io_err!(self.crypto.encrypt_with_ad(&buf, &self.skey, &ad))?;
 
         // write to file
-        let mut file = OpenOptions::new()
+        let mut file = vio_imp::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
@@ -293,7 +296,7 @@ impl SectorMgr {
         if path.exists() {
             self.load_sec(&path)
         } else {
-            fs::create_dir_all(path.parent().unwrap())?;
+            vio_imp::create_dir_all(path.parent().unwrap())?;
             let sec = Sector::new(sec_id, path);
             self.save_sec(&sec)?;
             Ok(sec)
@@ -301,9 +304,9 @@ impl SectorMgr {
     }
 
     // open sector data file, create if it doesn't exist
-    fn open_sec_data(&self, sec_path: &Path) -> IoResult<File> {
+    fn open_sec_data(&self, sec_path: &Path) -> IoResult<vio_imp::File> {
         let path = sec_path.with_extension(Sector::DATA_EXT);
-        OpenOptions::new()
+        vio_imp::OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
@@ -459,12 +462,12 @@ impl SectorMgr {
         let bk_path = sec.backup_path();
         let data_path = sec.data_path();
         let data_bk_path = sec.data_backup_path();
-        fs::rename(&sec.path, &bk_path)?;
-        fs::rename(&data_path, &data_bk_path)?;
+        vio_imp::rename(&sec.path, &bk_path)?;
+        vio_imp::rename(&data_path, &data_bk_path)?;
 
         // open sector data and shrink file
-        let mut orig_data = File::open(&data_bk_path)?;
-        let mut dst_data = OpenOptions::new()
+        let mut orig_data = vio_imp::File::open(&data_bk_path)?;
+        let mut dst_data = vio_imp::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
@@ -512,9 +515,9 @@ impl SectorMgr {
 
         if bk_path.exists() {
             if data_bk_path.exists() {
-                fs::rename(&data_bk_path, &data_path)?;
+                vio_imp::rename(&data_bk_path, &data_path)?;
             }
-            fs::rename(&bk_path, &sec.path)?;
+            vio_imp::rename(&bk_path, &sec.path)?;
             Ok(true)
         } else {
             if sec.path.exists() {
@@ -598,7 +601,7 @@ impl SectorMgr {
                 // if next size is still in the same size level,
                 // no need to shrink, just update the sector
                 let backup = sec.backup_path();
-                fs::rename(&sec.path, &backup)?;
+                vio_imp::rename(&sec.path, &backup)?;
                 self.save_sec(&sec)?;
                 remove_file(&backup)?;
             } else {

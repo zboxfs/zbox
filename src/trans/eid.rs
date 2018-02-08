@@ -6,7 +6,7 @@ use super::txid::Txid;
 
 /// Unique entity ID.
 ///
-/// This represents a 32-byte randomly-generated unique ID.
+/// This represents a 32-byte randomly generated unique ID.
 #[derive(PartialEq, Eq, Hash, Default, Clone, Deserialize, Serialize)]
 pub struct Eid([u8; Eid::EID_SIZE]);
 
@@ -15,6 +15,7 @@ impl Eid {
     pub(crate) const EID_SIZE: usize = 32;
 
     /// Create an empty entity ID
+    #[inline]
     pub(crate) fn new_empty() -> Self {
         Eid::default()
     }
@@ -36,12 +37,14 @@ impl Eid {
         ret
     }
 
+    #[inline]
     pub(crate) fn to_short_string(&self) -> String {
         (&self.to_string()[..8]).to_string()
     }
 }
 
 impl AsRef<[u8]> for Eid {
+    #[inline]
     fn as_ref(&self) -> &[u8] {
         &self.0
     }
@@ -50,6 +53,7 @@ impl AsRef<[u8]> for Eid {
 impl Index<usize> for Eid {
     type Output = u8;
 
+    #[inline]
     fn index(&self, idx: usize) -> &u8 {
         &self.0[idx]
     }

@@ -28,7 +28,7 @@ fuzz-test = []
 # performance test compilation flag
 perf-test = []
 
-# virtual I/O test compilation flag
+# virtual I/O test compilation flag, used for random IO error test
 vio-test = []
 
 [dependencies]

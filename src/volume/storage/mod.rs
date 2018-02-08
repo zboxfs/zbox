@@ -73,6 +73,9 @@ pub trait Storage: Debug {
     fn begin_trans(&mut self, txid: Txid) -> Result<()>;
 
     /// Abort transaction
+    ///
+    /// If any errors happend between begin_trans() and commit_trans(), this
+    /// should be called to abort a transaction.
     fn abort_trans(&mut self, txid: Txid) -> Result<()>;
 
     /// Commit transaction

@@ -264,7 +264,7 @@ impl PartialEq for Error {
 
 /// A specialized [`Result`] type for Zbox operations.
 ///
-/// See the [`zbox::Error`] for all possible errors.
+/// See the [`zbox::Error`] for all the  errors.
 ///
 /// [`Result`]: https://doc.rust-lang.org/std/result/enum.Result.html
 /// [`zbox::Error`]: enum.Error.html

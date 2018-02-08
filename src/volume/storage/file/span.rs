@@ -77,6 +77,7 @@ impl SpanList {
         SpanList::default()
     }
 
+    #[inline]
     pub fn offset(&self) -> u64 {
         self.list.first().unwrap().offset
     }
@@ -100,6 +101,7 @@ impl SpanList {
         self.len += other.len;
     }
 
+    #[inline]
     pub fn iter(&self) -> Iter<Span> {
         self.list.iter()
     }

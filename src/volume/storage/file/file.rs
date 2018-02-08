@@ -2,9 +2,9 @@ use std::error::Error as StdError;
 use std::fmt::{self, Display};
 use std::collections::{HashMap, VecDeque, HashSet};
 use std::path::{Path, PathBuf};
-use std::env;
-use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write, Error as IoError, ErrorKind, Result as IoResult};
+use std::cmp::min;
+use std::env;
 
 use error::{Error, Result};
 use base::Time;
@@ -16,6 +16,7 @@ use super::{remove_file, save_obj, load_obj};
 use super::span::Span;
 use super::sector::{BLK_SIZE, LocId, Space, SectorMgr};
 use super::emap::Emap;
+use super::vio::imp as vio_imp;
 
 // maximum snapshot count
 const MAX_SNAPSHOT_CNT: usize = 2;
@@ -64,7 +65,7 @@ impl Snapshot {
     }
 
     fn init(base: &Path) -> Result<()> {
-        fs::create_dir(base.join(Snapshot::DIR_NAME))?;
+        vio_imp::create_dir(base.join(Snapshot::DIR_NAME))?;
         Ok(())
     }
 
@@ -103,9 +104,11 @@ enum TxStatus {
     Prepare, // committing preparation started
     Recycle, // recycling started
     Committed, // transaction committed
+    Dispose, // dispose a committed transaction
 }
 
 impl Default for TxStatus {
+    #[inline]
     fn default() -> Self {
         TxStatus::Init
     }
@@ -119,6 +122,7 @@ impl Display for TxStatus {
             TxStatus::Prepare => write!(f, "prepare"),
             TxStatus::Recycle => write!(f, "recycle"),
             TxStatus::Committed => write!(f, "committed"),
+            TxStatus::Dispose => write!(f, "dispose"),
         }
     }
 }
@@ -130,22 +134,24 @@ impl<'a> From<&'a str> for TxStatus {
             "prepare" => TxStatus::Prepare,
             "recycle" => TxStatus::Recycle,
             "committed" => TxStatus::Committed,
+            "dispose" => TxStatus::Dispose,
             _ => unreachable!(),
         }
     }
 }
 
-// transaction session history
+// transaction session history item
 #[derive(Debug, Default)]
-struct SessionHist {
+struct SessionHistItem {
     seq: u64,
     txid: Txid,
     status: TxStatus,
 }
 
-impl SessionHist {
-    fn is_committed(&self) -> bool {
-        self.status == TxStatus::Committed
+impl SessionHistItem {
+    #[inline]
+    fn is_completed(&self) -> bool {
+        self.status == TxStatus::Committed || self.status == TxStatus::Dispose
     }
 }
 
@@ -191,7 +197,7 @@ impl Session {
     }
 
     fn init(base: &Path) -> Result<()> {
-        fs::create_dir(base.join(Session::DIR_NAME))?;
+        vio_imp::create_dir(base.join(Session::DIR_NAME))?;
         Ok(())
     }
 
@@ -200,6 +206,7 @@ impl Session {
         base.join(Session::DIR_NAME).join(stem)
     }
 
+    #[inline]
     fn is_committing(&self) -> bool {
         self.status == TxStatus::Prepare || self.status == TxStatus::Recycle
     }
@@ -210,7 +217,10 @@ impl Session {
     }
 
     fn switch_to_status(&mut self, to_status: TxStatus) -> Result<()> {
-        fs::rename(self.status_path(self.status), self.status_path(to_status))?;
+        vio_imp::rename(
+            self.status_path(self.status),
+            self.status_path(to_status),
+        )?;
         self.status = to_status;
         Ok(())
     }
@@ -218,21 +228,25 @@ impl Session {
     fn status_started(&mut self) -> Result<()> {
         let to_status = TxStatus::Started;
         let file_path = self.status_path(to_status);
-        OpenOptions::new().write(true).create_new(true).open(
-            file_path,
-        )?;
+        vio_imp::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(file_path)?;
         self.status = to_status;
         Ok(())
     }
 
+    #[inline]
     fn status_prepare(&mut self) -> Result<()> {
         self.switch_to_status(TxStatus::Prepare)
     }
 
+    #[inline]
     fn status_recycle(&mut self) -> Result<()> {
         self.switch_to_status(TxStatus::Recycle)
     }
 
+    #[inline]
     fn status_committed(&mut self) -> Result<()> {
         self.switch_to_status(TxStatus::Committed)
     }
@@ -246,6 +260,7 @@ impl Session {
         Space::new(self.txid, spans)
     }
 
+    #[inline]
     fn take_snapshot(&self) -> Snapshot {
         Snapshot::new(
             self.seq,
@@ -259,10 +274,10 @@ impl Session {
     }
 
     // load session history
-    fn load_history(base: &Path) -> Result<Vec<SessionHist>> {
+    fn load_history(base: &Path) -> Result<Vec<SessionHistItem>> {
         let mut hist = Vec::new();
 
-        for entry in fs::read_dir(base.join(Session::DIR_NAME))? {
+        for entry in vio_imp::read_dir(base.join(Session::DIR_NAME))? {
             let path = entry?.path();
             let comps = path.file_stem()
                 .unwrap()
@@ -270,7 +285,7 @@ impl Session {
                 .unwrap()
                 .split("-")
                 .collect::<Vec<&str>>();
-            let mut item = SessionHist::default();
+            let mut item = SessionHistItem::default();
             item.txid = Txid::from(comps[0].parse::<u64>().unwrap());
             item.seq = comps[1].parse::<u64>().unwrap();
             item.status =
@@ -284,9 +299,24 @@ impl Session {
         Ok(hist)
     }
 
+    // mark a committed session as dispose status
+    fn dispose(base: &Path, txid: Txid) -> Result<()> {
+        let prefix = format!("{}-", txid);
+        for entry in vio_imp::read_dir(base.join(Session::DIR_NAME))? {
+            let entry = entry?;
+            if entry.file_name().to_str().unwrap().starts_with(&prefix) {
+                let mut new_path = entry.path();
+                new_path.set_extension(TxStatus::Dispose.to_string());
+                vio_imp::rename(&entry.path(), &new_path)?;
+                break;
+            }
+        }
+        Ok(())
+    }
+
     fn cleanup(base: &Path, txid: Txid) -> Result<()> {
         let prefix = format!("{}-", txid);
-        for entry in fs::read_dir(base.join(Session::DIR_NAME))? {
+        for entry in vio_imp::read_dir(base.join(Session::DIR_NAME))? {
             let entry = entry?;
             if entry.file_name().to_str().unwrap().starts_with(&prefix) {
                 remove_file(entry.path())?;
@@ -359,9 +389,10 @@ impl FileStorage {
         }
 
         // create lock file
-        OpenOptions::new().write(true).create_new(true).open(
-            &lock_path,
-        )?;
+        vio_imp::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&lock_path)?;
         self.lock_path = lock_path;
         Ok(())
     }
@@ -370,12 +401,14 @@ impl FileStorage {
     fn recycle(&mut self) -> Result<()> {
         while self.snapshots.len() > MAX_SNAPSHOT_CNT {
             {
+                // the oldest snapshot is the one need to be retired
                 let retired = self.snapshots.front().unwrap();
                 debug!(
                     "start recycling snapshot#{}, entities_cnt: {}",
                     retired.txid,
                     retired.recycle.len()
                 );
+                Session::dispose(&self.base, retired.txid)?;
                 self.secmgr.recycle(&retired.recycle)?;
                 Emap::cleanup(&self.base, retired.txid)?;
                 Snapshot::cleanup(&self.base, retired.txid)?;
@@ -421,7 +454,7 @@ impl FileStorage {
     }
 
     fn commit(&mut self, txid: Txid) -> Result<()> {
-        debug!("start commit tx#{}", txid);
+        debug!("start committing tx#{}", txid);
 
         {
             let session = self.sessions.get_mut(&txid).ok_or(Error::NoTrans)?;
@@ -445,7 +478,7 @@ impl FileStorage {
         self.sessions.get_mut(&txid).unwrap().status_committed()?;
         self.sessions.remove(&txid);
 
-        debug!("tx#{} is comitted", txid);
+        debug!("tx#{} is committed", txid);
 
         Ok(())
     }
@@ -483,7 +516,7 @@ impl Storage for FileStorage {
         skey: &Key,
     ) -> Result<()> {
         // create folder structure
-        fs::create_dir_all(&self.base)?;
+        vio_imp::create_dir_all(&self.base)?;
         self.emap.init()?;
         self.secmgr.init()?;
         Snapshot::init(&self.base)?;
@@ -495,20 +528,25 @@ impl Storage for FileStorage {
         // lock storage
         self.lock_storage(volume_id)?;
 
-        debug!("file storage {} initialised", self.base.display());
+        debug!(
+            "file storage {:?} initialised",
+            self.base.file_name().unwrap()
+        );
+        debug!("path: {}", self.base.display());
+        debug!("lock file: {}", self.lock_path.display());
 
         Ok(())
     }
 
     fn get_super_blk(&self) -> Result<Vec<u8>> {
         let mut buf = Vec::new();
-        let mut file = File::open(&self.super_blk_path)?;
+        let mut file = vio_imp::File::open(&self.super_blk_path)?;
         file.read_to_end(&mut buf)?;
         Ok(buf)
     }
 
     fn put_super_blk(&mut self, super_blk: &[u8]) -> Result<()> {
-        let mut file = OpenOptions::new()
+        let mut file = vio_imp::OpenOptions::new()
             .write(true)
             .truncate(true)
             .create(true)
@@ -536,13 +574,19 @@ impl Storage for FileStorage {
         }
 
         // do some sanity checks
-        let committed_cnt = hist.iter().filter(|h| h.is_committed()).count();
-        let uncommitted_cnt = hist.iter().filter(|h| !h.is_committed()).count();
-        let uncommitted_pos = hist.iter()
-            .position(|h| !h.is_committed())
-            .unwrap_or(hist.len() - 1);
-        if committed_cnt == 0 || uncommitted_cnt > 1 ||
-            uncommitted_pos != hist.len() - 1
+        let mut completed_cnt = 0;
+        let mut uncompleted_cnt = 0;
+        let mut uncompleted_pos = hist.len() - 1;
+        for (i, item) in hist.iter().enumerate() {
+            if item.is_completed() {
+                completed_cnt += 1;
+            } else {
+                uncompleted_cnt += 1;
+                uncompleted_pos = min(i, uncompleted_pos);
+            }
+        }
+        if completed_cnt == 0 || uncompleted_cnt > 1 ||
+            uncompleted_pos != hist.len() - 1
         {
             return Err(Error::Corrupted);
         }
@@ -550,7 +594,7 @@ impl Storage for FileStorage {
         // load snapshots
         self.snapshots.clear();
         for item in hist.iter() {
-            let snapshot = if item.is_committed() {
+            let snapshot = if item.status == TxStatus::Committed {
                 Snapshot::load(&self.base, item.txid, &self.skey, &self.crypto)?
             } else {
                 Snapshot::new(
@@ -568,7 +612,7 @@ impl Storage for FileStorage {
 
         // cleanup uncompleted session
         let last = hist.last().unwrap();
-        if !last.is_committed() {
+        if !last.is_completed() {
             debug!("uncompleted tx#{} found", last.txid);
             self.cleanup(last.txid, last.status)?;
         }
@@ -579,7 +623,7 @@ impl Storage for FileStorage {
 
         // get seq from last committed transaction
         let last_comitted =
-            hist.iter().filter(|h| h.is_committed()).last().unwrap();
+            hist.iter().filter(|h| h.is_completed()).last().unwrap();
         self.seq = last_comitted.seq + 1;
 
         debug!(
@@ -590,6 +634,8 @@ impl Storage for FileStorage {
             self.snapshots.len(),
             last_comitted.txid
         );
+        debug!("path: {}", self.base.display());
+        debug!("lock file: {}", self.lock_path.display());
 
         Ok(last_comitted.txid)
     }
@@ -757,12 +803,13 @@ impl Storage for FileStorage {
 impl Drop for FileStorage {
     fn drop(&mut self) {
         if !self.lock_path.to_str().unwrap().is_empty() {
-            match fs::remove_file(&self.lock_path) {
+            match vio_imp::remove_file(&self.lock_path) {
                 Ok(_) => {}
-                Err(_) => {
+                Err(err) => {
                     warn!(
-                        "failed remove lock file: {}",
-                        self.lock_path.display()
+                        "remove lock file failed: {}, error: {}",
+                        self.lock_path.display(),
+                        err
                     )
                 }
             }
@@ -770,8 +817,8 @@ impl Drop for FileStorage {
     }
 }
 
-
 #[cfg(test)]
+#[cfg(not(feature = "vio-test"))]
 mod tests {
     extern crate tempdir;
 
@@ -789,7 +836,7 @@ mod tests {
         let dir = tmpdir.path().to_path_buf();
         /*let dir = PathBuf::from("./tt");
         if dir.exists() {
-            fs::remove_dir_all(&dir).unwrap();
+            vio_imp::remove_dir_all(&dir).unwrap();
         }*/
         (FileStorage::new(&dir), dir, tmpdir)
     }
@@ -825,7 +872,7 @@ mod tests {
 
     #[test]
     fn read_write() {
-        let (mut fs, dir, tmpdir) = setup();
+        let (mut fs, dir, _tmpdir) = setup();
         let crypto = Crypto::default();
         let key = Key::new_empty();
         let txid = Txid::from(42);
@@ -983,13 +1030,11 @@ mod tests {
         );
         assert_eq!(&dst[..data.len()], &data[..]);
         assert_eq!(&dst[data.len()..], &data[..]);
-
-        drop(tmpdir);
     }
 
     #[test]
     fn thread_read_write() {
-        let (mut fs, _, tmpdir) = setup();
+        let (mut fs, _dir, _tmpdir) = setup();
         let crypto = Crypto::default();
         let key = Key::new_empty();
         let children_cnt = 5;
@@ -1035,7 +1080,174 @@ mod tests {
                 assert_eq!(&dst[..], &buf[..]);
             }
         }
+    }
+}
 
-        drop(tmpdir);
+#[cfg(test)]
+#[cfg(feature = "vio-test")]
+mod tests {
+    extern crate tempdir;
+
+    use std::fs;
+    use std::cmp::max;
+    use std::result;
+    use std::io::Error as IoError;
+
+    use self::tempdir::TempDir;
+    use base::crypto::{Crypto, RandomSeed};
+    use base::init_env;
+    use trans::Eid;
+    use volume::storage::file::vio::imp::{turn_on_random_error,
+                                          turn_off_random_error,
+                                          reset_random_error};
+    use super::*;
+
+    fn setup() -> (PathBuf, TempDir) {
+        init_env();
+        let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
+        let dir = tmpdir.path().to_path_buf();
+        //let dir = PathBuf::from("./tt");
+        if dir.exists() {
+            fs::remove_dir_all(&dir).unwrap();
+        }
+        (dir, tmpdir)
+    }
+
+    #[derive(Debug, Default)]
+    struct VioError {
+        opr_cnt: usize,
+    }
+
+    impl From<Error> for VioError {
+        fn from(_err: Error) -> VioError {
+            VioError::default()
+        }
+    }
+
+    impl From<IoError> for VioError {
+        fn from(_err: IoError) -> VioError {
+            VioError::default()
+        }
+    }
+
+    type VioResult<T> = result::Result<T, VioError>;
+
+    fn do_write(fs: &mut FileStorage, i: usize) -> Result<()> {
+        let txid = Txid::from(i as u64);
+        let buf = vec![i as u8; max(Eid::EID_SIZE, i)];
+        let id = Eid::from_slice(&buf[..Eid::EID_SIZE]);
+        fs.begin_trans(txid)?;
+        if let Err(err) = fs.write(&id, 0, &buf[..i], txid) {
+            fs.abort_trans(txid)?;
+            Err(Error::from(err))
+        } else {
+            fs.commit_trans(txid)
+        }
+    }
+
+    fn do_read(fs: &mut FileStorage, i: usize) -> Result<()> {
+        let mut buf = vec![i as u8; max(Eid::EID_SIZE, i)];
+        let id = Eid::from_slice(&buf[..Eid::EID_SIZE]);
+        fs.read(&id, 0, &mut buf, Txid::new_empty())?;
+        assert_eq!(&buf[..i], &vec![i as u8; i][..]);
+        Ok(())
+    }
+
+    fn run_round(mut fs: FileStorage) -> VioResult<()> {
+        let max_opr_cnt: usize = 8; // must less than u8::MAX
+        let mut opr_cnt = 0;
+
+        // the 1st transaction cannot fail
+        do_write(&mut fs, 0).unwrap();
+
+        // read/write operations
+        turn_on_random_error();
+        for i in 1..max_opr_cnt + 1 {
+            if let Err(_err) = do_write(&mut fs, i) {
+                turn_off_random_error();
+                return Err(VioError { opr_cnt });
+            };
+            opr_cnt = i;
+            if let Err(_err) = do_read(&mut fs, i) {
+                turn_off_random_error();
+                return Err(VioError { opr_cnt });
+            };
+        }
+        turn_off_random_error();
+
+        Ok(())
+    }
+
+    fn verify_fs(
+        vol_id: &Eid,
+        dir: &Path,
+        crypto: &Crypto,
+        key: &Key,
+        err: &VioError,
+    ) {
+        // re-open file storage
+        let mut fs = FileStorage::new(dir);
+        fs.open(vol_id, crypto, key).unwrap();
+
+        // check all written entities
+        for i in 0..err.opr_cnt {
+            do_read(&mut fs, i).unwrap();
+        }
+    }
+
+    #[test]
+    fn random_io_failure() {
+        // start test rounds
+        for _ in 0..50 {
+            let (dir, _tmpdir) = setup();
+            let crypto = Crypto::default();
+            let key = Key::new_empty();
+
+            // re-seed random error generator
+            let seed = RandomSeed::new();
+            println!("seed: {:?}", seed);
+            reset_random_error(&seed);
+
+            let vol_id = Eid::new();
+
+            // create and init file storage
+            let mut fs = FileStorage::new(&dir);
+            fs.init(&vol_id, &crypto, &key).unwrap();
+
+            // run the test round
+            // if a random IO error raised, re-open and verify the file storage
+            if let Err(err) = run_round(fs) {
+                // verify file storage
+                verify_fs(&vol_id, &dir, &crypto, &key, &err);
+            }
+        }
+    }
+
+    //#[test]
+    #[cfg_attr(rustfmt, rustfmt_skip)]
+    #[allow(dead_code)]
+    fn reproduce() {
+        let (dir, _tmpdir) = setup();
+        let crypto = Crypto::default();
+        let key = Key::new_empty();
+        let vol_id = Eid::new();
+        let seed = RandomSeed::from(
+            &[78, 207, 179, 62, 23, 246, 100, 163, 216, 72, 59, 70, 5, 82, 204,
+            230, 163, 114, 21, 70, 237, 55, 86, 117, 142, 182, 226, 229, 186,
+            152, 252, 102]
+        );
+
+        reset_random_error(&seed);
+
+        // create and init file storage
+        let mut fs = FileStorage::new(&dir);
+        fs.init(&vol_id, &crypto, &key).unwrap();
+
+        // run the test round
+        // if a random IO error raised, verify the file storage
+        if let Err(err) = run_round(fs) {
+            // verify file storage
+            verify_fs(&vol_id, &dir, &crypto, &key, &err);
+        }
     }
 }
