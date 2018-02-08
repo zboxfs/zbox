@@ -33,7 +33,7 @@ vio-test = []
 
 [dependencies]
 bytes = "0.4.6"
-env_logger = "0.5.2"
+env_logger = "0.5.3"
 log = "0.4.1"
 rmp-serde = "0.13.7"
 serde = "1.0.27"
@@ -41,11 +41,11 @@ serde_derive = "1.0.27"
 lz4 = "1.22.0"
 
 [dependencies.linked-hash-map]
-version = "0.5.0"
+version = "0.5.1"
 features = ["serde_impl"]
 
 [dev-dependencies]
-tempdir = "0.3.5"
+tempdir = "0.3.6"
 rand = "0.4.1"
 
 [build-dependencies]
