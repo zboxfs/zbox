@@ -191,28 +191,31 @@ Performance
 
 The performance test is run on a Macbook Pro 2017 laptop with spec as below.
 
-| Processor Name:        | Intel Core i7              |
-| Processor Speed:       | 3.5 GHz                    |
-| Number of Processors:  | 1                          |
-| Total Number of Cores: | 2                          |
-| L2 Cache (per Core):   | 256 KB                     |
-| L3 Cache:              | 4 MB                       |
-| Memory:                | 16 GB                      |
-| OS Version:            | macOS High Sierra 10.13.3  |
+| Spec                    | Value                       |
+| ----------------------- | --------------------------- |
+| Processor Name:         | Intel Core i7               |
+| Processor Speed:        | 3.5 GHz                     |
+| Number of Processors:   | 1                           |
+| Total Number of Cores:  | 2                           |
+| L2 Cache (per Core):    | 256 KB                      |
+| L3 Cache:               | 4 MB                        |
+| Memory:                 | 16 GB                       |
+| OS Version:             | macOS High Sierra 10.13.3   |
 
 Performance test result:
 
-Baseline test
---------------
+**Baseline test**
+
 memcpy: read: 3798.3032 MB/s, write: 3798.3032 MB/s
+
 file system: read: 923.0447 MB/s, write: 2373.3384 MB/s
 
-Memory storage performance test
--------------------------------
+**Memory storage performance test**
+
 read: 343.65326 MB/s, write: 163.1137 MB/s
 
-File storage performance test
-------------------------------
+**File storage performance test**
+
 read: 167.211 MB/s, write: 130.36934 MB/s
 
 To run the performance test on your own computer, please follow the

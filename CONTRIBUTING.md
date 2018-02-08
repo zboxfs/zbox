@@ -34,12 +34,12 @@ automatically format code while you're editing.
 Zbox has two main branches, both branches should always be compilable and
 passed all the unit and integration tests before pushed to GitHub.
 
-- [master](zboxfs/zbox/tree/master)
+- [master](/zboxfs/zbox/tree/master)
 
   This branch contains latest development code, pull request should be merged
   to this branch.
 
-- [stable](zboxfs/zbox/tree/stable)
+- [stable](/zboxfs/zbox/tree/stable)
 
   This branch always contains stable code and is mainly for releasing. Release
   tags are applied to this branch.
