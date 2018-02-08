@@ -34,12 +34,12 @@ automatically format code while you're editing.
 Zbox has two main branches, both branches should always be compilable and
 passed all the unit and integration tests before pushed to GitHub.
 
-- master
+- [master](zboxfs/zbox/tree/master)
 
   This branch contains latest development code, pull request should be merged
   to this branch.
 
-- stable
+- [stable](zboxfs/zbox/tree/stable)
 
   This branch always contains stable code and is mainly for releasing. Release
   tags are applied to this branch.
@@ -95,25 +95,56 @@ cargo test --doc
 
 ### Run fuzz test
 
-Zbox contains fuzz test tools, which are located in `src/bin` directory. To run
-those tests, you can run below commands from `zbox` directory.
+Zbox contains three fuzz test cases, which can be enabled by turning on the
+feature `fuzz-test`. To run those tests, you can run below commands from `zbox`
+directory.
 
-Run fuzz test for file system.
+1. Run fuzz test for file system.
+
+   ```bash
+   cargo test --tests fuzz_fs --features fuzz-test
+   ```
+
+2. Run fuzz test for file read and write
+
+   ```bash
+   cargo test --tests fuzz_file --features fuzz-test
+   ```
+
+3. Run fuzz test for directory.
+
+   ```bash
+   cargo test --tests fuzz_dir --features fuzz-test
+   ```
+
+### Run random IO failure test
+
+For file storage test, we need to simulate many IO failure scenerios which is
+hard because OS file system IO errors are very rare. To solve this problem,
+like what sqlite did, Zbox uses a virtual IO (vio) layer to access underling
+file system. Vio is a zero-cost wrapper of the underling file system API. That
+makes simulating random IO errors quite easy.
+
+By default, vio is turned off and it is just a synonym of the underling file
+system. To test the random IO errors, we need to enable vio first by turning on
+the feature `vio-test`.
+
+Run file storage random IO failure test:
 
 ```bash
-cargo run --bin fuzz_fs
+cargo test --lib random_io_failure --features vio-test
 ```
 
-Run fuzz test for file read and write
+### Run performance test
+
+To run performance test cases, we need to turn on the feature `perf-test`. And
+the performance test should be run under `release` mode otherwise the result
+will not be accurate.
+
+Run performance test:
 
 ```bash
-cargo run --bin fuzz_file
-```
-
-Run fuzz test for directory.
-
-```bash
-cargo run --bin fuzz_dir
+cargo test --tests perf --release --features perf-test -- --nocapture
 ```
 
 ## Code of Conduct
