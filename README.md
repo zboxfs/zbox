@@ -202,21 +202,14 @@ The performance test is run on a Macbook Pro 2017 laptop with spec as below.
 | Memory:                 | 16 GB                       |
 | OS Version:             | macOS High Sierra 10.13.3   |
 
-Performance test result:
+Test result:
 
-**Baseline test**
-
-memcpy: read: 3798.3032 MB/s, write: 3798.3032 MB/s
-
-file system: read: 923.0447 MB/s, write: 2373.3384 MB/s
-
-**Memory storage performance test**
-
-read: 343.65326 MB/s, write: 163.1137 MB/s
-
-**File storage performance test**
-
-read: 167.211 MB/s, write: 130.36934 MB/s
+|                     | Read              | Write          |
+| ------------------- | ----------------- | -------------- |
+| Baseline (memcpy):  | 3798.3032 MB/s    | 3798.3032 MB/s |
+| Baseline (file):    | 923.0447 MB/s     | 2373.3384 MB/s |
+| Memory storage:     | 343.6533 MB/s     | 163.1137 MB/s  |
+| File storage:       | 167.2110 MB/s     | 130.3693 MB/s  |
 
 To run the performance test on your own computer, please follow the
 instructions in [CONTRIBUTING.md](CONTRIBUTING.md#run-performance-test).
