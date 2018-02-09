@@ -4,7 +4,8 @@ extern crate zbox;
 
 use tempdir::TempDir;
 
-use zbox::{init_env, Error, RepoOpener, OpsLimit, MemLimit, Cipher};
+use zbox::{init_env, Error, RepoOpener, OpsLimit, MemLimit, Cipher,
+           OpenOptions};
 
 #[test]
 fn repo_oper() {
@@ -27,6 +28,7 @@ fn repo_oper() {
         .ops_limit(OpsLimit::Moderate)
         .mem_limit(MemLimit::Moderate)
         .cipher(Cipher::Aes)
+        .version_limit(5)
         .open(&path, &pwd)
         .unwrap();
     let repo = RepoOpener::new().open(&path, &pwd).unwrap();
@@ -34,6 +36,7 @@ fn repo_oper() {
     assert_eq!(info.ops_limit(), OpsLimit::Moderate);
     assert_eq!(info.mem_limit(), MemLimit::Moderate);
     assert_eq!(info.cipher(), Cipher::Aes);
+    assert_eq!(info.version_limit(), 5);
     assert!(!info.is_read_only());
 
     // case #3: open repo in read-only mode
@@ -97,5 +100,47 @@ fn repo_oper() {
             Error::AlreadyExists
         );
         RepoOpener::new().create(true).open(&path, &pwd).unwrap();
+    }
+
+    // case #7: test version_limit option
+    {
+        let path = base.clone() + "/repo7";
+        assert_eq!(
+            RepoOpener::new()
+                .create_new(true)
+                .version_limit(0)
+                .open(&path, &pwd)
+                .unwrap_err(),
+            Error::InvalidArgument
+        );
+        let mut repo = RepoOpener::new()
+            .create_new(true)
+            .version_limit(1)
+            .open(&path, &pwd)
+            .unwrap();
+
+        let buf = [1u8, 2u8, 3u8];
+        let buf2 = [4u8, 5u8, 6u8];
+        let buf3 = [7u8, 8u8, 9u8];
+
+        let mut f = OpenOptions::new()
+            .create(true)
+            .open(&mut repo, "/file")
+            .unwrap();
+        f.write_once(&buf[..]).unwrap();
+        f.write_once(&buf2[..]).unwrap();
+        let hist = f.history();
+        assert_eq!(hist.len(), 1);
+
+        let mut f2 = OpenOptions::new()
+            .create(true)
+            .version_limit(2)
+            .open(&mut repo, "/file2")
+            .unwrap();
+        f2.write_once(&buf[..]).unwrap();
+        f2.write_once(&buf2[..]).unwrap();
+        f2.write_once(&buf3[..]).unwrap();
+        let hist = f2.history();
+        assert_eq!(hist.len(), 2);
     }
 }

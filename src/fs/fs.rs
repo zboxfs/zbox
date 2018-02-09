@@ -19,6 +19,14 @@ use super::fnode::{Fnode, FnodeRef, FileType, Version, Metadata, DirEntry,
 // default cache size
 const FNODE_CACHE_SIZE: usize = 16;
 
+/// File system metadata
+#[derive(Debug)]
+pub struct Meta {
+    pub version_limit: u8,
+    pub read_only: bool,
+    pub vol_meta: VolumeMeta,
+}
+
 /// File system
 #[derive(Debug)]
 pub struct Fs {
@@ -27,10 +35,13 @@ pub struct Fs {
     store: StoreRef,
     txmgr: TxMgrRef,
     vol: VolumeRef,
+    version_limit: u8,
+    read_only: bool,
 }
 
 impl Fs {
     /// Check if fs exists
+    #[inline]
     pub fn exists(uri: &str) -> Result<bool> {
         Volume::exists(uri)
     }
@@ -41,6 +52,7 @@ impl Fs {
         pwd: &str,
         cost: Cost,
         cipher: Cipher,
+        version_limit: u8,
     ) -> Result<Fs> {
         // create and initialise volume
         let mut vol = Volume::new(uri)?;
@@ -64,15 +76,16 @@ impl Fs {
         })?;
 
         // write volume super block with payload
-        // payload: store id + root id
+        // payload: store_id + root_id + version_limit
         let store = store_ref.unwrap();
         let root = root_ref.unwrap();
         {
-            let mut payload = Vec::with_capacity(2 * Eid::EID_SIZE);
+            let mut payload = Vec::with_capacity(2 * Eid::EID_SIZE + 1);
             let store = store.read().unwrap();
             let root = root.read().unwrap();
             payload.put(store.id().as_ref());
             payload.put(root.id().as_ref());
+            payload.put(version_limit);
             let mut vol = vol.write().unwrap();
             vol.write_payload(pwd, &payload)?;
         }
@@ -83,11 +96,13 @@ impl Fs {
             store,
             txmgr,
             vol,
+            version_limit,
+            read_only: false,
         })
     }
 
     /// Open fs
-    pub fn open(uri: &str, pwd: &str) -> Result<Fs> {
+    pub fn open(uri: &str, pwd: &str, read_only: bool) -> Result<Fs> {
         let mut vol = Volume::new(uri)?;
 
         // open volume
@@ -95,6 +110,7 @@ impl Fs {
         let mut iter = payload.chunks(Eid::EID_SIZE);
         let store_id = Eid::from_slice(iter.next().unwrap());
         let root_id = Eid::from_slice(iter.next().unwrap());
+        let version_limit = iter.next().unwrap()[0];
         let vol = vol.into_ref();
 
         // create file sytem components
@@ -109,13 +125,24 @@ impl Fs {
             store,
             txmgr,
             vol,
+            version_limit,
+            read_only,
         })
     }
 
-    /// Get volume metadata
-    pub fn volume_meta(&self) -> VolumeMeta {
+    #[inline]
+    pub fn is_read_only(&self) -> bool {
+        self.read_only
+    }
+
+    /// Get file system metadata
+    pub fn meta(&self) -> Meta {
         let vol = self.vol.read().unwrap();
-        vol.meta()
+        Meta {
+            version_limit: self.version_limit,
+            read_only: self.read_only,
+            vol_meta: vol.meta(),
+        }
     }
 
     /// Reset volume password
@@ -125,6 +152,10 @@ impl Fs {
         new_pwd: &str,
         cost: Cost,
     ) -> Result<()> {
+        if self.read_only {
+            return Err(Error::ReadOnly);
+        }
+
         let mut vol = self.vol.write().unwrap();
         vol.reset_password(old_pwd, new_pwd, cost)
     }
@@ -173,8 +204,12 @@ impl Fs {
         &mut self,
         path: &Path,
         ftype: FileType,
-        version_limit: u8,
+        version_limit: Option<u8>,
     ) -> Result<FnodeRef> {
+        if self.read_only {
+            return Err(Error::ReadOnly);
+        }
+
         let (parent, name) = self.resolve_parent(path)?;
 
         {
@@ -194,7 +229,7 @@ impl Fs {
                 &parent,
                 &name,
                 ftype,
-                version_limit,
+                version_limit.unwrap_or(self.version_limit),
                 &self.txmgr,
             )?;
             Ok(())
@@ -205,11 +240,7 @@ impl Fs {
 
     /// Recursively create directories along the path
     pub fn create_dir_all(&mut self, path: &Path) -> Result<()> {
-        if path == Path::new("") {
-            return Ok(());
-        }
-
-        match self.create_fnode(path, FileType::Dir, 0) {
+        match self.create_fnode(path, FileType::Dir, None) {
             Ok(_) => return Ok(()),
             Err(ref e) if *e == Error::NotFound => {}
             Err(err) => return Err(err),
@@ -218,7 +249,7 @@ impl Fs {
             Some(p) => self.create_dir_all(p)?,
             None => return Err(Error::IsRoot),
         }
-        self.create_fnode(path, FileType::Dir, 0)?;
+        self.create_fnode(path, FileType::Dir, None)?;
         Ok(())
     }
 
@@ -247,6 +278,10 @@ impl Fs {
 
     /// Copy a regular file to another
     pub fn copy(&mut self, from: &Path, to: &Path) -> Result<()> {
+        if self.read_only {
+            return Err(Error::ReadOnly);
+        }
+
         let src = self.open_fnode(from)?;
         {
             let fnode = src.fnode.read().unwrap();
@@ -272,11 +307,7 @@ impl Fs {
                     tgt
                 }
                 Err(ref err) if *err == Error::NotFound => {
-                    self.create_fnode(
-                        to,
-                        FileType::File,
-                        Fnode::DEFAULT_VERSION_LIMIT,
-                    )?;
+                    self.create_fnode(to, FileType::File, None)?;
                     self.open_fnode(to)?
                 }
                 Err(err) => return Err(err),
@@ -303,6 +334,10 @@ impl Fs {
 
     /// Remove a regular file
     pub fn remove_file(&mut self, path: &Path) -> Result<()> {
+        if self.read_only {
+            return Err(Error::ReadOnly);
+        }
+
         let fnode_ref = self.resolve(path)?;
         {
             let fnode = fnode_ref.read().unwrap();
@@ -327,6 +362,10 @@ impl Fs {
 
     /// Remove an existing empty directory
     pub fn remove_dir(&mut self, path: &Path) -> Result<()> {
+        if self.read_only {
+            return Err(Error::ReadOnly);
+        }
+
         let fnode_ref = self.resolve(path)?;
         {
             let fnode = fnode_ref.read().unwrap();
@@ -372,6 +411,10 @@ impl Fs {
 
     /// Rename a file or directory to new name
     pub fn rename(&mut self, from: &Path, to: &Path) -> Result<()> {
+        if self.read_only {
+            return Err(Error::ReadOnly);
+        }
+
         if to.starts_with(from) {
             return Err(Error::InvalidArgument);
         }

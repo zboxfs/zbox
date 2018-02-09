@@ -66,11 +66,13 @@ pub struct RepoOpener {
     cipher: Cipher,
     create: bool,
     create_new: bool,
+    version_limit: u8,
     read_only: bool,
 }
 
 impl RepoOpener {
     /// Creates a blank new set of options ready for configuration.
+    #[inline]
     pub fn new() -> Self {
         RepoOpener::default()
     }
@@ -124,6 +126,19 @@ impl RepoOpener {
         self
     }
 
+    /// Sets the default maximum number of file version.
+    ///
+    /// The `version_limit` must be within [1, 255], 10 is the default. This
+    /// setting is a repository-wise setting, indivisual file can overwrite it
+    /// by setting [`version_limit`] in [`OpenOptions`].
+    ///
+    /// [`version_limit`]: struct.OpenOptions.html#method.version_limit
+    /// [`OpenOptions`]: struct.OpenOptions.html
+    pub fn version_limit(&mut self, version_limit: u8) -> &mut Self {
+        self.version_limit = version_limit;
+        self
+    }
+
     /// Sets the option for read-only mode.
     ///
     /// This option cannot be true with either `create` or `create_new` is true.
@@ -159,6 +174,11 @@ impl RepoOpener {
     /// Open a memory based repository without enable `create` option will
     /// return an error.
     pub fn open(&self, uri: &str, pwd: &str) -> Result<Repo> {
+        // version limit must be greater than 0
+        if self.version_limit == 0 {
+            return Err(Error::InvalidArgument);
+        }
+
         if self.create {
             if self.read_only {
                 return Err(Error::InvalidArgument);
@@ -169,7 +189,13 @@ impl RepoOpener {
                 }
                 Repo::open(uri, pwd, self.read_only)
             } else {
-                Repo::create(uri, pwd, self.cost, self.cipher)
+                Repo::create(
+                    uri,
+                    pwd,
+                    self.cost,
+                    self.cipher,
+                    self.version_limit,
+                )
             }
         } else {
             Repo::open(uri, pwd, self.read_only)
@@ -190,6 +216,7 @@ impl Default for RepoOpener {
             cipher: default_cipher,
             create: false,
             create_new: false,
+            version_limit: Fnode::DEFAULT_VERSION_LIMIT,
             read_only: false,
         }
     }
@@ -243,7 +270,7 @@ pub struct OpenOptions {
     truncate: bool,
     create: bool,
     create_new: bool,
-    version_limit: u8,
+    version_limit: Option<u8>,
 }
 
 impl OpenOptions {
@@ -258,7 +285,7 @@ impl OpenOptions {
             truncate: false,
             create: false,
             create_new: false,
-            version_limit: Fnode::DEFAULT_VERSION_LIMIT,
+            version_limit: None,
         }
     }
 
@@ -325,11 +352,14 @@ impl OpenOptions {
         self
     }
 
-    /// Sets the maximum number of version allowed.
+    /// Sets the maximum number of file versions allowed.
     ///
-    /// The `version_limit` must be within [1, 255].
+    /// The `version_limit` must be within [1, 255]. It will fall back to
+    /// repository's [`version_limit`] if it is not set.
+    ///
+    /// [`version_limit`]: struct.RepoOpener.html#method.version_limit
     pub fn version_limit(&mut self, version_limit: u8) -> &mut OpenOptions {
-        self.version_limit = version_limit;
+        self.version_limit = Some(version_limit);
         self
     }
 
@@ -340,8 +370,10 @@ impl OpenOptions {
         path: P,
     ) -> Result<File> {
         // version limit must be greater than 0
-        if self.version_limit == 0 {
-            return Err(Error::InvalidArgument);
+        if let Some(version_limit) = self.version_limit {
+            if version_limit == 0 {
+                return Err(Error::InvalidArgument);
+            }
         }
         repo.open_file_with_options(path, self)
     }
@@ -355,8 +387,9 @@ pub struct RepoInfo {
     uri: String,
     cost: Cost,
     cipher: Cipher,
-    ctime: Time,
+    version_limit: u8,
     read_only: bool,
+    ctime: Time,
 }
 
 impl RepoInfo {
@@ -393,14 +426,19 @@ impl RepoInfo {
         self.cipher
     }
 
-    /// Returns the creation time of this repository.
-    pub fn created(&self) -> SystemTime {
-        self.ctime.to_system_time()
+    /// Returns the default maximum number of file versions.
+    pub fn version_limit(&self) -> u8 {
+        self.version_limit
     }
 
     /// Returns whether this repository is read-only.
     pub fn is_read_only(&self) -> bool {
         self.read_only
+    }
+
+    /// Returns the creation time of this repository.
+    pub fn created(&self) -> SystemTime {
+        self.ctime.to_system_time()
     }
 }
 
@@ -474,7 +512,6 @@ impl RepoInfo {
 #[derive(Debug)]
 pub struct Repo {
     fs: FsRef,
-    read_only: bool,
 }
 
 impl Repo {
@@ -493,32 +530,33 @@ impl Repo {
         pwd: &str,
         cost: Cost,
         cipher: Cipher,
+        version_limit: u8,
     ) -> Result<Repo> {
-        let fs = Fs::create(uri, pwd, cost, cipher)?.into_ref();
-        Ok(Repo {
-            fs,
-            read_only: false,
-        })
+        let fs = Fs::create(uri, pwd, cost, cipher, version_limit)?
+            .into_ref();
+        Ok(Repo { fs })
     }
 
     // open repo
     fn open(uri: &str, pwd: &str, read_only: bool) -> Result<Repo> {
-        let fs = Fs::open(uri, pwd)?.into_ref();
-        Ok(Repo { fs, read_only })
+        let fs = Fs::open(uri, pwd, read_only)?.into_ref();
+        Ok(Repo { fs })
     }
 
     /// Get repository metadata infomation.
     pub fn info(&self) -> RepoInfo {
         let fs = self.fs.read().unwrap();
-        let meta = fs.volume_meta();
+        let fs_meta = fs.meta();
+        let vol_meta = &fs_meta.vol_meta;
         RepoInfo {
-            volume_id: meta.id.clone(),
-            ver: meta.ver.clone(),
-            uri: meta.uri.clone(),
-            cost: meta.cost.clone(),
-            cipher: meta.cipher.clone(),
-            ctime: meta.ctime.clone(),
-            read_only: self.read_only,
+            volume_id: vol_meta.id.clone(),
+            ver: vol_meta.ver.clone(),
+            uri: vol_meta.uri.clone(),
+            cost: vol_meta.cost.clone(),
+            cipher: vol_meta.cipher.clone(),
+            ctime: vol_meta.ctime.clone(),
+            version_limit: fs_meta.version_limit,
+            read_only: fs_meta.read_only,
         }
     }
 
@@ -579,14 +617,15 @@ impl Repo {
         path: P,
         opts: &OpenOptions,
     ) -> Result<File> {
-        if self.read_only &&
+        let mut fs = self.fs.write().unwrap();
+
+        if fs.is_read_only() &&
             (opts.write || opts.append || opts.truncate || opts.create ||
                  opts.create_new)
         {
             return Err(Error::ReadOnly);
         }
 
-        let mut fs = self.fs.write().unwrap();
         let path = path.as_ref();
 
         match fs.resolve(path) {
@@ -673,12 +712,8 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn create_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        if self.read_only {
-            return Err(Error::ReadOnly);
-        }
-
         let mut fs = self.fs.write().unwrap();
-        fs.create_fnode(path.as_ref(), FileType::Dir, 0)?;
+        fs.create_fnode(path.as_ref(), FileType::Dir, None)?;
         Ok(())
     }
 
@@ -687,10 +722,6 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn create_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        if self.read_only {
-            return Err(Error::ReadOnly);
-        }
-
         let mut fs = self.fs.write().unwrap();
         fs.create_dir_all(path.as_ref())
     }
@@ -733,10 +764,6 @@ impl Repo {
         from: P,
         to: Q,
     ) -> Result<()> {
-        if self.read_only {
-            return Err(Error::ReadOnly);
-        }
-
         let mut fs = self.fs.write().unwrap();
         fs.copy(from.as_ref(), to.as_ref())
     }
@@ -745,10 +772,6 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn remove_file<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        if self.read_only {
-            return Err(Error::ReadOnly);
-        }
-
         let mut fs = self.fs.write().unwrap();
         fs.remove_file(path.as_ref())
     }
@@ -757,10 +780,6 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn remove_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        if self.read_only {
-            return Err(Error::ReadOnly);
-        }
-
         let mut fs = self.fs.write().unwrap();
         fs.remove_dir(path.as_ref())
     }
@@ -770,10 +789,6 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn remove_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        if self.read_only {
-            return Err(Error::ReadOnly);
-        }
-
         let mut fs = self.fs.write().unwrap();
         fs.remove_dir_all(path.as_ref())
     }
@@ -787,10 +802,6 @@ impl Repo {
         from: P,
         to: Q,
     ) -> Result<()> {
-        if self.read_only {
-            return Err(Error::ReadOnly);
-        }
-
         let mut fs = self.fs.write().unwrap();
         fs.rename(from.as_ref(), to.as_ref())
     }
