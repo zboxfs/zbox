@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::path::Path;
 use std::io;
 
@@ -445,8 +445,3 @@ impl Fs {
         })
     }
 }
-
-impl IntoRef for Fs {}
-
-/// Fs reference type
-pub type FsRef = Arc<RwLock<Fs>>;

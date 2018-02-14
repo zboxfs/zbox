@@ -3,10 +3,10 @@ use std::io::SeekFrom;
 use std::time::SystemTime;
 
 use error::Error;
-use base::{self, IntoRef, Time};
+use base::{self, Time};
 use base::crypto::{OpsLimit, MemLimit, Cost, Cipher, Crypto};
 use trans::Eid;
-use fs::{Fs, FsRef, FileType, Version, Metadata, DirEntry, Fnode};
+use fs::{Fs, FileType, Version, Metadata, DirEntry, Fnode};
 use super::{Result, File};
 
 /// A builder used to create a repository [`Repo`] in various manners.
@@ -511,7 +511,7 @@ impl RepoInfo {
 /// [`read-only`]: struct.RepoOpener.html#method.read_only
 #[derive(Debug)]
 pub struct Repo {
-    fs: FsRef,
+    fs: Fs,
 }
 
 impl Repo {
@@ -532,21 +532,19 @@ impl Repo {
         cipher: Cipher,
         version_limit: u8,
     ) -> Result<Repo> {
-        let fs = Fs::create(uri, pwd, cost, cipher, version_limit)?
-            .into_ref();
+        let fs = Fs::create(uri, pwd, cost, cipher, version_limit)?;
         Ok(Repo { fs })
     }
 
     // open repo
     fn open(uri: &str, pwd: &str, read_only: bool) -> Result<Repo> {
-        let fs = Fs::open(uri, pwd, read_only)?.into_ref();
+        let fs = Fs::open(uri, pwd, read_only)?;
         Ok(Repo { fs })
     }
 
     /// Get repository metadata infomation.
     pub fn info(&self) -> RepoInfo {
-        let fs = self.fs.read().unwrap();
-        let fs_meta = fs.meta();
+        let fs_meta = self.fs.meta();
         let vol_meta = &fs_meta.vol_meta;
         RepoInfo {
             volume_id: vol_meta.id.clone(),
@@ -568,17 +566,17 @@ impl Repo {
         ops_limit: OpsLimit,
         mem_limit: MemLimit,
     ) -> Result<()> {
-        let mut fs = self.fs.write().unwrap();
         let cost = Cost::new(ops_limit, mem_limit);
-        fs.reset_password(old_pwd, new_pwd, cost)
+        self.fs.reset_password(old_pwd, new_pwd, cost)
     }
 
     /// Returns whether the path points at an existing entity in repository.
     ///
     /// `path` must be an absolute path.
     pub fn path_exists<P: AsRef<Path>>(&self, path: P) -> bool {
-        let fs = self.fs.read().unwrap();
-        fs.resolve(path.as_ref()).map(|_| true).unwrap_or(false)
+        self.fs.resolve(path.as_ref()).map(|_| true).unwrap_or(
+            false,
+        )
     }
 
     /// Returns whether the path exists in repository and is pointing at
@@ -586,11 +584,10 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn is_file<P: AsRef<Path>>(&self, path: P) -> bool {
-        let fs = self.fs.read().unwrap();
-        match fs.resolve(path.as_ref()) {
+        match self.fs.resolve(path.as_ref()) {
             Ok(fnode_ref) => {
                 let fnode = fnode_ref.read().unwrap();
-                !fnode.is_dir()
+                fnode.is_file()
             }
             Err(_) => false,
         }
@@ -601,8 +598,7 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn is_dir<P: AsRef<Path>>(&self, path: P) -> bool {
-        let fs = self.fs.read().unwrap();
-        match fs.resolve(path.as_ref()) {
+        match self.fs.resolve(path.as_ref()) {
             Ok(fnode_ref) => {
                 let fnode = fnode_ref.read().unwrap();
                 fnode.is_dir()
@@ -617,9 +613,7 @@ impl Repo {
         path: P,
         opts: &OpenOptions,
     ) -> Result<File> {
-        let mut fs = self.fs.write().unwrap();
-
-        if fs.is_read_only() &&
+        if self.fs.is_read_only() &&
             (opts.write || opts.append || opts.truncate || opts.create ||
                  opts.create_new)
         {
@@ -628,20 +622,24 @@ impl Repo {
 
         let path = path.as_ref();
 
-        match fs.resolve(path) {
+        match self.fs.resolve(path) {
             Ok(_) => {
                 if opts.create_new {
                     return Err(Error::AlreadyExists);
                 }
             }
             Err(ref err) if *err == Error::NotFound => {
-                fs.create_fnode(path, FileType::File, opts.version_limit)?;
+                self.fs.create_fnode(
+                    path,
+                    FileType::File,
+                    opts.version_limit,
+                )?;
             }
             Err(err) => return Err(err),
         }
 
         let curr_len;
-        let handle = fs.open_fnode(path)?;
+        let handle = self.fs.open_fnode(path)?;
         {
             let fnode = handle.fnode.read().unwrap();
             if fnode.is_dir() {
@@ -712,8 +710,7 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn create_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        let mut fs = self.fs.write().unwrap();
-        fs.create_fnode(path.as_ref(), FileType::Dir, None)?;
+        self.fs.create_fnode(path.as_ref(), FileType::Dir, None)?;
         Ok(())
     }
 
@@ -722,16 +719,14 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn create_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        let mut fs = self.fs.write().unwrap();
-        fs.create_dir_all(path.as_ref())
+        self.fs.create_dir_all(path.as_ref())
     }
 
     /// Returns a vector of all the entries within a directory.
     ///
     /// `path` must be an absolute path.
     pub fn read_dir<P: AsRef<Path>>(&self, path: P) -> Result<Vec<DirEntry>> {
-        let fs = self.fs.read().unwrap();
-        fs.read_dir(path.as_ref())
+        self.fs.read_dir(path.as_ref())
     }
 
     /// Given a path, query the repository to get information about a file,
@@ -739,16 +734,14 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn metadata<P: AsRef<Path>>(&self, path: P) -> Result<Metadata> {
-        let fs = self.fs.read().unwrap();
-        fs.metadata(path.as_ref())
+        self.fs.metadata(path.as_ref())
     }
 
     /// Return a vector of history versions of a regular file.
     ///
     /// `path` must be an absolute path to a regular file.
     pub fn history<P: AsRef<Path>>(&self, path: P) -> Result<Vec<Version>> {
-        let fs = self.fs.read().unwrap();
-        fs.history(path.as_ref())
+        self.fs.history(path.as_ref())
     }
 
     /// Copies the content of one file to another.
@@ -764,24 +757,21 @@ impl Repo {
         from: P,
         to: Q,
     ) -> Result<()> {
-        let mut fs = self.fs.write().unwrap();
-        fs.copy(from.as_ref(), to.as_ref())
+        self.fs.copy(from.as_ref(), to.as_ref())
     }
 
     /// Removes a regular file from the repository.
     ///
     /// `path` must be an absolute path.
     pub fn remove_file<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        let mut fs = self.fs.write().unwrap();
-        fs.remove_file(path.as_ref())
+        self.fs.remove_file(path.as_ref())
     }
 
     /// Remove an existing empty directory.
     ///
     /// `path` must be an absolute path.
     pub fn remove_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        let mut fs = self.fs.write().unwrap();
-        fs.remove_dir(path.as_ref())
+        self.fs.remove_dir(path.as_ref())
     }
 
     /// Removes a directory at this path, after removing all its children.
@@ -789,8 +779,7 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn remove_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        let mut fs = self.fs.write().unwrap();
-        fs.remove_dir_all(path.as_ref())
+        self.fs.remove_dir_all(path.as_ref())
     }
 
     /// Rename a file or directory to a new name, replacing the original file
@@ -802,7 +791,6 @@ impl Repo {
         from: P,
         to: Q,
     ) -> Result<()> {
-        let mut fs = self.fs.write().unwrap();
-        fs.rename(from.as_ref(), to.as_ref())
+        self.fs.rename(from.as_ref(), to.as_ref())
     }
 }

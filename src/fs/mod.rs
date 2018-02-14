@@ -5,7 +5,7 @@ pub mod fnode;
 mod fs;
 
 pub use self::fnode::{Fnode, FnodeRef, FileType, Version, Metadata, DirEntry};
-pub use self::fs::{Fs, FsRef};
+pub use self::fs::Fs;
 
 use content::StoreRef;
 use volume::VolumeRef;
