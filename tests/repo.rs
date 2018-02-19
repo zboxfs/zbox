@@ -4,8 +4,8 @@ extern crate zbox;
 
 use tempdir::TempDir;
 
-use zbox::{init_env, Error, RepoOpener, OpsLimit, MemLimit, Cipher,
-           OpenOptions};
+use zbox::{init_env, Cipher, Error, MemLimit, OpenOptions, OpsLimit,
+           RepoOpener};
 
 #[test]
 fn repo_oper() {
@@ -129,7 +129,7 @@ fn repo_oper() {
             .unwrap();
         f.write_once(&buf[..]).unwrap();
         f.write_once(&buf2[..]).unwrap();
-        let hist = f.history();
+        let hist = f.history().unwrap();
         assert_eq!(hist.len(), 1);
 
         let mut f2 = OpenOptions::new()
@@ -140,7 +140,30 @@ fn repo_oper() {
         f2.write_once(&buf[..]).unwrap();
         f2.write_once(&buf2[..]).unwrap();
         f2.write_once(&buf3[..]).unwrap();
-        let hist = f2.history();
+        let hist = f2.history().unwrap();
         assert_eq!(hist.len(), 2);
+    }
+
+    // case #8: test file read/write after repo is closed
+    {
+        let path = base.clone() + "/repo8";
+        let mut repo = RepoOpener::new()
+            .create_new(true)
+            .version_limit(1)
+            .open(&path, &pwd)
+            .unwrap();
+
+        let mut f = OpenOptions::new()
+            .create(true)
+            .open(&mut repo, "/file")
+            .unwrap();
+
+        drop(repo);
+
+        let buf = [1u8, 2u8, 3u8];
+        assert_eq!(f.write_once(&buf[..]).unwrap_err(), Error::Closed);
+        assert_eq!(f.metadata().unwrap_err(), Error::Closed);
+        assert_eq!(f.history().unwrap_err(), Error::Closed);
+        assert_eq!(f.curr_version().unwrap_err(), Error::Closed);
     }
 }

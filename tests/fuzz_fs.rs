@@ -5,7 +5,7 @@ extern crate zbox;
 
 mod common;
 
-use std::io::{Read, Write, Seek, SeekFrom, Cursor};
+use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::fmt::{self, Debug};
 use std::sync::{Arc, RwLock};
@@ -15,7 +15,7 @@ use std::fs;
 use bytes::{Buf, BufMut, LittleEndian};
 
 use common::fuzz;
-use zbox::{Error, OpenOptions, Repo, File};
+use zbox::{Error, File, OpenOptions, Repo};
 
 #[derive(Debug, Clone, Copy)]
 enum FileType {
@@ -287,9 +287,11 @@ impl Step {
 
 impl Debug for Step {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Step {{ round: {}, action: Action::{:?}, node_idx: {}, \
-                tgt_idx: {}, ftype: FileType::{:?}, name: String::from({:?}), \
-                file_pos: {}, data_pos: {}, data_len: {}}}",
+        write!(
+            f,
+            "Step {{ round: {}, action: Action::{:?}, node_idx: {}, \
+             tgt_idx: {}, ftype: FileType::{:?}, name: String::from({:?}), \
+             file_pos: {}, data_pos: {}, data_len: {}}}",
             self.round,
             self.action,
             self.node_idx,
@@ -305,7 +307,7 @@ impl Debug for Step {
 
 fn compare_file_content(repo: &mut Repo, node: &Node) {
     let mut f = repo.open_file(&node.path).unwrap();
-    let meta = f.metadata();
+    let meta = f.metadata().unwrap();
     assert_eq!(meta.len(), node.data.len());
 
     let mut dst = Vec::new();
@@ -315,7 +317,7 @@ fn compare_file_content(repo: &mut Repo, node: &Node) {
 
 // write data to file at random position
 fn write_data_to_file(f: &mut File, step: &Step, data: &[u8]) {
-    let meta = f.metadata();
+    let meta = f.metadata().unwrap();
     let file_size = meta.len();
     assert!(step.file_pos <= file_size);
     f.seek(SeekFrom::Start(step.file_pos as u64)).unwrap();
@@ -355,17 +357,16 @@ fn test_round(env: &mut fuzz::TestEnv, step: &Step, nodes: &mut Vec<Node>) {
 
             match step.ftype {
                 FileType::File => {
-                    let result = OpenOptions::new().create(true).open(
-                        &mut env.repo,
-                        &path,
-                    );
+                    let result = OpenOptions::new()
+                        .create(true)
+                        .open(&mut env.repo, &path);
                     if !node.is_dir() {
                         assert_eq!(result.unwrap_err(), Error::NotDir);
                         return;
                     }
 
-                    let data = &env.data[step.data_pos..
-                                             step.data_pos + step.data_len];
+                    let data =
+                        &env.data[step.data_pos..step.data_pos + step.data_len];
 
                     // write initial data to the new file
                     let mut f = result.unwrap();
@@ -401,7 +402,6 @@ fn test_round(env: &mut fuzz::TestEnv, step: &Step, nodes: &mut Vec<Node>) {
                     children.iter().map(|c| c.path()).collect();
                 cmp_grp.sort();
                 assert_eq!(dirs, cmp_grp);
-
             } else {
                 // compare file content
                 compare_file_content(&mut env.repo, &node);
@@ -409,10 +409,9 @@ fn test_round(env: &mut fuzz::TestEnv, step: &Step, nodes: &mut Vec<Node>) {
         }
 
         Action::Update => {
-            let result = OpenOptions::new().write(true).open(
-                &mut env.repo,
-                &node.path,
-            );
+            let result = OpenOptions::new()
+                .write(true)
+                .open(&mut env.repo, &node.path);
             if node.is_dir() {
                 assert_eq!(result.unwrap_err(), Error::IsDir);
                 return;
@@ -435,10 +434,9 @@ fn test_round(env: &mut fuzz::TestEnv, step: &Step, nodes: &mut Vec<Node>) {
         }
 
         Action::Truncate => {
-            let result = OpenOptions::new().write(true).open(
-                &mut env.repo,
-                &node.path,
-            );
+            let result = OpenOptions::new()
+                .write(true)
+                .open(&mut env.repo, &node.path);
             if node.is_dir() {
                 assert_eq!(result.unwrap_err(), Error::IsDir);
                 return;
@@ -511,9 +509,8 @@ fn test_round(env: &mut fuzz::TestEnv, step: &Step, nodes: &mut Vec<Node>) {
                 assert_eq!(result.unwrap_err(), Error::AlreadyExists);
             } else {
                 result.unwrap();
-                for nd in nodes.iter_mut().filter(
-                    |n| n.path.starts_with(&node.path),
-                )
+                for nd in
+                    nodes.iter_mut().filter(|n| n.path.starts_with(&node.path))
                 {
                     let child =
                         nd.path.strip_prefix(&node.path).unwrap().to_path_buf();
@@ -546,9 +543,8 @@ fn test_round(env: &mut fuzz::TestEnv, step: &Step, nodes: &mut Vec<Node>) {
                 assert_eq!(result.unwrap_err(), Error::AlreadyExists);
             } else {
                 result.unwrap();
-                for nd in nodes.iter_mut().filter(
-                    |n| n.path.starts_with(&node.path),
-                )
+                for nd in
+                    nodes.iter_mut().filter(|n| n.path.starts_with(&node.path))
                 {
                     let child =
                         nd.path.strip_prefix(&node.path).unwrap().to_path_buf();
@@ -596,8 +592,8 @@ fn verify(env: &mut fuzz::TestEnv, nodes: &mut Vec<Node>) {
             while let Some(nd) = nodes.get(pos) {
                 match nd.path.strip_prefix(&node.path) {
                     Ok(p) => {
-                        if p.components().count() == 1 &&
-                            children
+                        if p.components().count() == 1
+                            && children
                                 .binary_search_by(|c| c.path.cmp(&nd.path))
                                 .is_err()
                         {
@@ -620,7 +616,6 @@ fn verify(env: &mut fuzz::TestEnv, nodes: &mut Vec<Node>) {
                 assert_eq!(&child.path, subdir.path());
                 assert_eq!(child.is_dir(), subdir.metadata().is_dir());
             }
-
         } else {
             // if node is file, compare its content
             compare_file_content(&mut env.repo, &node);

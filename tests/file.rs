@@ -1,14 +1,14 @@
-extern crate tempdir;
 extern crate rand;
+extern crate tempdir;
 extern crate zbox;
 
 mod common;
 
-use std::io::{Read, Write, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use rand::{Rng, XorShiftRng};
-use zbox::{Error, OpenOptions, File};
+use zbox::{Error, File, OpenOptions};
 
 #[test]
 fn file_open_close() {
@@ -19,14 +19,14 @@ fn file_open_close() {
         .create(true)
         .open(&mut repo, "/file")
         .unwrap();
-    assert!(f.metadata().is_file());
+    assert!(f.metadata().unwrap().is_file());
     assert!(repo.path_exists("/file"));
     assert!(repo.is_file("/file"));
 }
 
 fn verify_content(f: &mut File, buf: &[u8]) {
     let mut dst = Vec::new();
-    let ver_num = f.history().last().unwrap().num();
+    let ver_num = f.history().unwrap().last().unwrap().num();
     let mut rdr = f.version_reader(ver_num).unwrap();
     let result = rdr.read_to_end(&mut dst).unwrap();
     assert_eq!(result, buf.len());
@@ -69,8 +69,8 @@ fn file_read_write() {
 
         verify_content(&mut f, &buf2);
 
-        let meta = f.metadata();
-        let hist = f.history();
+        let meta = f.metadata().unwrap();
+        let hist = f.history().unwrap();
         assert_eq!(meta.len(), buf2.len());
         assert_eq!(meta.curr_version(), 3);
         assert_eq!(hist.len(), 3);
@@ -89,8 +89,8 @@ fn file_read_write() {
         combo.extend_from_slice(&buf);
         verify_content(&mut f, &combo);
 
-        let meta = f.metadata();
-        let hist = f.history();
+        let meta = f.metadata().unwrap();
+        let hist = f.history().unwrap();
         assert_eq!(meta.len(), buf.len() + buf2.len());
         assert_eq!(meta.curr_version(), 4);
         assert_eq!(hist.len(), 4);
@@ -106,7 +106,7 @@ fn file_read_write() {
 
         verify_content(&mut f, &buf2[..3]);
 
-        let meta = f.metadata();
+        let meta = f.metadata().unwrap();
         assert_eq!(meta.len(), 3);
         assert_eq!(meta.curr_version(), 5);
     }
@@ -124,7 +124,7 @@ fn file_read_write() {
         combo.extend_from_slice(&[0, 0]);
         verify_content(&mut f, &combo);
 
-        let meta = f.metadata();
+        let meta = f.metadata().unwrap();
         assert_eq!(meta.len(), 5);
         assert_eq!(meta.curr_version(), 6);
     }
@@ -137,7 +137,7 @@ fn file_read_write() {
             .unwrap();
         f.set_len(0).unwrap();
 
-        let meta = f.metadata();
+        let meta = f.metadata().unwrap();
         assert_eq!(meta.len(), 0);
         assert_eq!(meta.curr_version(), 7);
     }
@@ -208,9 +208,9 @@ fn file_read_write() {
 
         verify_content(&mut f, &buf2);
 
-        let meta = f.metadata();
+        let meta = f.metadata().unwrap();
         assert_eq!(meta.len(), buf2.len());
-        assert_eq!(f.history().len(), 1);
+        assert_eq!(f.history().unwrap().len(), 1);
     }
 
     // #11, version reader
@@ -227,8 +227,8 @@ fn file_read_write() {
 
         verify_content(&mut f, &buf2);
 
-        let meta = f.metadata();
-        let history = f.history();
+        let meta = f.metadata().unwrap();
+        let history = f.history().unwrap();
         assert_eq!(meta.len(), buf2.len());
         assert_eq!(history.len(), 2);
 
@@ -256,7 +256,7 @@ fn file_read_write() {
         f.write_once(&buf[..]).unwrap();
         f.write_once(&buf2[..]).unwrap();
 
-        let curr_ver = f.curr_version();
+        let curr_ver = f.curr_version().unwrap();
 
         let mut rdr = f.version_reader(curr_ver).unwrap();
         let mut dst = Vec::new();
@@ -460,19 +460,19 @@ fn file_truncate() {
             .open(&mut repo, "/file")
             .unwrap();
 
-        let meta = f.metadata();
+        let meta = f.metadata().unwrap();
         assert_eq!(meta.len(), 0);
         assert_eq!(meta.curr_version(), 3);
 
         // write some data
         f.write_once(&buf[..]).unwrap();
-        let meta = f.metadata();
+        let meta = f.metadata().unwrap();
         assert_eq!(meta.len(), 3);
         assert_eq!(meta.curr_version(), 4);
 
         // then truncate again
         f.set_len(0).unwrap();
-        let meta = f.metadata();
+        let meta = f.metadata().unwrap();
         assert_eq!(meta.len(), 0);
         assert_eq!(meta.curr_version(), 5);
     }

@@ -56,6 +56,7 @@ pub enum Error {
     CannotWrite,
     NotWrite,
     NotFinish,
+    Closed,
 
     Encode(EncodeError),
     Decode(DecodeError),
@@ -109,6 +110,7 @@ impl Display for Error {
             Error::CannotWrite => write!(f, "Cannot write file"),
             Error::NotWrite => write!(f, "File does not write yet"),
             Error::NotFinish => write!(f, "File does not finish yet"),
+            Error::Closed => write!(f, "Repo is closed"),
 
             Error::Encode(ref err) => err.fmt(f),
             Error::Decode(ref err) => err.fmt(f),
@@ -164,6 +166,7 @@ impl StdError for Error {
             Error::CannotWrite => "Cannot write file",
             Error::NotWrite => "File does not write yet",
             Error::NotFinish => "File does not finish yet",
+            Error::Closed => "Repo is closed",
 
             Error::Encode(ref err) => err.description(),
             Error::Decode(ref err) => err.description(),
@@ -252,6 +255,7 @@ impl PartialEq for Error {
             (&Error::CannotWrite, &Error::CannotWrite) => true,
             (&Error::NotWrite, &Error::NotWrite) => true,
             (&Error::NotFinish, &Error::NotFinish) => true,
+            (&Error::Closed, &Error::Closed) => true,
 
             (&Error::Encode(_), &Error::Encode(_)) => true,
             (&Error::Decode(_), &Error::Decode(_)) => true,

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::path::Path;
 use std::io;
 
@@ -8,12 +8,12 @@ use error::{Error, Result};
 use base::IntoRef;
 use base::crypto::{Cipher, Cost};
 use content::{Store, StoreRef};
-use trans::{Id, Eid, Txid, TxMgr, TxMgrRef};
+use trans::{Eid, Id, TxMgr, TxMgrRef, Txid};
 use trans::cow::IntoCow;
-use volume::{Volume, VolumeRef, Meta as VolumeMeta};
+use volume::{Meta as VolumeMeta, Volume, VolumeRef};
 use super::Handle;
-use super::fnode::{Fnode, FnodeRef, FileType, Version, Metadata, DirEntry,
-                   Cache as FnodeCache, Reader as FnodeReader,
+use super::fnode::{Cache as FnodeCache, DirEntry, FileType, Fnode, FnodeRef,
+                   Metadata, Reader as FnodeReader, Version,
                    Writer as FnodeWriter};
 
 // default cache size
@@ -27,6 +27,30 @@ pub struct Meta {
     pub vol_meta: VolumeMeta,
 }
 
+/// Shutter
+#[derive(Debug)]
+pub struct Shutter(bool);
+
+impl Shutter {
+    fn new() -> ShutterRef {
+        Shutter(false).into_ref()
+    }
+
+    #[inline]
+    pub fn is_closed(&self) -> bool {
+        self.0
+    }
+
+    #[inline]
+    fn close(&mut self) {
+        self.0 = true
+    }
+}
+
+impl IntoRef for Shutter {}
+
+pub type ShutterRef = Arc<RwLock<Shutter>>;
+
 /// File system
 #[derive(Debug)]
 pub struct Fs {
@@ -35,6 +59,7 @@ pub struct Fs {
     store: StoreRef,
     txmgr: TxMgrRef,
     vol: VolumeRef,
+    shutter: ShutterRef,
     version_limit: u8,
     read_only: bool,
 }
@@ -96,6 +121,7 @@ impl Fs {
             store,
             txmgr,
             vol,
+            shutter: Shutter::new(),
             version_limit,
             read_only: false,
         })
@@ -125,6 +151,7 @@ impl Fs {
             store,
             txmgr,
             vol,
+            shutter: Shutter::new(),
             version_limit,
             read_only,
         })
@@ -181,9 +208,9 @@ impl Fs {
     // resolve path to parent fnode and child file name
     fn resolve_parent(&self, path: &Path) -> Result<(FnodeRef, String)> {
         let parent_path = path.parent().ok_or(Error::IsRoot)?;
-        let file_name = path.file_name().and_then(|s| s.to_str()).ok_or(
-            Error::InvalidPath,
-        )?;
+        let file_name = path.file_name()
+            .and_then(|s| s.to_str())
+            .ok_or(Error::InvalidPath)?;
         let parent = self.resolve(parent_path)?;
         Ok((parent, file_name.to_string()))
     }
@@ -196,6 +223,7 @@ impl Fs {
             store: self.store.clone(),
             txmgr: self.txmgr.clone(),
             vol: self.vol.clone(),
+            shutter: self.shutter.clone(),
         })
     }
 
@@ -316,9 +344,7 @@ impl Fs {
 
         // tx #1: truncate target file
         let tx_handle = TxMgr::begin_trans(&self.txmgr)?;
-        tx_handle.run_all(
-            || Fnode::set_len(tgt.clone(), 0, tx_handle.txid),
-        )?;
+        tx_handle.run_all(|| Fnode::set_len(tgt.clone(), 0, tx_handle.txid))?;
 
         // tx #2: copy data from source to target
         let tx_handle = TxMgr::begin_trans(&self.txmgr)?;
@@ -443,5 +469,12 @@ impl Fs {
             // and then add to target
             Fnode::add_child(&tgt_parent, &src.fnode, &name)
         })
+    }
+}
+
+impl Drop for Fs {
+    fn drop(&mut self) {
+        let mut shutter = self.shutter.write().unwrap();
+        shutter.close()
     }
 }

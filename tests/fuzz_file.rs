@@ -1,13 +1,13 @@
 #![cfg(feature = "fuzz-test")]
 
-extern crate serde;
-extern crate rmp_serde;
 extern crate bytes;
+extern crate rmp_serde;
+extern crate serde;
 extern crate zbox;
 
 mod common;
 
-use std::io::{Read, Write, Seek, SeekFrom, Cursor};
+use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::fmt::{self, Debug};
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -17,7 +17,7 @@ use std::fs;
 use bytes::{Buf, BufMut, LittleEndian};
 
 use common::fuzz;
-use zbox::{OpenOptions, Repo, File};
+use zbox::{File, OpenOptions, Repo};
 
 #[derive(Default)]
 struct Step {
@@ -102,18 +102,20 @@ impl Step {
 
 impl Debug for Step {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Step {{ round: {}, do_set_len: {}, new_len: {}, \
-            file_pos: {}, data_pos: {}, data_len: {}, \
-            data: &test_data[{}..{}] }},",
-        self.round,
-        self.do_set_len,
-        self.new_len,
-        self.file_pos,
-        self.data_pos,
-        self.data_len,
-        self.data_pos,
-        self.data_pos + self.data_len,
-    )
+        write!(
+            f,
+            "Step {{ round: {}, do_set_len: {}, new_len: {}, \
+             file_pos: {}, data_pos: {}, data_len: {}, \
+             data: &test_data[{}..{}] }},",
+            self.round,
+            self.do_set_len,
+            self.new_len,
+            self.file_pos,
+            self.data_pos,
+            self.data_len,
+            self.data_pos,
+            self.data_pos + self.data_len,
+        )
     }
 }
 
@@ -145,7 +147,7 @@ fn test_round(
         println!("{}: Start {} file fuzz test rounds...", worker, rounds);
     }
 
-    let old_len = f.metadata().len();
+    let old_len = f.metadata().unwrap().len();
     let data = &src_data[step.data_pos..step.data_pos + step.data_len];
     //println!("step: {:?}", step);
 
@@ -159,7 +161,6 @@ fn test_round(
         } else {
             ctl.truncate(step.new_len);
         }
-
     } else {
         f.seek(SeekFrom::Start(step.file_pos as u64)).unwrap();
         f.write_all(&data[..]).unwrap();
@@ -175,7 +176,7 @@ fn test_round(
     }
 
     if round % 10 == 0 {
-        let meta = f.metadata();
+        let meta = f.metadata().unwrap();
         println!(
             "{}: {}/{}, file len: {}, ...",
             worker,
@@ -200,7 +201,7 @@ fn fuzz_file_read_write(rounds: usize) {
     // start fuzz rounds
     // ------------------
     for round in 0..rounds {
-        let meta = file.metadata();
+        let meta = file.metadata().unwrap();
         let old_len = meta.len();
         let step = Step::new_random(round, old_len, &env.data);
         step.save(&env);
@@ -260,25 +261,26 @@ fn fuzz_file_read_write_mt(rounds: usize) {
 
         workers.push(
             builder
-                .spawn(move || for round in 0..rounds {
-                    let mut env = env.write().unwrap();
-                    let mut file = OpenOptions::new()
-                        .write(true)
-                        .open(&mut env.repo, "/file")
-                        .unwrap();
-                    let mut ctl = ctl.write().unwrap();
-                    let old_len = file.metadata().len();
-                    let step = Step::new_random(round, old_len, &env.data);
+                .spawn(move || {
+                    for round in 0..rounds {
+                        let mut env = env.write().unwrap();
+                        let mut file = OpenOptions::new()
+                            .write(true)
+                            .open(&mut env.repo, "/file")
+                            .unwrap();
+                        let mut ctl = ctl.write().unwrap();
+                        let old_len = file.metadata().unwrap().len();
+                        let step = Step::new_random(round, old_len, &env.data);
 
-                    test_round(
-                        &mut file,
-                        &step,
-                        &env.data,
-                        round,
-                        rounds,
-                        &mut ctl,
-                    );
-
+                        test_round(
+                            &mut file,
+                            &step,
+                            &env.data,
+                            round,
+                            rounds,
+                            &mut ctl,
+                        );
+                    }
                 })
                 .unwrap(),
         );

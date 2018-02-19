@@ -1,12 +1,12 @@
 use std::error::Error as StdError;
-use std::io::{self, Read, Write, Error as IoError, ErrorKind, Seek, SeekFrom};
+use std::io::{self, Error as IoError, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::fmt::{self, Debug};
 
-use trans::{TxMgr, TxHandle};
+use trans::{TxHandle, TxMgr};
 use fs::Handle;
-use fs::fnode::{Fnode, Version, Metadata, Reader as FnodeReader,
+use fs::fnode::{Fnode, Metadata, Reader as FnodeReader, Version,
                 Writer as FnodeWriter};
-use super::{Result, Error};
+use super::{Error, Result};
 
 /// A reader for a specific vesion of file content.
 ///
@@ -43,8 +43,8 @@ impl<'a> Seek for VersionReader<'a> {
 /// A reference to an open file in the repository.
 ///
 /// An instance of a `File` can be read and/or written depending on what options
-/// it was opened with. Files also implement [`Seek`] to alter the logical cursor
-/// that the file contains internally.
+/// it was opened with. Files also implement [`Seek`] to alter the logical
+/// cursor that the file contains internally.
 ///
 /// Files are automatically closed when they go out of scope.
 ///
@@ -129,7 +129,9 @@ impl<'a> Seek for VersionReader<'a> {
 ///   # fn foo() -> Result<()> {
 ///   # init_env();
 ///   # let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
-///   let mut file = OpenOptions::new().create(true).open(&mut repo, "/foo.txt")?;
+///   let mut file = OpenOptions::new()
+///       .create(true)
+///       .open(&mut repo, "/foo.txt")?;
 ///   file.write_all(b"foo ")?;
 ///   file.write_all(b"bar")?;
 ///   file.finish()?;
@@ -158,7 +160,9 @@ impl<'a> Seek for VersionReader<'a> {
 ///   # fn foo() -> Result<()> {
 ///   # init_env();
 ///   # let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
-///   let mut file = OpenOptions::new().create(true).open(&mut repo, "/foo.txt")?;
+///   let mut file = OpenOptions::new()
+///       .create(true)
+///       .open(&mut repo, "/foo.txt")?;
 ///   file.write_once(b"foo bar")?;
 ///
 ///   let mut content = String::new();
@@ -199,7 +203,7 @@ impl<'a> Seek for VersionReader<'a> {
 /// file.write_once(b"bar")?;
 ///
 /// // get latest version number
-/// let curr_ver = file.curr_version();
+/// let curr_ver = file.curr_version()?;
 ///
 /// let mut rdr = file.version_reader(curr_ver)?;
 /// let mut content = String::new();
@@ -285,22 +289,34 @@ impl File {
         }
     }
 
+    /// Check if file system is closed
+    fn check_closed(&self) -> Result<()> {
+        let shutter = self.handle.shutter.read().unwrap();
+        if shutter.is_closed() {
+            return Err(Error::Closed);
+        }
+        Ok(())
+    }
+
     /// Queries metadata about the underlying file.
-    pub fn metadata(&self) -> Metadata {
+    pub fn metadata(&self) -> Result<Metadata> {
+        self.check_closed()?;
         let fnode = self.handle.fnode.read().unwrap();
-        fnode.metadata()
+        Ok(fnode.metadata())
     }
 
     /// Returns a list of all the file content versions.
-    pub fn history(&self) -> Vec<Version> {
+    pub fn history(&self) -> Result<Vec<Version>> {
+        self.check_closed()?;
         let fnode = self.handle.fnode.read().unwrap();
-        fnode.history()
+        Ok(fnode.history())
     }
 
     /// Returns the current content version number.
-    pub fn curr_version(&self) -> usize {
+    pub fn curr_version(&self) -> Result<usize> {
+        self.check_closed()?;
         let fnode = self.handle.fnode.read().unwrap();
-        fnode.curr_ver_num()
+        Ok(fnode.curr_ver_num())
     }
 
     /// Returns content byte size of the current version.
@@ -318,6 +334,7 @@ impl File {
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`history`]: struct.File.html#method.history
     pub fn version_reader(&self, ver_num: usize) -> Result<VersionReader> {
+        self.check_closed()?;
         if !self.can_read {
             return Err(Error::CannotRead);
         }
@@ -330,13 +347,11 @@ impl File {
         let pos: i64 = match pos {
             SeekFrom::Start(p) => p as i64,
             SeekFrom::End(p) => curr_len as i64 + p,
-            SeekFrom::Current(p) => {
-                match self.pos {
-                    SeekFrom::Start(q) => p + q as i64,
-                    SeekFrom::End(q) => curr_len as i64 + p + q,
-                    SeekFrom::Current(_) => unreachable!(),
-                }
-            }
+            SeekFrom::Current(p) => match self.pos {
+                SeekFrom::Start(q) => p + q as i64,
+                SeekFrom::End(q) => curr_len as i64 + p + q,
+                SeekFrom::Current(_) => unreachable!(),
+            },
         };
         SeekFrom::Start(pos as u64)
     }
@@ -391,6 +406,7 @@ impl File {
     ///
     /// [`Error::NotWrite`]: enum.Error.html
     pub fn finish(&mut self) -> Result<()> {
+        self.check_closed()?;
         match self.wtr.take() {
             Some(wtr) => {
                 let tx_handle = self.tx_handle.take().unwrap();
@@ -415,22 +431,21 @@ impl File {
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     /// [`finish`]: struct.File.html#method.finish
     pub fn write_once(&mut self, buf: &[u8]) -> Result<()> {
+        self.check_closed()?;
         match self.wtr {
             Some(_) => Err(Error::NotFinish),
             None => {
                 self.begin_write()?;
                 match self.wtr {
-                    Some(ref mut wtr) => {
-                        match self.tx_handle {
-                            Some(ref tx_handle) => {
-                                tx_handle.run(|| {
-                                    wtr.write_all(buf)?;
-                                    Ok(())
-                                })?;
-                            }
-                            None => unreachable!(),
+                    Some(ref mut wtr) => match self.tx_handle {
+                        Some(ref tx_handle) => {
+                            tx_handle.run(|| {
+                                wtr.write_all(buf)?;
+                                Ok(())
+                            })?;
                         }
-                    }
+                        None => unreachable!(),
+                    },
                     None => unreachable!(),
                 }
                 self.finish()
@@ -451,6 +466,7 @@ impl File {
     /// This function will return an error if the file is not opened for
     /// writing or not finished writing.
     pub fn set_len(&mut self, len: usize) -> Result<()> {
+        self.check_closed()?;
         if self.wtr.is_some() {
             return Err(Error::NotFinish);
         }
@@ -469,6 +485,7 @@ impl File {
 
 impl Read for File {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        map_io_err!(self.check_closed())?;
         if !self.can_read {
             return Err(IoError::new(
                 ErrorKind::Other,
@@ -476,9 +493,9 @@ impl Read for File {
             ));
         }
         if self.rdr.is_none() {
-            let mut rdr = map_io_err!(
-                FnodeReader::new_current(self.handle.fnode.clone())
-            )?;
+            let mut rdr = map_io_err!(FnodeReader::new_current(
+                self.handle.fnode.clone()
+            ))?;
             rdr.seek(self.pos)?;
             self.rdr = Some(rdr);
         }
@@ -491,41 +508,39 @@ impl Read for File {
 
 impl Write for File {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        map_io_err!(self.check_closed())?;
         if self.wtr.is_none() {
             map_io_err!(self.begin_write())?;
         }
         match self.wtr {
-            Some(ref mut wtr) => {
-                match self.tx_handle {
-                    Some(ref tx_handle) => {
-                        let mut ret = 0;
-                        map_io_err!(tx_handle.run(|| {
-                            ret = wtr.write(buf)?;
-                            Ok(())
-                        }))?;
-                        Ok(ret)
-                    }
-                    None => unreachable!(),
+            Some(ref mut wtr) => match self.tx_handle {
+                Some(ref tx_handle) => {
+                    let mut ret = 0;
+                    map_io_err!(tx_handle.run(|| {
+                        ret = wtr.write(buf)?;
+                        Ok(())
+                    }))?;
+                    Ok(ret)
                 }
-            }
+                None => unreachable!(),
+            },
             None => unreachable!(),
         }
     }
 
     fn flush(&mut self) -> io::Result<()> {
+        map_io_err!(self.check_closed())?;
         match self.wtr {
-            Some(ref mut wtr) => {
-                match self.tx_handle {
-                    Some(ref tx_handle) => {
-                        map_io_err!(tx_handle.run(|| {
-                            wtr.flush()?;
-                            Ok(())
-                        }))?;
+            Some(ref mut wtr) => match self.tx_handle {
+                Some(ref tx_handle) => {
+                    map_io_err!(tx_handle.run(|| {
+                        wtr.flush()?;
                         Ok(())
-                    }
-                    None => unreachable!(),
+                    }))?;
+                    Ok(())
                 }
-            }
+                None => unreachable!(),
+            },
             None => Err(IoError::new(
                 ErrorKind::PermissionDenied,
                 Error::CannotWrite.description(),
@@ -536,6 +551,7 @@ impl Write for File {
 
 impl Seek for File {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        map_io_err!(self.check_closed())?;
         if self.wtr.is_some() {
             return Err(IoError::new(
                 ErrorKind::Other,

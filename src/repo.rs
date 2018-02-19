@@ -4,10 +4,10 @@ use std::time::SystemTime;
 
 use error::Error;
 use base::{self, Time};
-use base::crypto::{OpsLimit, MemLimit, Cost, Cipher, Crypto};
+use base::crypto::{Cipher, Cost, Crypto, MemLimit, OpsLimit};
 use trans::Eid;
-use fs::{Fs, FileType, Version, Metadata, DirEntry, Fnode};
-use super::{Result, File};
+use fs::{DirEntry, FileType, Fnode, Fs, Metadata, Version};
+use super::{File, Result};
 
 /// A builder used to create a repository [`Repo`] in various manners.
 ///
@@ -574,9 +574,10 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn path_exists<P: AsRef<Path>>(&self, path: P) -> bool {
-        self.fs.resolve(path.as_ref()).map(|_| true).unwrap_or(
-            false,
-        )
+        self.fs
+            .resolve(path.as_ref())
+            .map(|_| true)
+            .unwrap_or(false)
     }
 
     /// Returns whether the path exists in repository and is pointing at
@@ -613,9 +614,9 @@ impl Repo {
         path: P,
         opts: &OpenOptions,
     ) -> Result<File> {
-        if self.fs.is_read_only() &&
-            (opts.write || opts.append || opts.truncate || opts.create ||
-                 opts.create_new)
+        if self.fs.is_read_only()
+            && (opts.write || opts.append || opts.truncate || opts.create
+                || opts.create_new)
         {
             return Err(Error::ReadOnly);
         }
@@ -629,11 +630,8 @@ impl Repo {
                 }
             }
             Err(ref err) if *err == Error::NotFound => {
-                self.fs.create_fnode(
-                    path,
-                    FileType::File,
-                    opts.version_limit,
-                )?;
+                self.fs
+                    .create_fnode(path, FileType::File, opts.version_limit)?;
             }
             Err(err) => return Err(err),
         }
@@ -670,10 +668,10 @@ impl Repo {
     /// See the [`OpenOptions::open`](struct.OpenOptions.html#method.open)
     /// function for more details.
     pub fn create_file<P: AsRef<Path>>(&mut self, path: P) -> Result<File> {
-        OpenOptions::new().create(true).truncate(true).open(
-            self,
-            path,
-        )
+        OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .open(self, path)
     }
 
     /// Attempts to open a file in read-only mode.
