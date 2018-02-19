@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::collections::VecDeque;
-use std::io::{Read, Write, Result as IoResult, Seek, SeekFrom};
+use std::io::{Read, Result as IoResult, Seek, SeekFrom, Write};
 use std::fmt::{self, Debug};
 use std::time::SystemTime;
 use std::path::{Path, PathBuf};
@@ -8,12 +8,12 @@ use std::cmp::min;
 
 use error::{Error, Result};
 use base::Time;
-use base::lru::{Lru, CountMeter, PinChecker};
-use trans::{Eid, Id, CloneNew, Txid, TxMgrRef};
-use trans::cow::{Cow, CowRef, IntoCow, CowWeakRef, CowCache};
-use volume::{VolumeRef, Persistable};
-use content::{StoreRef, Writer as StoreWriter, Content, ContentRef,
-              ContentReader, ChunkMap};
+use base::lru::{CountMeter, Lru, PinChecker};
+use trans::{CloneNew, Eid, Id, TxMgrRef, Txid};
+use trans::cow::{Cow, CowCache, CowRef, CowWeakRef, IntoCow};
+use volume::{Persistable, VolumeRef};
+use content::{ChunkMap, Content, ContentReader, ContentRef, StoreRef,
+              Writer as StoreWriter};
 use super::Handle;
 
 // maximum sub nodes for a fnode
@@ -65,7 +65,7 @@ impl ChildEntry {
 /// A representation of a permanent file content.
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct Version {
-    num: usize, // version number
+    num: usize,      // version number
     content_id: Eid, // content id
     len: usize,
     ctime: Time,
@@ -218,8 +218,7 @@ pub struct Fnode {
             default = "Fnode::default_sub_nodes")]
     sub_nodes: SubNodes,
 
-    #[serde(skip_serializing, skip_deserializing, default)]
-    store: StoreRef,
+    #[serde(skip_serializing, skip_deserializing, default)] store: StoreRef,
 }
 
 impl Fnode {
@@ -347,11 +346,9 @@ impl Fnode {
         vol: &VolumeRef,
     ) -> Result<FnodeRef> {
         // get child fnode from sub node list first
-        if let Some(fnode) = self.sub_nodes.get_refresh(name).and_then(
-            |sub| {
-                sub.upgrade()
-            },
-        )
+        if let Some(fnode) = self.sub_nodes
+            .get_refresh(name)
+            .and_then(|sub| sub.upgrade())
         {
             return Ok(fnode);
         }
@@ -374,10 +371,8 @@ impl Fnode {
                 }
 
                 // add to parent's sub node list
-                self.sub_nodes.insert(
-                    name.to_string(),
-                    Arc::downgrade(&child),
-                );
+                self.sub_nodes
+                    .insert(name.to_string(), Arc::downgrade(&child));
                 Ok(child)
             })
     }
@@ -398,12 +393,8 @@ impl Fnode {
         vol: &VolumeRef,
     ) -> Result<FnodeRef> {
         let mut par = parent.write().unwrap();
-        par.make_mut_naive()?.load_child(
-            name,
-            parent.clone(),
-            cache,
-            vol,
-        )
+        par.make_mut_naive()?
+            .load_child(name, parent.clone(), cache, vol)
     }
 
     fn children_names(&self) -> Vec<String> {
@@ -471,10 +462,8 @@ impl Fnode {
         kid.make_mut()?.parent = Some(parent.clone());
 
         // add to parent's sub node list and update modified time
-        par.sub_nodes.insert(
-            name.to_string(),
-            Arc::downgrade(child),
-        );
+        par.sub_nodes
+            .insert(name.to_string(), Arc::downgrade(child));
         par.mtime = Time::now();
 
         Ok(())
@@ -522,16 +511,16 @@ impl Fnode {
 
     // remove a specified version and its associated content
     fn remove_ver(&mut self, ver_num: usize) -> Result<()> {
-        let idx = self.vers.iter().position(|v| v.num == ver_num).ok_or(
-            Error::NoVersion,
-        )?;
+        let idx = self.vers
+            .iter()
+            .position(|v| v.num == ver_num)
+            .ok_or(Error::NoVersion)?;
         let ver = self.vers.remove(idx).unwrap();
 
         if let Some(ctn) = {
             let mut store = self.store.write().unwrap();
             store.make_mut()?.deref_content(&ver.content_id)?
-        }
-        {
+        } {
             Content::unlink(&ctn, &mut self.chk_map, &self.store)?;
         }
 
@@ -617,7 +606,6 @@ impl Fnode {
                 size -= written;
             }
             wtr.finish()?;
-
         } else if curr_len > len {
             // truncate
             let mut fnode_cow = handle.fnode.write().unwrap();

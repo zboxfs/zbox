@@ -1,5 +1,5 @@
 use std::result::Result as StdResult;
-use std::fmt::{self, Debug, Formatter, Display};
+use std::fmt::{self, Debug, Display, Formatter};
 use std::cell::RefCell;
 
 use serde::{Deserialize, Serialize};

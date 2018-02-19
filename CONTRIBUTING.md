@@ -123,7 +123,7 @@ For file storage test, we need to simulate many IO failure scenerios which is
 hard because OS file system IO errors are very rare. To solve this problem,
 like what sqlite did, Zbox uses a virtual IO (vio) layer to access underling
 file system. Vio is a zero-cost wrapper of the underling file system API. That
-makes simulating random IO errors quite easy.
+makes simulating random IO errors easy.
 
 By default, vio is turned off and it is just a synonym of the underling file
 system. To test the random IO errors, we need to enable vio first by turning on
@@ -150,5 +150,5 @@ cargo test --tests perf --release --features perf-test -- --nocapture
 ## Code of Conduct
 
 In all Zbox-related forums, we follow the [Code of Conduct](CODE_OF_CONDUCT.md).
-For escalation or moderation issues please contact Bo (support@zbox.io).
+For escalation or moderation issues please contact us (support@zbox.io).
 

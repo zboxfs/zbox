@@ -1,6 +1,6 @@
 use std::fmt::{self, Debug};
-use std::cmp::{min, max};
-use std::io::{Read, Write, Result as IoResult, Seek, SeekFrom};
+use std::cmp::{max, min};
+use std::io::{Read, Result as IoResult, Seek, SeekFrom, Write};
 
 use error::Result;
 use base::crypto::{Crypto, Hash, HashState, HASH_STATE_SIZE};
@@ -184,11 +184,11 @@ impl MerkleTree {
         let mut old_begin = self.inner_cnt();
         let old_leaf_cnt = self.leaf_cnt();
 
-        let mut overlap_begin = leaves_begin +
-            align_piece_floor_chunk(leaves.offset);
+        let mut overlap_begin =
+            leaves_begin + align_piece_floor_chunk(leaves.offset);
         let overlap_end_offset = min(self.len, leaves.end_offset());
-        let mut overlap_end = leaves_begin +
-            align_piece_ceil_chunk(overlap_end_offset);
+        let mut overlap_end =
+            leaves_begin + align_piece_ceil_chunk(overlap_end_offset);
 
         // resize nodes and move old leaf nodes
         let old_leaves = self.nodes[old_begin..].to_vec();
@@ -206,8 +206,8 @@ impl MerkleTree {
             self.nodes[overlap_begin] = piece_hash(leaves.offset, rdr)?;
             head_is_rehashed = true;
         }
-        if align_piece_offset(overlap_end_offset) != 0 &&
-            !(overlap_begin == overlap_end - 1 && head_is_rehashed)
+        if align_piece_offset(overlap_end_offset) != 0
+            && !(overlap_begin == overlap_end - 1 && head_is_rehashed)
         {
             self.nodes[overlap_end - 1] = piece_hash(overlap_end_offset, rdr)?;
         }
@@ -275,9 +275,8 @@ impl MerkleTree {
 
         // copy leaf nodes
         let src = self.inner_cnt();
-        new.nodes[leaves_begin..].clone_from_slice(
-            &self.nodes[src..src + leaf_cnt],
-        );
+        new.nodes[leaves_begin..]
+            .clone_from_slice(&self.nodes[src..src + leaf_cnt]);
 
         // re-hash the last piece at cut position
         if align_piece_offset(at) != 0 || at == 0 {
@@ -298,9 +297,8 @@ impl MerkleTree {
             let src_begin = parent(old_begin, old_begin, old_lvl_node_cnt);
             let src_end = parent(old_end - 1, old_begin, old_lvl_node_cnt) + 1;
             assert_eq!(dst_end - dst_begin, src_end - src_begin);
-            &new.nodes[dst_begin..dst_end].clone_from_slice(
-                &self.nodes[src_begin..src_end],
-            );
+            &new.nodes[dst_begin..dst_end]
+                .clone_from_slice(&self.nodes[src_begin..src_end]);
 
             // re-hash the last node
             if (end - begin) & 1 == 0 {
@@ -533,9 +531,8 @@ mod tests {
 
         for i in 1..20 {
             let len = PIECE_SIZE * i + Crypto::random_u32(6u32) as usize - 3;
-            let len2 = PIECE_SIZE *
-                (Crypto::random_u32(i as u32) as usize + 1) +
-                Crypto::random_u32(6u32) as usize - 3;
+            let len2 = PIECE_SIZE * (Crypto::random_u32(i as u32) as usize + 1)
+                + Crypto::random_u32(6u32) as usize - 3;
             let offset = Crypto::random_u32(len as u32) as usize;
             test_merge(len, len2, 0);
             test_merge(len, len2, offset);

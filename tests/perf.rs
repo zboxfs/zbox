@@ -11,8 +11,8 @@ use std::path::Path;
 use std::env;
 use std::ptr;
 
-use rand::{XorShiftRng, Rng, SeedableRng};
-use zbox::{init_env, Repo, RepoOpener, OpenOptions, File};
+use rand::{Rng, SeedableRng, XorShiftRng};
+use zbox::{init_env, File, OpenOptions, Repo, RepoOpener};
 
 const DATA_LEN: usize = 60 * 1024 * 1024;
 const ROUND: usize = 3;
@@ -24,8 +24,8 @@ fn time_str(duration: &Duration) -> String {
 }
 
 fn speed_str(duration: &Duration) -> String {
-    let secs = duration.as_secs() as f32 +
-        duration.subsec_nanos() as f32 / 1_000_000_000.0;
+    let secs = duration.as_secs() as f32
+        + duration.subsec_nanos() as f32 / 1_000_000_000.0;
     let speed = DATA_LEN as f32 / (1024.0 * 1024.0) / secs;
     format!("{} MB/s", speed)
 }

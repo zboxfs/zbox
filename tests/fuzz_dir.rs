@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::sync::{Arc, RwLock};
 use std::fs;
-use std::io::{Read, Write, Cursor};
+use std::io::{Cursor, Read, Write};
 
 use bytes::{Buf, BufMut};
 
@@ -162,8 +162,8 @@ fn test_round(
             let tgt_parent = ctl_grp[fuzz::random_usize(ctl_grp.len())].clone();
             let path = tgt_parent.join(name);
             //println!("rename to path: {}", path.display());
-            if node == root || path.starts_with(&node) ||
-                ctl_grp.iter().filter(|p| *p == &path).count() > 0
+            if node == root || path.starts_with(&node)
+                || ctl_grp.iter().filter(|p| *p == &path).count() > 0
             {
                 assert!(repo.rename(&node, &path).is_err());
             } else {
@@ -228,17 +228,19 @@ fn dir_fuzz_mt(rounds: usize) {
         let builder = thread::Builder::new().name(name);
         workers.push(
             builder
-                .spawn(move || for round in 0..rounds {
-                    let mut env = env.write().unwrap();
-                    let mut ctl_grp = ctl_grp.write().unwrap();
-                    let action = Action::new_random();
-                    test_round(
-                        &mut env.repo,
-                        &action,
-                        round,
-                        rounds,
-                        &mut ctl_grp,
-                    );
+                .spawn(move || {
+                    for round in 0..rounds {
+                        let mut env = env.write().unwrap();
+                        let mut ctl_grp = ctl_grp.write().unwrap();
+                        let action = Action::new_random();
+                        test_round(
+                            &mut env.repo,
+                            &action,
+                            round,
+                            rounds,
+                            &mut ctl_grp,
+                        );
+                    }
                 })
                 .unwrap(),
         );

@@ -1,16 +1,16 @@
 use std::fmt::{self, Debug};
 use std::sync::{Arc, RwLock};
 use std::ops::{Index, IndexMut, Range};
-use std::io::{Read, Write, Error as IoError, ErrorKind, Result as IoResult};
+use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write};
 use std::error::Error as StdError;
 
 use error::Result;
 use base::IntoRef;
 use base::lru::{Lru, Meter, PinChecker};
-use trans::{Eid, Id, CloneNew, TxMgrRef, Txid};
+use trans::{CloneNew, Eid, Id, TxMgrRef, Txid};
 use trans::trans::{Action, Transable};
-use trans::cow::{CowRef, IntoCow, CowCache};
-use volume::{Volume, VolumeRef, Persistable, Writer as VolWriter};
+use trans::cow::{CowCache, CowRef, IntoCow};
+use volume::{Persistable, Volume, VolumeRef, Writer as VolWriter};
 use super::chunk::Chunk;
 
 // maximum number of chunks in a segment
@@ -162,7 +162,9 @@ pub struct DataCache {
 
 impl DataCache {
     pub fn new(capacity: usize) -> Self {
-        DataCache { lru: Arc::new(RwLock::new(SegDataLru::new(capacity))) }
+        DataCache {
+            lru: Arc::new(RwLock::new(SegDataLru::new(capacity))),
+        }
     }
 
     pub fn get(&self, id: &Eid, vol: &VolumeRef) -> Result<SegDataRef> {
@@ -192,7 +194,7 @@ impl DataCache {
 #[derive(Clone, Default, Deserialize, Serialize)]
 pub struct Segment {
     id: Eid,
-    len: usize, // segment data length, in bytes,
+    len: usize,  // segment data length, in bytes,
     used: usize, // currently used segment data length, in bytes
     data_id: Eid,
     chunks: Vec<Chunk>,
@@ -288,9 +290,7 @@ impl Segment {
 
         debug!(
             "shrink segment {:#?} from {} to {}",
-            self.id,
-            self.len,
-            self.used
+            self.id, self.len, self.used
         );
 
         // re-position chunks
@@ -327,10 +327,7 @@ impl Debug for Segment {
         write!(
             f,
             "Segment(id: {:?}, len: {}, used: {}, data_id: {:?}, [\n",
-            self.id,
-            self.len,
-            self.used,
-            self.data_id
+            self.id, self.len, self.used, self.data_id
         ).unwrap();
         if self.chunks.len() > 10 {
             for val in self.chunks[..3].iter() {

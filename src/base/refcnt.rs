@@ -14,20 +14,22 @@ impl RefCnt {
     }
 
     pub fn inc_ref(&mut self) -> Result<u32> {
-        self.0.checked_add(1).ok_or(Error::RefOverflow).and_then(
-            |r| {
+        self.0
+            .checked_add(1)
+            .ok_or(Error::RefOverflow)
+            .and_then(|r| {
                 self.0 = r;
                 Ok(r)
-            },
-        )
+            })
     }
 
     pub fn dec_ref(&mut self) -> Result<u32> {
-        self.0.checked_sub(1).ok_or(Error::RefUnderflow).and_then(
-            |r| {
+        self.0
+            .checked_sub(1)
+            .ok_or(Error::RefUnderflow)
+            .and_then(|r| {
                 self.0 = r;
                 Ok(r)
-            },
-        )
+            })
     }
 }

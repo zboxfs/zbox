@@ -7,6 +7,6 @@ pub mod trans;
 mod txid;
 mod txmgr;
 
-pub use self::eid::{Eid, Id, CloneNew};
-pub use self::txmgr::{TxMgr, TxMgrRef, TxHandle};
+pub use self::eid::{CloneNew, Eid, Id};
+pub use self::txmgr::{TxHandle, TxMgr, TxMgrRef};
 pub use self::txid::Txid;

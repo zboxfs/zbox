@@ -6,7 +6,7 @@ mod vio;
 
 pub use self::file::FileStorage;
 
-use std::io::{Read, Write, ErrorKind, Result as IoResult};
+use std::io::{ErrorKind, Read, Result as IoResult, Write};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};

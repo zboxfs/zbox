@@ -28,11 +28,11 @@ pub(super) trait Cutable: Clone {
 /// Span, continuous area in a segment
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Span {
-    pub(super) begin: usize, // begin chunk index
-    pub(super) end: usize, // end chunk index, exclusive
+    pub(super) begin: usize,      // begin chunk index
+    pub(super) end: usize,        // end chunk index, exclusive
     pub(super) seg_offset: usize, // offset from begin chunk in segment
-    pub(super) len: usize, // span length, in bytes
-    pub(super) offset: usize, // offset in content, in bytes
+    pub(super) len: usize,        // span length, in bytes
+    pub(super) offset: usize,     // offset in content, in bytes
 }
 
 impl Span {

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde::ser::Serializer;
 use serde::de::{self, Deserializer};
 
-use error::{Result, Error};
+use error::{Error, Result};
 
 extern "C" {
     // Initialisation
@@ -55,7 +55,6 @@ extern "C" {
         out: *mut u8,
         outlen: usize,
     ) -> i32;
-
 
     // password hash
     // -------------
@@ -272,7 +271,9 @@ struct SafeBoxVisitor<T> {
 
 impl<T> SafeBoxVisitor<T> {
     fn new() -> Self {
-        SafeBoxVisitor { _marker: PhantomData::<T> }
+        SafeBoxVisitor {
+            _marker: PhantomData::<T>,
+        }
     }
 }
 
@@ -595,26 +596,28 @@ const XCHACHA_NONCE_SIZE: usize = 24;
 type Nonce = [u8; AES_NONCE_SIZE];
 
 // encrypt/decrypt function type
-type EncryptFn = unsafe extern "C" fn(c: *mut u8,
-                                      clen_p: *const u64,
-                                      m: *const u8,
-                                      mlen: u64,
-                                      ad: *const u8,
-                                      adlen: u64,
-                                      nsec: *const u8,
-                                      npub: *const u8,
-                                      k: *const u8)
-                                      -> i32;
-type DecryptFn = unsafe extern "C" fn(m: *mut u8,
-                                      mlen_p: *const u64,
-                                      nsec: *const u8,
-                                      c: *const u8,
-                                      clen: u64,
-                                      ad: *const u8,
-                                      adlen: u64,
-                                      npub: *const u8,
-                                      k: *const u8)
-                                      -> i32;
+type EncryptFn = unsafe extern "C" fn(
+    c: *mut u8,
+    clen_p: *const u64,
+    m: *const u8,
+    mlen: u64,
+    ad: *const u8,
+    adlen: u64,
+    nsec: *const u8,
+    npub: *const u8,
+    k: *const u8,
+) -> i32;
+type DecryptFn = unsafe extern "C" fn(
+    m: *mut u8,
+    mlen_p: *const u64,
+    nsec: *const u8,
+    c: *const u8,
+    clen: u64,
+    ad: *const u8,
+    adlen: u64,
+    npub: *const u8,
+    k: *const u8,
+) -> i32;
 
 /// Crypto
 #[derive(Debug, Clone)]
@@ -628,22 +631,8 @@ pub struct Crypto {
 impl Crypto {
     // nonce extension const
     const NONCE_EXT_CONST: [u8; 16] = [
-        0x32,
-        0xb9,
-        0xa5,
-        0xb8,
-        0xb1,
-        0x96,
-        0x83,
-        0x85,
-        0xa3,
-        0x4e,
-        0x47,
-        0x97,
-        0x0d,
-        0x82,
-        0xc1,
-        0x6d,
+        0x32, 0xb9, 0xa5, 0xb8, 0xb1, 0x96, 0x83, 0x85, 0xa3, 0x4e, 0x47, 0x97,
+        0x0d, 0x82, 0xc1, 0x6d,
     ];
 
     /// Initialise libsodium
@@ -659,14 +648,12 @@ impl Crypto {
     /// Create new crypto
     pub fn new(cost: Cost, cipher: Cipher) -> Result<Self> {
         match cipher {
-            Cipher::Xchacha => {
-                Ok(Crypto {
-                    cost,
-                    cipher,
-                    enc_fn: crypto_aead_xchacha20poly1305_ietf_encrypt,
-                    dec_fn: crypto_aead_xchacha20poly1305_ietf_decrypt,
-                })
-            }
+            Cipher::Xchacha => Ok(Crypto {
+                cost,
+                cipher,
+                enc_fn: crypto_aead_xchacha20poly1305_ietf_encrypt,
+                dec_fn: crypto_aead_xchacha20poly1305_ietf_decrypt,
+            }),
             Cipher::Aes => {
                 if !Crypto::is_aes_hardware_available() {
                     return Err(Error::NoAesHardware);

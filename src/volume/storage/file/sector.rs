@@ -2,17 +2,17 @@ use std::error::Error as StdError;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fmt::{self, Debug};
-use std::io::{Read, Write, Seek, SeekFrom, Error as IoError, ErrorKind,
-              Result as IoResult};
+use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Seek,
+              SeekFrom, Write};
 use std::slice;
 use std::cmp::min;
 use std::u16;
 
-use bytes::{Bytes, Buf, BufMut, IntoBuf, LittleEndian};
+use bytes::{Buf, BufMut, Bytes, IntoBuf, LittleEndian};
 
 use error::Result;
-use base::crypto::{Crypto, Key, HashKey};
-use base::lru::{Lru, CountMeter, PinChecker};
+use base::crypto::{Crypto, HashKey, Key};
+use base::lru::{CountMeter, Lru, PinChecker};
 use base::utils::{align_offset, align_offset_u64};
 use trans::Txid;
 use super::remove_file;
@@ -328,17 +328,16 @@ impl SectorMgr {
         if offset == space_len as u64 {
             return Ok(0);
         } else if offset > space_len as u64 {
-            return Err(
-                IoError::new(ErrorKind::UnexpectedEof, "Read beyond EOF"),
-            );
+            return Err(IoError::new(
+                ErrorKind::UnexpectedEof,
+                "Read beyond EOF",
+            ));
         }
 
-        for &(sec_id, ref spans) in
-            space.divide_into_sectors().iter().skip_while(
-                |&&(_, ref spans)| {
-                    offset < spans.offset()
-                },
-            )
+        for &(sec_id, ref spans) in space
+            .divide_into_sectors()
+            .iter()
+            .skip_while(|&&(_, ref spans)| offset < spans.offset())
         {
             let path = self.sec_path(sec_id);
 
@@ -347,8 +346,8 @@ impl SectorMgr {
             let mut data_file = self.open_sec_data(&path)?;
 
             for span in spans.iter().skip_while(|s| offset >= s.end_offset()) {
-                let start_blk_idx = span.begin +
-                    (start - span.offset) / BLK_SIZE as u64;
+                let start_blk_idx =
+                    span.begin + (start - span.offset) / BLK_SIZE as u64;
                 for blk_idx in start_blk_idx..span.end {
                     let blk_id = LocId::new(space.txid, blk_idx);
 
@@ -380,7 +379,6 @@ impl SectorMgr {
                     if read >= buf_len || read >= space_len {
                         return Ok(read);
                     }
-
                 }
             }
         }
@@ -397,12 +395,10 @@ impl SectorMgr {
     ) -> IoResult<()> {
         let mut start = offset;
 
-        for &(sec_id, ref spans) in
-            space.divide_into_sectors().iter().skip_while(
-                |&&(_, ref spans)| {
-                    offset < spans.offset()
-                },
-            )
+        for &(sec_id, ref spans) in space
+            .divide_into_sectors()
+            .iter()
+            .skip_while(|&&(_, ref spans)| offset < spans.offset())
         {
             let path = self.sec_path(sec_id);
 
@@ -437,8 +433,8 @@ impl SectorMgr {
 
                 // write padding if necessary
                 if buf.is_empty() {
-                    let padding_len = BLK_SIZE -
-                        align_offset(start as usize, BLK_SIZE);
+                    let padding_len =
+                        BLK_SIZE - align_offset(start as usize, BLK_SIZE);
                     if padding_len != BLK_SIZE {
                         let mut padding = vec![0u8; padding_len];
                         Crypto::random_buf(&mut padding);
@@ -488,7 +484,9 @@ impl SectorMgr {
             }
 
             orig_data.seek(SeekFrom::Start(data_offset))?;
-            orig_data.read_exact(&mut buf).and(dst_data.write_all(&buf))?;
+            orig_data
+                .read_exact(&mut buf)
+                .and(dst_data.write_all(&buf))?;
 
             *blk_idx = idx;
             idx += 1;
@@ -583,7 +581,7 @@ impl SectorMgr {
 
             debug!(
                 "recycle sector#{}.{} {}. curr: (size: {}, lv: {}), \
-                next: (size: {}, lv: {})",
+                 next: (size: {}, lv: {})",
                 sec_id.txid,
                 sec_id.idx,
                 sec.path.display(),
@@ -620,10 +618,10 @@ impl SectorMgr {
             let sec = Sector::new(sec_id, self.sec_path(sec_id));
 
             // if any one file is deleted successfully, then continue
-            if remove_file(sec.backup_path())? |
-                remove_file(sec.data_backup_path())? |
-                remove_file(sec.data_path())? |
-                remove_file(&sec.path)?
+            if remove_file(sec.backup_path())?
+                | remove_file(sec.data_backup_path())?
+                | remove_file(sec.data_path())?
+                | remove_file(&sec.path)?
             {
                 sec_idx += 1;
                 continue;

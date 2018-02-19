@@ -45,7 +45,9 @@ pub(super) struct ContentMap {
 
 impl ContentMap {
     pub fn new() -> Self {
-        ContentMap { map: HashMap::new() }
+        ContentMap {
+            map: HashMap::new(),
+        }
     }
 
     #[inline]

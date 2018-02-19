@@ -6,8 +6,8 @@ use super::sector::{BLK_SIZE, SECTOR_BLK_CNT};
 /// Span
 #[derive(Debug, Clone, Copy, Default, PartialEq, Deserialize, Serialize)]
 pub struct Span {
-    pub(super) begin: u64, // begin block index
-    pub(super) end: u64, // end block index, exclusive
+    pub(super) begin: u64,  // begin block index
+    pub(super) end: u64,    // end block index, exclusive
     pub(super) offset: u64, // offset in span list
 }
 
@@ -39,8 +39,8 @@ impl Span {
     #[inline]
     pub fn offset_in_sec(&self, offset: u64) -> u64 {
         assert!(self.offset <= offset && offset <= self.end_offset());
-        align_offset_u64(self.begin, SECTOR_BLK_CNT as u64) *
-            BLK_SIZE as u64 + offset - self.offset
+        align_offset_u64(self.begin, SECTOR_BLK_CNT as u64) * BLK_SIZE as u64
+            + offset - self.offset
     }
 
     pub fn into_span_list(self, len: usize) -> SpanList {

@@ -5,7 +5,7 @@ use std::slice::Iter;
 use error::Result;
 use trans::{Eid, Id};
 use super::Store;
-use super::span::{Extent, Cutable, Span};
+use super::span::{Cutable, Extent, Span};
 use super::chunk::ChunkMap;
 use super::segment::Segment;
 

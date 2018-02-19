@@ -10,6 +10,7 @@ pub trait Meter<T> {
 }
 
 pub trait Pinnable<T> {
+    #[inline]
     fn is_pinned(&self, _: &T) -> bool {
         false
     }
@@ -101,11 +102,13 @@ where
             .entries()
             .enumerate()
             .find(|&(_, ref ent)| !pin_ckr.is_pinned(ent.get()))
-            .and_then(|(idx, ent)| if idx < capacity {
-                Some(ent.remove())
-            } else {
-                warn!("Cannot find item to remove in LRU");
-                None
+            .and_then(|(idx, ent)| {
+                if idx < capacity {
+                    Some(ent.remove())
+                } else {
+                    warn!("Cannot find item to remove in LRU");
+                    None
+                }
             });
         if let Some(ref v) = ret {
             self.used = (self.used as isize - self.meter.measure(v)) as usize;
@@ -137,6 +140,7 @@ pub struct CountMeter<T> {
 }
 
 impl<T> Meter<T> for CountMeter<T> {
+    #[inline]
     fn measure(&self, _: &T) -> isize {
         1
     }
@@ -144,7 +148,9 @@ impl<T> Meter<T> for CountMeter<T> {
 
 impl<T> Default for CountMeter<T> {
     fn default() -> Self {
-        CountMeter { _marker: PhantomData::<T> }
+        CountMeter {
+            _marker: PhantomData::<T>,
+        }
     }
 }
 
@@ -158,6 +164,8 @@ impl<T> Pinnable<T> for PinChecker<T> {}
 
 impl<T> Default for PinChecker<T> {
     fn default() -> Self {
-        PinChecker { _marker: PhantomData::<T> }
+        PinChecker {
+            _marker: PhantomData::<T>,
+        }
     }
 }

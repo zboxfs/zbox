@@ -1,15 +1,15 @@
 #[cfg(not(feature = "vio-test"))]
 pub mod imp {
-    pub use std::fs::{File, OpenOptions, ReadDir, copy, create_dir,
-                      create_dir_all, remove_dir, remove_dir_all, remove_file,
-                      rename, read_dir};
+    pub use std::fs::{copy, create_dir, create_dir_all, read_dir, remove_dir,
+                      remove_dir_all, remove_file, rename, File, OpenOptions,
+                      ReadDir};
 }
 
 #[cfg(feature = "vio-test")]
 pub mod imp {
 
     use std::fs;
-    use std::io::{Read, Write, Error, ErrorKind, Result, Seek, SeekFrom};
+    use std::io::{Error, ErrorKind, Read, Result, Seek, SeekFrom, Write};
     use std::path::Path;
 
     use base::crypto::{Crypto, RandomSeed};
@@ -47,9 +47,10 @@ pub mod imp {
                 ERR_INDEX = (ERR_INDEX + 1) % ERR_SAMPLE_CNT;
                 // 42 is a magic number ;)
                 return match sample {
-                    42 => Err(
-                        Error::new(ErrorKind::Other, "Test random IO error"),
-                    ),
+                    42 => Err(Error::new(
+                        ErrorKind::Other,
+                        "Test random IO error",
+                    )),
                     _ => Ok(()),
                 };
             }
@@ -111,7 +112,9 @@ pub mod imp {
 
     impl OpenOptions {
         pub fn new() -> Self {
-            OpenOptions { inner: fs::OpenOptions::new() }
+            OpenOptions {
+                inner: fs::OpenOptions::new(),
+            }
         }
 
         pub fn read(&mut self, read: bool) -> &mut OpenOptions {

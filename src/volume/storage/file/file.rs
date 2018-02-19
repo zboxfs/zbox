@@ -1,8 +1,8 @@
 use std::error::Error as StdError;
 use std::fmt::{self, Display};
-use std::collections::{HashMap, VecDeque, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
-use std::io::{Read, Write, Error as IoError, ErrorKind, Result as IoResult};
+use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write};
 use std::cmp::min;
 use std::env;
 
@@ -12,9 +12,9 @@ use base::crypto::{Crypto, Key};
 use base::utils::align_ceil;
 use trans::{Eid, Txid};
 use volume::storage::Storage;
-use super::{remove_file, save_obj, load_obj};
+use super::{load_obj, remove_file, save_obj};
 use super::span::Span;
-use super::sector::{BLK_SIZE, LocId, Space, SectorMgr};
+use super::sector::{LocId, SectorMgr, Space, BLK_SIZE};
 use super::emap::Emap;
 use super::vio::imp as vio_imp;
 
@@ -30,14 +30,11 @@ struct Snapshot {
     recycle: Vec<Space>,
     tm: Time,
 
-    #[serde(skip_serializing, skip_deserializing, default)]
-    base: PathBuf,
+    #[serde(skip_serializing, skip_deserializing, default)] base: PathBuf,
 
-    #[serde(skip_serializing, skip_deserializing, default)]
-    skey: Key,
+    #[serde(skip_serializing, skip_deserializing, default)] skey: Key,
 
-    #[serde(skip_serializing, skip_deserializing, default)]
-    crypto: Crypto,
+    #[serde(skip_serializing, skip_deserializing, default)] crypto: Crypto,
 }
 
 impl Snapshot {
@@ -99,12 +96,12 @@ impl Snapshot {
 // transaction session status
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum TxStatus {
-    Init, // initial status
-    Started, // transaction started
-    Prepare, // committing preparation started
-    Recycle, // recycling started
+    Init,      // initial status
+    Started,   // transaction started
+    Prepare,   // committing preparation started
+    Recycle,   // recycling started
     Committed, // transaction committed
-    Dispose, // dispose a committed transaction
+    Dispose,   // dispose a committed transaction
 }
 
 impl Default for TxStatus {
@@ -585,8 +582,8 @@ impl Storage for FileStorage {
                 uncompleted_pos = min(i, uncompleted_pos);
             }
         }
-        if completed_cnt == 0 || uncompleted_cnt > 1 ||
-            uncompleted_pos != hist.len() - 1
+        if completed_cnt == 0 || uncompleted_cnt > 1
+            || uncompleted_pos != hist.len() - 1
         {
             return Err(Error::Corrupted);
         }
@@ -628,7 +625,7 @@ impl Storage for FileStorage {
 
         debug!(
             "file storage {} opened. seq: {}, snapshots_cnt: {}, \
-            last_commit: {}",
+             last_commit: {}",
             self.base.display(),
             self.seq,
             self.snapshots.len(),
@@ -656,12 +653,10 @@ impl Storage for FileStorage {
         }
         match self.emap.get(id) {
             Some(space) => self.secmgr.read(buf, space, offset),
-            None => {
-                Err(IoError::new(
-                    ErrorKind::NotFound,
-                    Error::NoEntity.description(),
-                ))
-            }
+            None => Err(IoError::new(
+                ErrorKind::NotFound,
+                Error::NoEntity.description(),
+            )),
         }
     }
 
@@ -687,7 +682,6 @@ impl Storage for FileStorage {
                     // overwrite existing entity, discard the old space
                     session.recycle.push(curr_space.clone());
                     space = session.alloc(buf_len);
-
                 } else {
                     // appending to the existing entity
                     assert_eq!(offset, curr_space.len() as u64);
@@ -701,9 +695,8 @@ impl Storage for FileStorage {
                     // invalidate the last block of the space in cache
                     if align_len > 0 {
                         let last_span = space.spans.list.last().unwrap();
-                        self.secmgr.remove_cache(
-                            LocId::new(txid, last_span.end - 1),
-                        );
+                        self.secmgr
+                            .remove_cache(LocId::new(txid, last_span.end - 1));
                     }
 
                     if end_offset <= ubound {
@@ -805,13 +798,11 @@ impl Drop for FileStorage {
         if !self.lock_path.to_str().unwrap().is_empty() {
             match vio_imp::remove_file(&self.lock_path) {
                 Ok(_) => {}
-                Err(err) => {
-                    warn!(
-                        "remove lock file failed: {}, error: {}",
-                        self.lock_path.display(),
-                        err
-                    )
-                }
+                Err(err) => warn!(
+                    "remove lock file failed: {}, error: {}",
+                    self.lock_path.display(),
+                    err
+                ),
             }
         }
     }
@@ -1097,9 +1088,9 @@ mod tests {
     use base::crypto::{Crypto, RandomSeed};
     use base::init_env;
     use trans::Eid;
-    use volume::storage::file::vio::imp::{turn_on_random_error,
+    use volume::storage::file::vio::imp::{reset_random_error,
                                           turn_off_random_error,
-                                          reset_random_error};
+                                          turn_on_random_error};
     use super::*;
 
     fn setup() -> (PathBuf, TempDir) {

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use error::Result;
 use base::crypto::{Crypto, Key};
 use trans::{Eid, Txid};
-use super::{remove_dir_all, save_obj, load_obj};
+use super::{load_obj, remove_dir_all, save_obj};
 use super::sector::Space;
 use super::vio::imp as vio_imp;
 
@@ -82,10 +82,9 @@ impl Emap {
     }
 
     fn bucket_file_path(&self, txid: Txid, bucket_id: usize) -> PathBuf {
-        Emap::path(&self.base, txid).join("bucket").with_extension(
-            bucket_id
-                .to_string(),
-        )
+        Emap::path(&self.base, txid)
+            .join("bucket")
+            .with_extension(bucket_id.to_string())
     }
 
     fn save_bucket(&self, bucket_id: usize, txid: Txid) -> Result<()> {

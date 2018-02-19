@@ -4,4 +4,4 @@
 mod storage;
 mod volume;
 
-pub use self::volume::{Volume, VolumeRef, Meta, Reader, Writer, Persistable};
+pub use self::volume::{Meta, Persistable, Reader, Volume, VolumeRef, Writer};

@@ -1,7 +1,7 @@
 extern crate zbox;
 
 use std::io::{Read, Write};
-use zbox::{init_env, RepoOpener, OpenOptions};
+use zbox::{init_env, OpenOptions, RepoOpener};
 
 fn main() {
     // initialise zbox environment, called first

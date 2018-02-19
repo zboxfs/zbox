@@ -2,21 +2,21 @@ use std::sync::{Arc, RwLock};
 use std::fmt::{self, Debug};
 use std::path::Path;
 use std::error::Error as StdError;
-use std::io::{Read, Write, Error as IoError, ErrorKind, Result as IoResult};
+use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write};
 use std::cmp::min;
 
 use bytes::{BufMut, ByteOrder, LittleEndian};
 use serde::{Deserialize, Serialize};
 use rmp_serde::{Deserializer, Serializer};
-use lz4::{EncoderBuilder as Lz4EncoderBuilder, Encoder as Lz4Encoder,
-          Decoder as Lz4Decoder};
+use lz4::{Decoder as Lz4Decoder, Encoder as Lz4Encoder,
+          EncoderBuilder as Lz4EncoderBuilder};
 
 use error::{Error, Result};
 use base::{IntoRef, Time, Version};
-use base::crypto::{Crypto, Key, KEY_SIZE, Salt, SALT_SIZE, PwdHash, Cost,
-                   Cipher};
+use base::crypto::{Cipher, Cost, Crypto, Key, PwdHash, Salt, KEY_SIZE,
+                   SALT_SIZE};
 use trans::{Eid, Id, Txid};
-use super::storage::{Storage, FileStorage, MemStorage};
+use super::storage::{FileStorage, MemStorage, Storage};
 
 // subkey id for key derivation
 const SUBKEY_ID: u64 = 42;
@@ -38,8 +38,8 @@ impl SuperBlk {
     const HEADER_LEN: usize = SALT_SIZE + Cost::BYTES_LEN + Cipher::BYTES_LEN;
 
     // body: volume id + version + ctime + master key
-    const BODY_LEN: usize = Eid::EID_SIZE + Version::BYTES_LEN +
-        Time::BYTES_LEN + KEY_SIZE;
+    const BODY_LEN: usize =
+        Eid::EID_SIZE + Version::BYTES_LEN + Time::BYTES_LEN + KEY_SIZE;
 
     fn new(
         volume_id: &Eid,
@@ -70,11 +70,9 @@ impl SuperBlk {
         body.put(&self.ver.serialize()[..]);
         body.put_u64::<LittleEndian>(self.ctime.as_secs());
         body.put(self.key.as_slice());
-        let enc_body = self.crypto.encrypt_with_ad(
-            &body,
-            vkey,
-            &[Self::BODY_LEN as u8],
-        )?;
+        let enc_body =
+            self.crypto
+                .encrypt_with_ad(&body, vkey, &[Self::BODY_LEN as u8])?;
 
         // encrypt payload using volume key
         let enc_payload = self.crypto.encrypt(&self.payload, vkey)?;
@@ -120,11 +118,8 @@ impl SuperBlk {
         // derive volume key and use it to decrypt body
         let pwd_hash = crypto.hash_pwd(pwd, &salt)?;
         let vkey = &pwd_hash.value;
-        let body = crypto.decrypt_with_ad(
-            body_buf,
-            vkey,
-            &[Self::BODY_LEN as u8],
-        )?;
+        let body =
+            crypto.decrypt_with_ad(body_buf, vkey, &[Self::BODY_LEN as u8])?;
         pos = Eid::EID_SIZE;
         let volume_id = Eid::from_slice(&body[..pos]);
         let ver = Version::deserialize(&body[pos..pos + Version::BYTES_LEN]);
@@ -236,11 +231,9 @@ impl Volume {
 
         // derive storage key from master key and open storage
         let skey = Crypto::derive_from_key(&super_blk.key, SUBKEY_ID)?;
-        let last_txid = self.storage.open(
-            &super_blk.volume_id,
-            &super_blk.crypto,
-            &skey,
-        )?;
+        let last_txid =
+            self.storage
+                .open(&super_blk.volume_id, &super_blk.crypto, &skey)?;
 
         // set volume properties
         self.meta.id = super_blk.volume_id.clone();
@@ -631,7 +624,7 @@ mod tests {
     use self::tempdir::TempDir;
 
     use base::init_env;
-    use base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE, Hash, Cost};
+    use base::crypto::{Cost, Crypto, Hash, RandomSeed, RANDOM_SEED_SIZE};
     use super::*;
 
     fn setup_mem_vol() -> VolumeRef {
@@ -720,8 +713,8 @@ mod tests {
     }
 
     fn speed_str(duration: &Duration, data_len: usize) -> String {
-        let secs = duration.as_secs() as f32 +
-            duration.subsec_nanos() as f32 / 1_000_000_000.0;
+        let secs = duration.as_secs() as f32
+            + duration.subsec_nanos() as f32 / 1_000_000_000.0;
         let speed = data_len as f32 / (1024.0 * 1024.0) / secs;
         format!("{} MB/s", speed)
     }
@@ -856,9 +849,8 @@ mod tests {
             let max_len = min(DATA_LEN - pos, RND_DATA_LEN - rnd_pos);
             let len = Crypto::random_u32(max_len as u32) as usize;
             permu.push((Span { pos: rnd_pos, len }, pos));
-            &mut data[pos..pos + len].copy_from_slice(
-                &rnd_data[rnd_pos..rnd_pos + len],
-            );
+            &mut data[pos..pos + len]
+                .copy_from_slice(&rnd_data[rnd_pos..rnd_pos + len]);
         }
 
         (seed, permu, data)
@@ -879,9 +871,8 @@ mod tests {
             let pos = opr.1;
             let rnd_pos = opr.0.pos;
             let len = opr.0.len;
-            &mut data[pos..pos + len].copy_from_slice(
-                &rnd_data[rnd_pos..rnd_pos + len],
-            );
+            &mut data[pos..pos + len]
+                .copy_from_slice(&rnd_data[rnd_pos..rnd_pos + len]);
         }
 
         data
@@ -926,7 +917,7 @@ mod tests {
                                 Span {
                                     pos,
                                     len: buf.len(),
-                                }
+                                },
                             ),
                         ],
                         hash: Crypto::hash(buf),

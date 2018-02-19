@@ -124,8 +124,8 @@ mod volume;
 
 pub use self::error::{Error, Result};
 pub use self::base::init_env;
-pub use self::base::crypto::{OpsLimit, MemLimit, Cipher};
+pub use self::base::crypto::{Cipher, MemLimit, OpsLimit};
 pub use self::trans::Eid;
-pub use self::fs::fnode::{FileType, Metadata, DirEntry, Version};
+pub use self::fs::fnode::{DirEntry, FileType, Metadata, Version};
 pub use self::file::{File, VersionReader};
-pub use self::repo::{RepoOpener, OpenOptions, RepoInfo, Repo};
+pub use self::repo::{OpenOptions, Repo, RepoInfo, RepoOpener};

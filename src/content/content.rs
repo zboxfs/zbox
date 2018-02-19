@@ -1,20 +1,20 @@
 use std::error::Error as StdError;
 use std::fmt::{self, Debug};
-use std::io::{Read, Write, Error as IoError, ErrorKind, Result as IoResult,
-              Seek, SeekFrom};
+use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Seek,
+              SeekFrom, Write};
 use std::cmp::min;
 
 use error::Result;
 use base::crypto::{Crypto, Hash};
-use volume::{VolumeRef, Persistable};
-use trans::{Eid, Id, CloneNew, TxMgrRef, Txid};
-use trans::cow::{CowRef, IntoCow, CowCache};
+use volume::{Persistable, VolumeRef};
+use trans::{CloneNew, Eid, Id, TxMgrRef, Txid};
+use trans::cow::{CowCache, CowRef, IntoCow};
 use super::StoreRef;
 use super::chunk::ChunkMap;
 use super::span::{Extent, Span};
-use super::entry::{EntryList, CutableList};
+use super::entry::{CutableList, EntryList};
 use super::segment::Writer as SegWriter;
-use super::merkle_tree::{MerkleTree, Leaves, Writer as MerkleTreeWriter};
+use super::merkle_tree::{Leaves, MerkleTree, Writer as MerkleTreeWriter};
 
 /// Content
 #[derive(Default, Clone, Deserialize, Serialize)]
@@ -24,8 +24,7 @@ pub struct Content {
     ents: EntryList,
 
     // merkle tree leaves
-    #[serde(skip_serializing, skip_deserializing, default)]
-    leaves: Leaves,
+    #[serde(skip_serializing, skip_deserializing, default)] leaves: Leaves,
 }
 
 impl Content {

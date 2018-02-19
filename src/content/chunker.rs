@@ -1,5 +1,5 @@
 use std::fmt::{self, Debug};
-use std::io::{Write, Result as IoResult, Seek, SeekFrom};
+use std::io::{Result as IoResult, Seek, SeekFrom, Write};
 use std::cmp::min;
 use std::ptr;
 
@@ -31,9 +31,9 @@ const WTR_BUF_LEN: usize = 8 * MAX_SIZE;
 /// Pre-calculated chunker parameters
 #[derive(Clone, Deserialize, Serialize)]
 pub struct ChunkerParams {
-    poly_pow: u64, // poly power
+    poly_pow: u64,     // poly power
     out_map: Vec<u64>, // pre-computed out byte map, length is 256
-    ir: Vec<u64>, // irreducible polynomial, length is 256
+    ir: Vec<u64>,      // irreducible polynomial, length is 256
 }
 
 impl ChunkerParams {
@@ -86,7 +86,7 @@ impl Default for ChunkerParams {
 
 /// Chunker
 pub struct Chunker<W: Write + Seek> {
-    dst: W, // destination writer
+    dst: W,                // destination writer
     params: ChunkerParams, // chunker parameters
     pos: usize,
     chunk_len: usize,
@@ -94,7 +94,7 @@ pub struct Chunker<W: Write + Seek> {
     win_idx: usize,
     roll_hash: u64,
     win: [u8; WIN_SIZE], // rolling hash circle window
-    buf: Vec<u8>, // chunker buffer, fixed size: WTR_BUF_LEN
+    buf: Vec<u8>,        // chunker buffer, fixed size: WTR_BUF_LEN
 }
 
 impl<W: Write + Seek> Chunker<W> {
@@ -223,7 +223,7 @@ impl<W: Write + Seek> Seek for Chunker<W> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Write, Result as IoResult, Seek, SeekFrom, Cursor, copy};
+    use std::io::{copy, Cursor, Result as IoResult, Seek, SeekFrom, Write};
     use std::time::{Duration, Instant};
 
     use base::init_env;
@@ -308,8 +308,8 @@ mod tests {
     }
 
     fn speed_str(duration: &Duration, data_len: usize) -> String {
-        let secs = duration.as_secs() as f32 +
-            duration.subsec_nanos() as f32 / 1_000_000_000.0;
+        let secs = duration.as_secs() as f32
+            + duration.subsec_nanos() as f32 / 1_000_000_000.0;
         let speed = data_len as f32 / (1024.0 * 1024.0) / secs;
         format!("{} MB/s", speed)
     }

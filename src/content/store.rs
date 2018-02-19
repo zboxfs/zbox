@@ -1,20 +1,20 @@
 use std::fmt::{self, Debug};
-use std::io::{Write, Result as IoResult, Seek, SeekFrom};
+use std::io::{Result as IoResult, Seek, SeekFrom, Write};
 
 use error::{Error, Result};
 use base::crypto::Hash;
-use trans::{Eid, Id, CloneNew, TxMgrRef, Txid};
+use trans::{CloneNew, Eid, Id, TxMgrRef, Txid};
 use trans::cow::{Cow, CowRef, IntoCow};
 use trans::trans::Action;
-use volume::{VolumeRef, Persistable};
+use volume::{Persistable, VolumeRef};
 use super::Content;
-use super::content::{ContentRef, Cache as ContentCache,
+use super::content::{Cache as ContentCache, ContentRef,
                      Writer as ContentWriter};
-use super::content_map::{ContentMapEntry, ContentMap};
+use super::content_map::{ContentMap, ContentMapEntry};
 use super::chunk::ChunkMap;
-use super::chunker::{ChunkerParams, Chunker};
-use super::segment::{Segment, SegData, SegRef, SegDataRef, Cache as SegCache,
-                     DataCache as SegDataCache};
+use super::chunker::{Chunker, ChunkerParams};
+use super::segment::{Cache as SegCache, DataCache as SegDataCache, SegData,
+                     SegDataRef, SegRef, Segment};
 
 // segment cache size
 const SEG_CACHE_SIZE: usize = 16;
@@ -35,17 +35,14 @@ pub struct Store {
     #[serde(skip_serializing, skip_deserializing, default)]
     content_cache: ContentCache,
 
-    #[serde(skip_serializing, skip_deserializing, default)]
-    seg_cache: SegCache,
+    #[serde(skip_serializing, skip_deserializing, default)] seg_cache: SegCache,
 
     #[serde(skip_serializing, skip_deserializing, default)]
     segdata_cache: SegDataCache,
 
-    #[serde(skip_serializing, skip_deserializing, default)]
-    txmgr: TxMgrRef,
+    #[serde(skip_serializing, skip_deserializing, default)] txmgr: TxMgrRef,
 
-    #[serde(skip_serializing, skip_deserializing, default)]
-    vol: VolumeRef,
+    #[serde(skip_serializing, skip_deserializing, default)] vol: VolumeRef,
 }
 
 impl Store {
@@ -98,9 +95,9 @@ impl Store {
         content_id: &Eid,
         hash: &Hash,
     ) -> Result<Eid> {
-        let ent = self.content_map.entry(hash.clone()).or_insert_with(|| {
-            ContentMapEntry::new(&content_id)
-        });
+        let ent = self.content_map
+            .entry(hash.clone())
+            .or_insert_with(|| ContentMapEntry::new(&content_id));
         ent.inc_ref()?;
         Ok(ent.content_id().clone())
     }
@@ -115,11 +112,10 @@ impl Store {
         {
             let ctn_ref = self.get_content(content_id)?;
             let ctn = ctn_ref.read().unwrap();
-            let refcnt =
-                self.content_map
-                    .get_mut(ctn.hash())
-                    .ok_or(Error::NoContent)
-                    .and_then(|ent| ent.dec_ref().map_err(|e| Error::from(e)))?;
+            let refcnt = self.content_map
+                .get_mut(ctn.hash())
+                .ok_or(Error::NoContent)
+                .and_then(|ent| ent.dec_ref().map_err(|e| Error::from(e)))?;
             if refcnt > 0 {
                 return Ok(None);
             }

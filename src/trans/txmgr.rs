@@ -8,7 +8,7 @@ use error::{Error, Result};
 use base::IntoRef;
 use volume::VolumeRef;
 use super::{Eid, Id, Txid};
-use super::trans::{Trans, TransRef, Action, TransableRef};
+use super::trans::{Action, Trans, TransRef, TransableRef};
 
 /// Tranaction manager
 #[derive(Default)]

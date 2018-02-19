@@ -12,7 +12,7 @@ pub use self::refcnt::RefCnt;
 pub use self::time::Time;
 pub use self::version::Version;
 
-use std::sync::{Arc, RwLock, Once, ONCE_INIT};
+use std::sync::{Arc, Once, RwLock, ONCE_INIT};
 
 use env_logger;
 

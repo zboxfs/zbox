@@ -9,7 +9,7 @@ use std::cmp::min;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::io::{Read, Write, Cursor};
+use std::io::{Cursor, Read, Write};
 use std::sync::{Arc, RwLock};
 
 use self::bytes::{Buf, BufMut, LittleEndian};
@@ -207,8 +207,8 @@ impl TestEnv {
 
         // open repo
         println!("Create fuzz test env at {:?}.", path);
-        let repo_path = "file://".to_string() +
-            path.join("repo").to_str().unwrap();
+        let repo_path =
+            "file://".to_string() + path.join("repo").to_str().unwrap();
         let repo = RepoOpener::new()
             .create(true)
             .open(&repo_path, "pwd")
@@ -244,9 +244,8 @@ impl TestEnv {
             let max_len = min(DATA_LEN - pos, RND_DATA_LEN - rnd_pos);
             let len = random_u32(max_len as u32) as usize;
             permu.push((Span { pos: rnd_pos, len }, pos));
-            &mut self.data[pos..pos + len].copy_from_slice(
-                &rnd_data[rnd_pos..rnd_pos + len],
-            );
+            &mut self.data[pos..pos + len]
+                .copy_from_slice(&rnd_data[rnd_pos..rnd_pos + len]);
         }
 
         // save seed
@@ -313,9 +312,8 @@ impl TestEnv {
             let pos = opr.1;
             let rnd_pos = opr.0.pos;
             let len = opr.0.len;
-            &mut data[pos..pos + len].copy_from_slice(
-                &rnd_data[rnd_pos..rnd_pos + len],
-            );
+            &mut data[pos..pos + len]
+                .copy_from_slice(&rnd_data[rnd_pos..rnd_pos + len]);
         }
 
         // create and open repo

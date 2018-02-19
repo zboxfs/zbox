@@ -3,7 +3,6 @@ extern crate pkg_config;
 use std::env;
 
 fn main() {
-
     println!("cargo:rerun-if-env-changed=SODIUM_LIB_DIR");
     println!("cargo:rerun-if-env-changed=SODIUM_STATIC");
 
@@ -15,7 +14,6 @@ fn main() {
             None => "dylib",
         };
         println!("cargo:rustc-link-lib={0}=sodium", mode);
-
     } else {
         pkg_config::Config::new()
             .atleast_version("1.0.11")

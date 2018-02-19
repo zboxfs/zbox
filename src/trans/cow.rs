@@ -6,9 +6,9 @@ use std::ops::Deref;
 
 use error::{Error, Result};
 use base::IntoRef;
-use base::lru::{Lru, CountMeter, Pinnable};
-use volume::{VolumeRef, Persistable};
-use super::{Eid, Id, CloneNew, Txid, TxMgrRef};
+use base::lru::{CountMeter, Lru, Pinnable};
+use volume::{Persistable, VolumeRef};
+use super::{CloneNew, Eid, Id, TxMgrRef, Txid};
 use super::trans::{Action, Transable};
 
 /// Cow switch
@@ -46,8 +46,7 @@ struct Slot<T: Id> {
     id: Eid,
     txid: Option<Txid>,
 
-    #[serde(skip_serializing, skip_deserializing, default)]
-    inner: Option<T>,
+    #[serde(skip_serializing, skip_deserializing, default)] inner: Option<T>,
 }
 
 impl<T: Id> Slot<T> {
@@ -85,25 +84,17 @@ where
     left: Option<Slot<T>>,
     right: Option<Slot<T>>,
 
-    #[serde(skip_serializing, skip_deserializing, default)]
-    txid: Option<Txid>,
+    #[serde(skip_serializing, skip_deserializing, default)] txid: Option<Txid>,
 
     #[serde(skip_serializing, skip_deserializing, default)]
     self_ref: CowWeakRef<T>,
 
-    #[serde(skip_serializing, skip_deserializing, default)]
-    txmgr: TxMgrRef,
+    #[serde(skip_serializing, skip_deserializing, default)] txmgr: TxMgrRef,
 }
 
 impl<'d, T> Cow<T>
 where
-    T: Debug
-        + Default
-        + Send
-        + Sync
-        + CloneNew
-        + Persistable<'d>
-        + 'static,
+    T: Debug + Default + Send + Sync + CloneNew + Persistable<'d> + 'static,
 {
     fn new(inner: T, txmgr: &TxMgrRef) -> Self {
         Cow {
@@ -184,18 +175,14 @@ where
     // mutable index by switch
     fn index_mut_by(&mut self, switch: Switch) -> &mut T {
         match switch {
-            Switch::Left => {
-                match self.left {
-                    Some(ref mut slot) => return slot.inner_ref_mut(),
-                    None => {}
-                }
-            }
-            Switch::Right => {
-                match self.right {
-                    Some(ref mut slot) => return slot.inner_ref_mut(),
-                    None => {}
-                }
-            }
+            Switch::Left => match self.left {
+                Some(ref mut slot) => return slot.inner_ref_mut(),
+                None => {}
+            },
+            Switch::Right => match self.right {
+                Some(ref mut slot) => return slot.inner_ref_mut(),
+                None => {}
+            },
         }
         panic!("Cow slot is empty");
     }
@@ -216,18 +203,14 @@ where
 
     fn slot_by(&self, switch: Switch) -> &Slot<T> {
         match switch {
-            Switch::Left => {
-                match self.left {
-                    Some(ref slot) => return slot,
-                    None => {}
-                }
-            }
-            Switch::Right => {
-                match self.right {
-                    Some(ref slot) => return slot,
-                    None => {}
-                }
-            }
+            Switch::Left => match self.left {
+                Some(ref slot) => return slot,
+                None => {}
+            },
+            Switch::Right => match self.right {
+                Some(ref slot) => return slot,
+                None => {}
+            },
         }
         panic!("Cow slot is empty");
     }
@@ -244,18 +227,14 @@ where
 
     fn slot_mut_by(&mut self, switch: Switch) -> &mut Slot<T> {
         match switch {
-            Switch::Left => {
-                match self.left {
-                    Some(ref mut slot) => return slot,
-                    None => {}
-                }
-            }
-            Switch::Right => {
-                match self.right {
-                    Some(ref mut slot) => return slot,
-                    None => {}
-                }
-            }
+            Switch::Left => match self.left {
+                Some(ref mut slot) => return slot,
+                None => {}
+            },
+            Switch::Right => match self.right {
+                Some(ref mut slot) => return slot,
+                None => {}
+            },
         }
         panic!("Cow slot is empty");
     }
@@ -303,13 +282,7 @@ where
 
 impl<'d, T> Deref for Cow<T>
 where
-    T: Debug
-        + Default
-        + Send
-        + Sync
-        + CloneNew
-        + Persistable<'d>
-        + 'static,
+    T: Debug + Default + Send + Sync + CloneNew + Persistable<'d> + 'static,
 {
     type Target = T;
 
@@ -361,25 +334,13 @@ where
 
 impl<'d, T> Persistable<'d> for Cow<T>
 where
-    T: Debug
-        + Default
-        + Send
-        + Sync
-        + CloneNew
-        + Persistable<'d>
-        + 'static,
+    T: Debug + Default + Send + Sync + CloneNew + Persistable<'d> + 'static,
 {
 }
 
 impl<'d, T> Transable for Cow<T>
 where
-    T: Debug
-        + Default
-        + Send
-        + Sync
-        + CloneNew
-        + Persistable<'d>
-        + 'static,
+    T: Debug + Default + Send + Sync + CloneNew + Persistable<'d> + 'static,
 {
     fn commit(&mut self, action: Action, vol: &VolumeRef) -> Result<()> {
         let txid = self.txid.unwrap();
@@ -450,13 +411,7 @@ pub type CowWeakRef<T> = Weak<RwLock<Cow<T>>>;
 /// Wrap value into Cow reference
 pub trait IntoCow<'de>
 where
-    Self: Debug
-        + Default
-        + Send
-        + Sync
-        + CloneNew
-        + Persistable<'de>
-        + 'static,
+    Self: Debug + Default + Send + Sync + CloneNew + Persistable<'de> + 'static,
 {
     fn into_cow(self, txmgr: &TxMgrRef) -> Result<CowRef<Self>> {
         let cow_ref = Cow::new(self, txmgr).into_ref();
@@ -475,11 +430,7 @@ pub struct CowPinChecker {}
 
 impl<T> Pinnable<CowRef<T>> for CowPinChecker
 where
-    T: Debug
-        + Default
-        + Send
-        + Sync
-        + CloneNew,
+    T: Debug + Default + Send + Sync + CloneNew,
 {
     fn is_pinned(&self, item: &CowRef<T>) -> bool {
         // if cannot read the inner cow entity, we assume it is pinned
@@ -499,13 +450,7 @@ pub struct CowCache<T: Debug + Default + Send + Sync + CloneNew> {
 
 impl<'d, T> CowCache<T>
 where
-    T: Debug
-        + Default
-        + Send
-        + Sync
-        + CloneNew
-        + Persistable<'d>
-        + 'static,
+    T: Debug + Default + Send + Sync + CloneNew + Persistable<'d> + 'static,
 {
     pub fn new(capacity: usize, txmgr: &TxMgrRef) -> Self {
         CowCache {
@@ -542,7 +487,7 @@ mod tests {
     use std::{thread, time};
     use base::init_env;
     use base::crypto::{Cipher, Cost};
-    use trans::{TxMgr, Txid, Eid, CloneNew};
+    use trans::{CloneNew, Eid, TxMgr, Txid};
     use volume::Volume;
 
     fn setup_vol() -> VolumeRef {
@@ -636,6 +581,5 @@ mod tests {
         for child in children {
             let _ = child.join();
         }
-
     }
 }

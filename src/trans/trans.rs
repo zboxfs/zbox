@@ -83,9 +83,8 @@ impl Trans {
                     if using > 1 {
                         error!(
                             "Cannot delete entity in use (using: ({}), \
-                            cohort: {:?})",
-                            using,
-                            cohort
+                             cohort: {:?})",
+                            using, cohort
                         );
                         return Err(Error::InUse);
                     }

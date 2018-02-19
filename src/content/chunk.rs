@@ -87,11 +87,9 @@ impl ChunkMapInner {
     }
 
     fn get(&self, hash: &Hash) -> Option<ChunkLoc> {
-        self.map.get(hash).map(|&(seg_idx, chk_idx)| {
-            ChunkLoc {
-                seg_id: self.seg_ids[seg_idx as usize].clone(),
-                idx: chk_idx,
-            }
+        self.map.get(hash).map(|&(seg_idx, chk_idx)| ChunkLoc {
+            seg_id: self.seg_ids[seg_idx as usize].clone(),
+            idx: chk_idx,
         })
     }
 
@@ -109,9 +107,9 @@ impl ChunkMapInner {
     fn remove_chunks(&mut self, seg_id: &Eid, chk_indices: &[usize]) {
         self.seg_ids.iter().position(|s| s == seg_id).and_then(
             |idx| -> Option<()> {
-                self.map.retain(
-                    |_, val| val.0 != idx || !chk_indices.contains(&val.1),
-                );
+                self.map.retain(|_, val| {
+                    val.0 != idx || !chk_indices.contains(&val.1)
+                });
                 None
             },
         );
@@ -172,8 +170,7 @@ impl<'de> Deserialize<'de> for ChunkMap {
     where
         D: Deserializer<'de>,
     {
-        ChunkMapInner::deserialize(deserializer).map(|inner| {
-            ChunkMap(Arc::new(RwLock::new(inner)))
-        })
+        ChunkMapInner::deserialize(deserializer)
+            .map(|inner| ChunkMap(Arc::new(RwLock::new(inner))))
     }
 }

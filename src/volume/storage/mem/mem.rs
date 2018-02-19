@@ -100,7 +100,6 @@ impl Storage for MemStorage {
         buf: &mut [u8],
         txid: Txid,
     ) -> IoResult<usize> {
-
         fn copy_buf(buf: &mut [u8], src: &[u8], offset: u64) -> usize {
             let offset = offset as usize;
             let read_len = min(buf.len(), src.len() - offset);
@@ -117,12 +116,10 @@ impl Storage for MemStorage {
         }
         match self.emap.get(id) {
             Some(data) => Ok(copy_buf(buf, &data, offset)),
-            None => {
-                Err(IoError::new(
-                    ErrorKind::NotFound,
-                    Error::NoEntity.description(),
-                ))
-            }
+            None => Err(IoError::new(
+                ErrorKind::NotFound,
+                Error::NoEntity.description(),
+            )),
         }
     }
 
@@ -209,12 +206,12 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use base::init_env;
-    use base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE, Cost, Cipher};
+    use base::crypto::{Cipher, Cost, Crypto, RandomSeed, RANDOM_SEED_SIZE};
     use super::*;
 
     fn speed_str(duration: &Duration, data_len: usize) -> String {
-        let secs = duration.as_secs() as f32 +
-            duration.subsec_nanos() as f32 / 1_000_000_000.0;
+        let secs = duration.as_secs() as f32
+            + duration.subsec_nanos() as f32 / 1_000_000_000.0;
         let speed = data_len as f32 / (1024.0 * 1024.0) / secs;
         format!("{} MB/s", speed)
     }
