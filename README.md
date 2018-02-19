@@ -32,6 +32,8 @@ Features
   no knowledge can be leaked to underlying storage
 - State-of-the-art cryptography: AES-256-GCM (hardware), XChaCha20-Poly1305,
   Argon2 password hashing and etc., empowered by [libsodium]
+- Support multiple storages, including memory, OS file system, RDBMS (coming
+  soon), Key-value object store (coming soon) and more
 - Content-based data chunk deduplication and file-based deduplication
 - Data compression using [LZ4] in fast mode
 - Data integrity is guaranteed by authenticated encryption primitives (AEAD
@@ -40,8 +42,6 @@ Features
 - Copy-on-write (COW :cow:) semantics
 - ACID transactional operations
 - Snapshot :camera:
-- Support multiple storages, including memory, OS file system, RDBMS (coming
-  soon), Key-value object store (coming soon) and more
 - Built with [Rust] :hearts:
 
 ## Comparison
