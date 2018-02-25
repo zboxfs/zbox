@@ -415,7 +415,7 @@ pub type HashState = [u8; HASH_STATE_SIZE];
 /// It represents a maximum amount of computations to perform. Higher level
 /// will require more CPU cycles to compute.
 ///
-/// See https://download.libsodium.org/doc/password_hashing/ for more details.
+/// See <https://download.libsodium.org/doc/password_hashing/> for more details.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum OpsLimit {
     Interactive = 4,
@@ -445,7 +445,7 @@ impl From<u8> for OpsLimit {
 /// It represents a maximum amount of memory required to perform password
 /// hashing.
 ///
-/// See https://download.libsodium.org/doc/password_hashing/ for more details.
+/// See <https://download.libsodium.org/doc/password_hashing/> for more details.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum MemLimit {
     /// 64 MB
