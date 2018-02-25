@@ -33,7 +33,7 @@ vio-test = []
 
 [dependencies]
 bytes = "0.4.6"
-env_logger = "0.5.3"
+env_logger = "0.5.4"
 log = "0.4.1"
 rmp-serde = "0.13.7"
 serde = "1.0.27"
