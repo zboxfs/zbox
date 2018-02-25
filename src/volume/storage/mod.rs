@@ -1,5 +1,7 @@
 mod file;
 mod mem;
+#[cfg(feature = "zbox-cloud")]
+mod zbox;
 
 use std::fmt::Debug;
 use std::io::Result as IoResult;

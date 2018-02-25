@@ -108,6 +108,9 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
+#[cfg(feature = "zbox-cloud")]
+extern crate reqwest;
+
 macro_rules! map_io_err {
     ($x:expr) => {
         $x.map_err(|e| IoError::new(ErrorKind::Other, e.description()));
