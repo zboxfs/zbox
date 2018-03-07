@@ -17,7 +17,7 @@ travis-ci = { repository = "zboxfs/zbox" }
 
 [lib]
 name = "zbox"
-crate-type = ["rlib", "dylib"]
+crate-type = ["rlib", "dylib", "staticlib"]
 
 [features]
 default = []
@@ -34,11 +34,12 @@ vio-test = []
 [dependencies]
 bytes = "0.4.6"
 env_logger = "0.5.4"
+libc = "0.2"
 log = "0.4.1"
+lz4 = "1.22.0"
 rmp-serde = "0.13.7"
 serde = "1.0.27"
 serde_derive = "1.0.27"
-lz4 = "1.22.0"
 
 [dependencies.linked-hash-map]
 version = "0.5.1"

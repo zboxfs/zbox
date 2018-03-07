@@ -97,6 +97,7 @@
 
 extern crate bytes;
 extern crate env_logger;
+extern crate libc;
 extern crate linked_hash_map;
 #[macro_use]
 extern crate log;
@@ -121,6 +122,8 @@ mod repo;
 mod trans;
 mod version;
 mod volume;
+
+pub mod ffi;
 
 pub use self::error::{Error, Result};
 pub use self::base::init_env;
