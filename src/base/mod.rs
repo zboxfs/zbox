@@ -25,7 +25,7 @@ static INIT: Once = ONCE_INIT;
 pub fn init_env() {
     // only call the initialisation code once globally
     INIT.call_once(|| {
-        env_logger::init();
+        env_logger::try_init().ok();
         crypto::Crypto::init().expect("Initialise crypto failed");
     });
 }
