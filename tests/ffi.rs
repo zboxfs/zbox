@@ -13,8 +13,8 @@ fn ffi_c() {
     let mut cmd = Command::new("gcc");
     cmd.arg("-o")
         .arg(&exe)
-        .arg("-lzbox")
         .arg("tests/ffi.c")
+        .arg("-lzbox")
         .arg("-Isrc/ffi/include");
 
     if cfg!(debug_assertions) {
@@ -22,7 +22,6 @@ fn ffi_c() {
     } else {
         cmd.arg("-Ltarget/release");
     }
-    println!("{:#?}", cmd);
 
     // compile
     let output = cmd.output().expect("Failed to run command");
