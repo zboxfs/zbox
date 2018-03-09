@@ -257,6 +257,7 @@ impl Volume {
             payload,
         )?;
         let buf = super_blk.serialize()?;
+        self.meta.ctime = super_blk.ctime;
         self.storage.put_super_blk(&buf)
     }
 
