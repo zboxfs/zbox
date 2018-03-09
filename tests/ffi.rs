@@ -10,7 +10,7 @@ fn ffi_c() {
     let output_dir = tmpdir.path();
     let exe = output_dir.join("ffi");
 
-    let mut cmd = Command::new("cc");
+    let mut cmd = Command::new("gcc");
     cmd.arg("-o")
         .arg(&exe)
         .arg("-lzbox")
@@ -22,6 +22,7 @@ fn ffi_c() {
     } else {
         cmd.arg("-Ltarget/release");
     }
+    println!("{:#?}", cmd);
 
     // compile
     let output = cmd.output().expect("Failed to run command");
