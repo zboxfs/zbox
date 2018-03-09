@@ -1,6 +1,8 @@
 ZBOX_EXPORT = \
 	zbox.h \
-	zbox/ffi.h
+	zbox/common.h \
+	zbox/file.h \
+	zbox/repo.h
 
 EXTRA_SRC = $(ZBOX_EXPORT) \
 	zbox/version.h.in

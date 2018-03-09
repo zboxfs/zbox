@@ -7,6 +7,7 @@ use super::txid::Txid;
 /// Unique entity ID.
 ///
 /// This represents a 32-byte randomly generated unique ID.
+#[repr(C)]
 #[derive(PartialEq, Eq, Hash, Default, Clone, Deserialize, Serialize)]
 pub struct Eid([u8; Eid::EID_SIZE]);
 

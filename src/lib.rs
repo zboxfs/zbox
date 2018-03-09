@@ -97,7 +97,6 @@
 
 extern crate bytes;
 extern crate env_logger;
-extern crate libc;
 extern crate linked_hash_map;
 #[macro_use]
 extern crate log;

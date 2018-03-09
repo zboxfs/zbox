@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::io::SeekFrom;
 use std::time::SystemTime;
+use std::fmt::{self, Debug};
 
 use error::Error;
 use base::{self, Time};
@@ -509,7 +510,6 @@ impl RepoInfo {
 /// [`init_env`]: fn.init_env.html
 /// [`RepoOpener`]: struct.RepoOpener.html
 /// [`read-only`]: struct.RepoOpener.html#method.read_only
-#[derive(Debug)]
 pub struct Repo {
     fs: Fs,
 }
@@ -552,9 +552,9 @@ impl Repo {
             uri: vol_meta.uri.clone(),
             cost: vol_meta.cost.clone(),
             cipher: vol_meta.cipher.clone(),
-            ctime: vol_meta.ctime.clone(),
             version_limit: fs_meta.version_limit,
             read_only: fs_meta.read_only,
+            ctime: vol_meta.ctime.clone(),
         }
     }
 
@@ -790,5 +790,11 @@ impl Repo {
         to: Q,
     ) -> Result<()> {
         self.fs.rename(from.as_ref(), to.as_ref())
+    }
+}
+
+impl Debug for Repo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Repo").finish()
     }
 }

@@ -416,6 +416,7 @@ pub type HashState = [u8; HASH_STATE_SIZE];
 /// will require more CPU cycles to compute.
 ///
 /// See <https://download.libsodium.org/doc/password_hashing/> for more details.
+#[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum OpsLimit {
     Interactive = 4,
@@ -446,16 +447,17 @@ impl From<u8> for OpsLimit {
 /// hashing.
 ///
 /// See <https://download.libsodium.org/doc/password_hashing/> for more details.
+#[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum MemLimit {
     /// 64 MB
-    Interactive = 67108864,
+    Interactive = 67_108_864,
 
     /// 256 MB
-    Moderate = 268435456,
+    Moderate = 268_435_456,
 
     /// 1024 MB
-    Sensitive = 1073741824,
+    Sensitive = 1_073_741_824,
 }
 
 impl Default for MemLimit {
@@ -551,13 +553,14 @@ impl Default for Key {
 }
 
 /// Crypto cipher primitivies.
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Cipher {
     /// XChaCha20-Poly1305
-    Xchacha,
+    Xchacha = 0,
 
     /// AES256-GCM, hardware only
-    Aes,
+    Aes = 1,
 }
 
 impl Cipher {

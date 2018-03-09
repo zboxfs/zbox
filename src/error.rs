@@ -197,6 +197,7 @@ impl From<DecodeError> for Error {
         Error::Decode(err)
     }
 }
+
 impl From<VarError> for Error {
     fn from(err: VarError) -> Error {
         Error::Var(err)
@@ -206,6 +207,62 @@ impl From<VarError> for Error {
 impl From<IoError> for Error {
     fn from(err: IoError) -> Error {
         Error::Io(err)
+    }
+}
+
+impl Into<i32> for Error {
+    fn into(self) -> i32 {
+        match self {
+            Error::RefOverflow => 1000,
+            Error::RefUnderflow => 1001,
+
+            Error::InitCrypto => 1010,
+            Error::NoAesHardware => 1011,
+            Error::Hashing => 1012,
+            Error::InvalidCost => 1013,
+            Error::InvalidCipher => 1014,
+            Error::Encrypt => 1015,
+            Error::Decrypt => 1016,
+
+            Error::InvalidUri => 1020,
+            Error::InvalidSuperBlk => 1021,
+            Error::Corrupted => 1022,
+            Error::Opened => 1023,
+            Error::WrongVersion => 1024,
+            Error::NoEntity => 1025,
+
+            Error::InTrans => 1030,
+            Error::NotInTrans => 1031,
+            Error::NoTrans => 1032,
+            Error::Uncompleted => 1033,
+            Error::InUse => 1034,
+
+            Error::NoContent => 1040,
+
+            Error::InvalidArgument => 1050,
+            Error::InvalidPath => 1051,
+            Error::NotFound => 1052,
+            Error::AlreadyExists => 1053,
+            Error::IsRoot => 1054,
+            Error::IsDir => 1055,
+            Error::IsFile => 1056,
+            Error::NotDir => 1057,
+            Error::NotFile => 1058,
+            Error::NotEmpty => 1059,
+            Error::NoVersion => 1060,
+
+            Error::ReadOnly => 1070,
+            Error::CannotRead => 1071,
+            Error::CannotWrite => 1072,
+            Error::NotWrite => 1073,
+            Error::NotFinish => 1074,
+            Error::Closed => 1075,
+
+            Error::Encode(_) => 2000,
+            Error::Decode(_) => 2010,
+            Error::Var(_) => 2020,
+            Error::Io(_) => 2030,
+        }
     }
 }
 
