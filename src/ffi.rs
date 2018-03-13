@@ -2,13 +2,16 @@ use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_long};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::mem::forget;
+use std::slice::{from_raw_parts, from_raw_parts_mut};
+use std::io::{Read, Seek, SeekFrom, Write};
 
 use base::init_env;
 use base::crypto::{Cipher, MemLimit, OpsLimit};
 use trans::Eid;
 use repo::{Repo, RepoOpener};
-use fs::Metadata;
-use file::File;
+use fs::{Metadata, Version};
+use file::{File, VersionReader};
+use error::Error;
 
 #[allow(non_camel_case_types)]
 type boolean_t = u8;
@@ -25,6 +28,16 @@ type time_t = c_long;
 #[inline]
 fn to_time_t(t: SystemTime) -> time_t {
     t.duration_since(UNIX_EPOCH).unwrap().as_secs() as time_t
+}
+
+#[inline]
+fn to_seek_from(offset: i64, whence: c_int) -> SeekFrom {
+    match whence {
+        0 => SeekFrom::Start(offset as u64),
+        1 => SeekFrom::Current(offset),
+        2 => SeekFrom::End(offset),
+        _ => unimplemented!(),
+    }
 }
 
 #[no_mangle]
@@ -437,6 +450,31 @@ pub struct VersionList {
     capacity: size_t,
 }
 
+impl From<Vec<Version>> for VersionList {
+    fn from(versions: Vec<Version>) -> Self {
+        let mut versions: Vec<CVersion> = versions
+            .iter()
+            .map(|ver| -> CVersion {
+                CVersion {
+                    num: ver.num(),
+                    len: ver.len(),
+                    created: to_time_t(ver.created()),
+                }
+            })
+            .collect();
+        versions.shrink_to_fit();
+
+        let vl = VersionList {
+            versions: versions.as_mut_ptr(),
+            len: versions.len(),
+            capacity: versions.capacity(),
+        };
+        forget(versions);
+
+        vl
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn zbox_repo_history(
     version_list: *mut VersionList,
@@ -447,22 +485,7 @@ pub extern "C" fn zbox_repo_history(
         let path = CStr::from_ptr(path).to_str().unwrap();
         match (*repo).history(path) {
             Ok(versions) => {
-                let mut versions: Vec<CVersion> = versions
-                    .iter()
-                    .map(|ver| -> CVersion {
-                        CVersion {
-                            num: ver.num(),
-                            len: ver.len(),
-                            created: to_time_t(ver.created()),
-                        }
-                    })
-                    .collect();
-
-                versions.shrink_to_fit();
-                (*version_list).versions = versions.as_mut_ptr();
-                (*version_list).len = versions.len();
-                (*version_list).capacity = versions.capacity();
-                forget(versions);
+                (*version_list) = VersionList::from(versions);
                 0
             }
             Err(err) => err.into(),
@@ -552,6 +575,187 @@ pub extern "C" fn zbox_repo_rename(
         match (*repo).rename(from, to) {
             Ok(_) => 0,
             Err(err) => err.into(),
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_file_metadata(
+    metadata: *mut CMetadata,
+    file: *mut File,
+) -> c_int {
+    unsafe {
+        match (*file).metadata() {
+            Ok(meta) => {
+                (*metadata) = CMetadata::from(meta);
+                0
+            }
+            Err(err) => err.into(),
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_file_history(
+    version_list: *mut VersionList,
+    file: *mut File,
+) -> c_int {
+    unsafe {
+        match (*file).history() {
+            Ok(versions) => {
+                (*version_list) = VersionList::from(versions);
+                0
+            }
+            Err(err) => err.into(),
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_file_curr_version(
+    version_num: *mut size_t,
+    file: *mut File,
+) -> c_int {
+    unsafe {
+        match (*file).curr_version() {
+            Ok(ver) => {
+                (*version_num) = ver;
+                0
+            }
+            Err(err) => err.into(),
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_file_read(
+    dst: *mut uint8_t,
+    len: size_t,
+    file: *mut File,
+) -> c_int {
+    unsafe {
+        let dst = from_raw_parts_mut(dst, len);
+        match (*file).read(dst) {
+            Ok(read) => read as c_int,
+            Err(err) => Error::from(err).into(),
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_file_version_reader(
+    reader: *mut *mut VersionReader,
+    ver_num: size_t,
+    file: *mut File,
+) -> c_int {
+    unsafe {
+        match (*file).version_reader(ver_num) {
+            Ok(rdr) => {
+                *reader = Box::into_raw(Box::new(rdr));
+                0
+            }
+            Err(err) => Error::from(err).into(),
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_file_version_read(
+    dst: *mut uint8_t,
+    len: size_t,
+    reader: *mut VersionReader,
+) -> c_int {
+    unsafe {
+        let dst = from_raw_parts_mut(dst, len);
+        match (*reader).read(dst) {
+            Ok(read) => read as c_int,
+            Err(err) => Error::from(err).into(),
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_file_version_reader_seek(
+    reader: *mut VersionReader,
+    offset: i64,
+    whence: c_int,
+) -> c_int {
+    unsafe {
+        let seek = to_seek_from(offset, whence);
+        match (*reader).seek(seek) {
+            Ok(_) => 0,
+            Err(err) => Error::from(err).into(),
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_close_version_reader(reader: *mut VersionReader) {
+    let _owned = unsafe { Box::from_raw(reader) };
+    // _owned droped here
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_file_write(
+    file: *mut File,
+    buf: *const uint8_t,
+    len: size_t,
+) -> c_int {
+    unsafe {
+        let buf = from_raw_parts(buf, len);
+        match (*file).write(buf) {
+            Ok(written) => written as c_int,
+            Err(err) => Error::from(err).into(),
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_file_finish(file: *mut File) -> c_int {
+    unsafe {
+        match (*file).finish() {
+            Ok(_) => 0,
+            Err(err) => Error::from(err).into(),
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_file_write_once(
+    file: *mut File,
+    buf: *const uint8_t,
+    len: size_t,
+) -> c_int {
+    unsafe {
+        let buf = from_raw_parts(buf, len);
+        match (*file).write_once(buf) {
+            Ok(_) => 0,
+            Err(err) => Error::from(err).into(),
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_file_seek(
+    file: *mut File,
+    offset: i64,
+    whence: c_int,
+) -> c_int {
+    unsafe {
+        let seek = to_seek_from(offset, whence);
+        match (*file).seek(seek) {
+            Ok(_) => 0,
+            Err(err) => Error::from(err).into(),
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_file_set_len(file: *mut File, len: size_t) -> c_int {
+    unsafe {
+        match (*file).set_len(len) {
+            Ok(_) => 0,
+            Err(err) => Error::from(err).into(),
         }
     }
 }

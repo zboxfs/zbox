@@ -5,7 +5,7 @@ use self::tempdir::TempDir;
 use std::process::Command;
 
 #[test]
-fn ffi_c() {
+fn ffi() {
     let tmpdir = TempDir::new("zbox_test_ffi").expect("Create temp dir failed");
     let output_dir = tmpdir.path();
     let exe = output_dir.join("ffi");
