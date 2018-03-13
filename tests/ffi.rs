@@ -24,12 +24,16 @@ fn ffi_c() {
     }
 
     // compile
-    let output = cmd.output().expect("Failed to run command");
-    println!("{:#?}", output);
+    let output = cmd.output().expect("Failed to run gcc");
+    if !output.status.success() {
+        println!("{:#?}", output);
+    }
     assert!(output.status.success());
 
     // execute
-    let output = Command::new(&exe).output().expect("Failed to run command");
-    println!("{:#?}", output);
+    let output = Command::new(&exe).output().expect("Failed to run ffi");
+    if !output.status.success() {
+        println!("{:#?}", output);
+    }
     assert!(output.status.success());
 }

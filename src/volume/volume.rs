@@ -82,7 +82,7 @@ impl SuperBlk {
         let mut ret = Vec::with_capacity(len);
         ret.put(self.pwd_hash.salt.as_ref());
         ret.put_u8(self.crypto.cost.to_u8());
-        ret.put_u8(self.crypto.cipher.to_u8());
+        ret.put_u8(self.crypto.cipher.into());
         ret.put(&enc_body);
         ret.put(&enc_payload);
 

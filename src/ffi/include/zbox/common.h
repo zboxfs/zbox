@@ -30,6 +30,46 @@ enum zbox_cipher {
     ZBOX_CIPHER_AES
 };
 
+enum zbox_file_type {
+    ZBOX_FTYPE_FILE,
+    ZBOX_FTYPE_DIR
+};
+
+struct zbox_metadata {
+    enum zbox_file_type ftype;
+    size_t len;
+    size_t curr_version;
+    time_t created;
+    time_t modified;
+};
+
+struct zbox_dir_entry {
+    const char *path;
+    const char *file_name;
+    struct zbox_metadata metadata;
+};
+
+struct zbox_dir_entry_list {
+    struct zbox_dir_entry *entries;
+    size_t len;
+    size_t capacity;
+};
+
+struct zbox_version {
+    size_t num;
+    size_t len;
+    time_t created;
+};
+
+struct zbox_version_list {
+    struct zbox_version *versions;
+    size_t len;
+    size_t capacity;
+};
+
+typedef void *zbox_repo;
+typedef void *zbox_file;
+
 // init env
 extern int zbox_init_env();
 

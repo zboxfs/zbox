@@ -416,7 +416,6 @@ pub type HashState = [u8; HASH_STATE_SIZE];
 /// will require more CPU cycles to compute.
 ///
 /// See <https://download.libsodium.org/doc/password_hashing/> for more details.
-#[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum OpsLimit {
     Interactive = 4,
@@ -430,12 +429,22 @@ impl Default for OpsLimit {
     }
 }
 
-impl From<u8> for OpsLimit {
-    fn from(n: u8) -> Self {
+impl Into<i32> for OpsLimit {
+    fn into(self) -> i32 {
+        match self {
+            OpsLimit::Interactive => 0,
+            OpsLimit::Moderate => 1,
+            OpsLimit::Sensitive => 2,
+        }
+    }
+}
+
+impl From<i32> for OpsLimit {
+    fn from(n: i32) -> Self {
         match n {
-            4 => OpsLimit::Interactive,
-            6 => OpsLimit::Moderate,
-            8 => OpsLimit::Sensitive,
+            0 => OpsLimit::Interactive,
+            1 => OpsLimit::Moderate,
+            2 => OpsLimit::Sensitive,
             _ => unimplemented!(),
         }
     }
@@ -447,7 +456,6 @@ impl From<u8> for OpsLimit {
 /// hashing.
 ///
 /// See <https://download.libsodium.org/doc/password_hashing/> for more details.
-#[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum MemLimit {
     /// 64 MB
@@ -463,6 +471,27 @@ pub enum MemLimit {
 impl Default for MemLimit {
     fn default() -> Self {
         MemLimit::Interactive
+    }
+}
+
+impl Into<i32> for MemLimit {
+    fn into(self) -> i32 {
+        match self {
+            MemLimit::Interactive => 0,
+            MemLimit::Moderate => 1,
+            MemLimit::Sensitive => 2,
+        }
+    }
+}
+
+impl From<i32> for MemLimit {
+    fn from(n: i32) -> Self {
+        match n {
+            0 => MemLimit::Interactive,
+            1 => MemLimit::Moderate,
+            2 => MemLimit::Sensitive,
+            _ => unimplemented!(),
+        }
     }
 }
 
@@ -553,7 +582,6 @@ impl Default for Key {
 }
 
 /// Crypto cipher primitivies.
-#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Cipher {
     /// XChaCha20-Poly1305
@@ -566,19 +594,40 @@ pub enum Cipher {
 impl Cipher {
     pub(crate) const BYTES_LEN: usize = 1;
 
-    pub(crate) fn to_u8(&self) -> u8 {
-        match *self {
-            Cipher::Aes => 0,
-            Cipher::Xchacha => 1,
-        }
-    }
-
     pub(crate) fn from_u8(s: u8) -> Result<Self> {
         Ok(match s {
-            0 => Cipher::Aes,
-            1 => Cipher::Xchacha,
+            0 => Cipher::Xchacha,
+            1 => Cipher::Aes,
             _ => return Err(Error::InvalidCipher),
         })
+    }
+}
+
+impl Into<u8> for Cipher {
+    fn into(self) -> u8 {
+        match self {
+            Cipher::Xchacha => 0,
+            Cipher::Aes => 1,
+        }
+    }
+}
+
+impl Into<i32> for Cipher {
+    fn into(self) -> i32 {
+        match self {
+            Cipher::Xchacha => 0,
+            Cipher::Aes => 1,
+        }
+    }
+}
+
+impl From<i32> for Cipher {
+    fn from(n: i32) -> Self {
+        match n {
+            0 => Cipher::Xchacha,
+            1 => Cipher::Aes,
+            _ => unimplemented!(),
+        }
     }
 }
 

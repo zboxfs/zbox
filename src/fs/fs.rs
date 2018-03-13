@@ -423,7 +423,7 @@ impl Fs {
     pub fn remove_dir_all(&mut self, path: &Path) -> Result<()> {
         for child in self.read_dir(path)? {
             let child_path = child.path();
-            match child.file_type() {
+            match child.metadata().file_type() {
                 FileType::File => self.remove_file(&child_path)?,
                 FileType::Dir => self.remove_dir_all(&child_path)?,
             }

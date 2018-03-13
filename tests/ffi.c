@@ -5,41 +5,126 @@
 #include "zbox.h"
 
 int main() {
+  const char *uri = "mem://repo";
+  const char *pwd = "pwd";
+  bool result;
   int ret;
 
   ret = zbox_init_env();
-  if (ret) {
-      return ret;
-  }
+  assert(!ret);
 
   // opener
   zbox_opener opener = zbox_create_opener();
+  zbox_opener_ops_limit(opener, ZBOX_OPS_MODERATE);
+  zbox_opener_mem_limit(opener, ZBOX_MEM_INTERACTIVE);
+  zbox_opener_cipher(opener, ZBOX_CIPHER_XCHACHA);
   zbox_opener_create(opener, true);
   zbox_opener_version_limit(opener, 2);
 
-  // repo
+  // open repo
   zbox_repo repo;
-  ret = zbox_open_repo(&repo, opener, "mem://repo", "pwd");
+  ret = zbox_open_repo(&repo, opener, uri, pwd);
   zbox_free_opener(opener);
-  if (ret) {
-      return ret;
-  }
+  assert(!ret);
 
-  // repo.exists
-  bool result;
+  // repo exists
   ret = zbox_repo_exists(&result, "wrong uri");
-  assert(ret == 1020);  // InvalidUri error
+  assert(ret == ZBOX_ERR_INVALIDURI);  // InvalidUri error
 
   // repo info
   struct zbox_repo_info info;
   zbox_get_repo_info(&info, repo);
   assert(info.version_limit == 2);
-  assert(strcmp(info.uri, "mem://repo") == 0);
+  assert(!strcmp(info.uri, uri));
+  assert(info.ops_limit == ZBOX_OPS_MODERATE);
+  assert(info.mem_limit == ZBOX_MEM_INTERACTIVE);
+  assert(info.cipher == ZBOX_CIPHER_XCHACHA);
   assert(!info.is_read_only);
   assert(info.created > 0);
   zbox_destroy_repo_info(&info);
 
+  // reset password
+  ret = zbox_repo_reset_password(repo, pwd, "new pwd",
+      ZBOX_OPS_INTERACTIVE, ZBOX_MEM_MODERATE);
+
+  // path exists
+  result = zbox_repo_path_exists(repo, "/");
+  assert(result);
+  result = zbox_repo_path_exists(repo, "/non-exists");
+  assert(!result);
+
+  // is file and is dir
+  result = zbox_repo_is_file(repo, "/");
+  assert(!result);
+  result = zbox_repo_is_dir(repo, "/");
+  assert(result);
+
+  // create file
+  zbox_file file;
+  ret = zbox_repo_create_file(&file, repo, "/file");
+  assert(!ret);
+  zbox_close_file(file);
+
+  // open and close file
+  zbox_file file2;
+  ret = zbox_repo_open_file(&file2, repo, "/file");
+  assert(!ret);
+  zbox_close_file(file2);
+
+  // create dir
+  ret = zbox_repo_create_dir(repo, "/dir");
+  assert(!ret);
+  ret = zbox_repo_create_dir_all(repo, "/dir1/dir2/dir3");
+  assert(!ret);
+
+  // read dir
+  struct zbox_dir_entry_list dlist;
+  ret = zbox_repo_read_dir(&dlist, repo, "/");
+  assert(!ret);
+  assert(dlist.entries);
+  assert(dlist.len == 3);
+  assert(!strcmp(dlist.entries[0].path, "/file"));
+  assert(!strcmp(dlist.entries[0].file_name, "file"));
+  assert(!strcmp(dlist.entries[1].path, "/dir"));
+  assert(!strcmp(dlist.entries[1].file_name, "dir"));
+  assert(!strcmp(dlist.entries[2].path, "/dir1"));
+  assert(!strcmp(dlist.entries[2].file_name, "dir1"));
+  zbox_destroy_dir_entry_list(&dlist);
+
+  // metadata
+  struct zbox_metadata meta;
+  ret = zbox_repo_metadata(&meta, repo, "/dir");
+  assert(!ret);
+  assert(meta.ftype == ZBOX_FTYPE_DIR);
+
+  // history
+  struct zbox_version_list vlist;
+  ret = zbox_repo_history(&vlist, repo, "/file");
+  assert(!ret);
+  assert(vlist.len == 1);
+  assert(vlist.versions[0].num == 1);
+  assert(vlist.versions[0].len == 0);
+  zbox_destroy_version_list(&vlist);
+
+  // copy
+  ret = zbox_repo_copy("/file2", "/file", repo);
+  assert(!ret);
+
+  // remove file
+  ret = zbox_repo_remove_file("/file2", repo);
+  assert(!ret);
+
+  // remove dir
+  ret = zbox_repo_remove_dir("/dir", repo);
+  assert(!ret);
+  ret = zbox_repo_remove_dir_all("/dir1", repo);
+  assert(!ret);
+
+  // rename
+  ret = zbox_repo_rename("/file3", "/file", repo);
+  assert(!ret);
+
   zbox_close_repo(repo);
 
-  return 0;
+  return ret;
 }

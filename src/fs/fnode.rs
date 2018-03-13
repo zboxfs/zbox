@@ -44,6 +44,15 @@ impl Default for FileType {
     }
 }
 
+impl Into<i32> for FileType {
+    fn into(self) -> i32 {
+        match self {
+            FileType::File => 0,
+            FileType::Dir => 1,
+        }
+    }
+}
+
 // fnode child entry
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct ChildEntry {
@@ -164,8 +173,8 @@ impl Metadata {
 #[derive(Debug)]
 pub struct DirEntry {
     path: PathBuf,
-    metadata: Metadata,
     name: String,
+    metadata: Metadata,
 }
 
 impl DirEntry {
@@ -174,20 +183,15 @@ impl DirEntry {
         self.path.as_path()
     }
 
-    /// Return the metadata for the file that this entry points at.
-    pub fn metadata(&self) -> Metadata {
-        self.metadata
-    }
-
-    /// Return the file type for the file that this entry points at.
-    pub fn file_type(&self) -> FileType {
-        self.metadata.file_type()
-    }
-
     /// Returns the bare file name of this directory entry without any other
     /// leading path component.
     pub fn file_name(&self) -> &str {
         &self.name
+    }
+
+    /// Return the metadata for the file that this entry points at.
+    pub fn metadata(&self) -> Metadata {
+        self.metadata
     }
 }
 
