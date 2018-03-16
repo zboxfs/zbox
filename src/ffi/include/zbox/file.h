@@ -49,11 +49,11 @@ extern int zbox_file_version_reader_seek(zbox_file file,
 extern void zbox_close_version_reader(zbox_version_reader *reader);
 
 // write and finish
-extern int zbox_file_write(zbox_file file, uint8_t *buf, size_t len);
+extern int zbox_file_write(zbox_file file, const uint8_t *buf, size_t len);
 extern int zbox_file_finish(zbox_file file);
 
 // write once
-extern int zbox_file_write_once(zbox_file file, uint8_t *buf, size_t len);
+extern int zbox_file_write_once(zbox_file file, const uint8_t *buf, size_t len);
 
 // seek
 extern int zbox_file_seek(zbox_file file, int64_t offset, int whence);
