@@ -1,41 +1,43 @@
-use std::io::{Error as IoError, ErrorKind, Result as IoResult};
+use std::io::Result as IoResult;
+use std::time::Duration;
 
-use reqwest;
+use reqwest::{header, Client, StatusCode};
 
-use error::{Error, Result};
+use error::Result;
 use base::crypto::{Crypto, Key};
 use trans::{Eid, Txid};
 use volume::storage::Storage;
 
 /// Zbox Storage
 #[derive(Debug)]
-pub struct ZboxStorage {}
+pub struct ZboxStorage {
+    base_url: String,
+    client: Client,
+}
 
 impl ZboxStorage {
-    const API_URL: &'static str = "https://api.zbox.io/";
+    pub fn new(repo_id: &str, access_key: &str) -> Self {
+        let mut headers = header::Headers::new();
+        headers.set(header::Authorization("Basic ".to_owned() + access_key));
 
-    pub fn new() -> Self {
-        ZboxStorage {}
-    }
+        let client = Client::builder()
+            .timeout(Duration::from_secs(30))
+            .default_headers(headers)
+            .build()
+            .unwrap();
 
-    #[inline]
-    fn make_url<S: AsRef<str>>(&self, path: S) -> String {
-        ZboxStorage::API_URL.to_string() + path.as_ref()
-    }
-
-    #[inline]
-    fn make_repo_url<S: AsRef<str>>(&self, path: S) -> String {
-        ZboxStorage::API_URL.to_string() + "repos/" + path.as_ref()
+        ZboxStorage {
+            base_url: "https://data.zbox.io/repos/".to_owned() + repo_id + "/",
+            client,
+        }
     }
 }
 
 impl Storage for ZboxStorage {
-    fn exists(&self, location: &str) -> bool {
-        let url = self.make_repo_url(location);
-        println!("url: {:#?}", url);
-        //let text = reqwest::get(url).unwrap().text().unwrap();
-        //println!("body = {:?}", text);
-        false
+    fn exists(&self, _location: &str) -> bool {
+        let url = self.base_url.to_string() + "super";
+        let resp = self.client.head(&url).send().unwrap();
+        resp.status() == StatusCode::Ok
     }
 
     fn init(
@@ -48,10 +50,20 @@ impl Storage for ZboxStorage {
     }
 
     fn get_super_blk(&self) -> Result<Vec<u8>> {
-        Ok(Vec::new())
+        let url = self.base_url.to_string() + "super";
+        let mut resp = self.client.get(&url).send()?.error_for_status()?;
+        let mut buf: Vec<u8> = Vec::new();
+        resp.copy_to(&mut buf)?;
+        Ok(buf)
     }
 
     fn put_super_blk(&mut self, super_blk: &[u8]) -> Result<()> {
+        let url = self.base_url.to_string() + "super";
+        let resp = self.client
+            .put(&url)
+            .body(super_blk.to_vec())
+            .send()?
+            .error_for_status()?;
         Ok(())
     }
 
@@ -107,7 +119,10 @@ mod tests {
 
     #[test]
     fn init_open() {
-        let zbox = ZboxStorage::new();
-        zbox.exists("123");
+        let mut zbox = ZboxStorage::new("123", "456");
+        //zbox.exists("");
+        zbox.put_super_blk(&[1, 2, 3]).unwrap();
+        let super_blk = zbox.get_super_blk().unwrap();
+        println!("{:?}", super_blk);
     }
 }
