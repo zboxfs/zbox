@@ -132,7 +132,6 @@ int test_repo() {
 int test_file() {
     const char *uri = "mem://repo2";
     const char *pwd = "pwd";
-    bool result;
     int ret;
 
     ret = zbox_init_env();
