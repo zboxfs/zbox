@@ -1,5 +1,5 @@
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_int, c_long};
+use std::os::raw::{c_char, c_int};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::mem::forget;
 use std::slice::{from_raw_parts, from_raw_parts_mut};
@@ -23,7 +23,7 @@ type uint8_t = u8;
 type size_t = usize;
 
 #[allow(non_camel_case_types)]
-type time_t = c_long;
+type time_t = u64;
 
 #[inline]
 fn to_time_t(t: SystemTime) -> time_t {
