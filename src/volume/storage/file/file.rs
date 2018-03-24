@@ -502,8 +502,8 @@ impl FileStorage {
 }
 
 impl Storage for FileStorage {
-    fn exists(&self, location: &str) -> bool {
-        Path::new(location).exists()
+    fn exists(&self, location: &str) -> Result<bool> {
+        Ok(Path::new(location).exists())
     }
 
     fn init(
@@ -853,7 +853,7 @@ mod tests {
         let vol_id = Eid::new();
 
         fs.init(&vol_id, &crypto, &key).unwrap();
-        assert!(fs.exists(fs.base.to_str().unwrap()));
+        assert!(fs.exists(fs.base.to_str().unwrap()).unwrap());
         assert_eq!(fs.open(&vol_id, &crypto, &key).unwrap_err(), Error::Opened);
 
         renew_fs(fs, &vol_id, &dir, &key);

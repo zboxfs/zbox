@@ -345,7 +345,7 @@ impl PartialEq for Error {
             (&Error::Io(ref a), &Error::Io(ref b)) => a.kind() == b.kind(),
 
             #[cfg(feature = "zbox-cloud")]
-            (&Error::Http(ref a), &Error::Http(ref b)) => true,
+            (&Error::Http(ref _a), &Error::Http(ref _b)) => true,
 
             (_, _) => false,
         }

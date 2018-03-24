@@ -192,9 +192,9 @@ impl Volume {
     pub fn exists(uri: &str) -> Result<bool> {
         if uri.starts_with("file://") {
             let path = Path::new(&uri[7..]);
-            Ok(FileStorage::new(path).exists(path.to_str().unwrap()))
+            FileStorage::new(path).exists(path.to_str().unwrap())
         } else if uri.starts_with("mem://") {
-            Ok(MemStorage::new().exists(&uri[6..]))
+            MemStorage::new().exists(&uri[6..])
         } else {
             Err(Error::InvalidUri)
         }

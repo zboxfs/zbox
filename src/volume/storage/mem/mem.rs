@@ -54,9 +54,9 @@ impl MemStorage {
 }
 
 impl Storage for MemStorage {
-    fn exists(&self, location: &str) -> bool {
+    fn exists(&self, location: &str) -> Result<bool> {
         let _ = location;
-        false
+        Ok(false)
     }
 
     fn init(

@@ -16,7 +16,7 @@ pub use self::mem::MemStorage;
 /// Storage trait
 pub trait Storage: Debug {
     /// Check if storage exists
-    fn exists(&self, location: &str) -> bool;
+    fn exists(&self, location: &str) -> Result<bool>;
 
     // Volume initialisation
     // ------------------------
