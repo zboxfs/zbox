@@ -204,12 +204,12 @@ The performance test is run on a Macbook Pro 2017 laptop with spec as below.
 
 Test result:
 
-|                     | Read              | Write          |
-| ------------------- | ----------------- | -------------- |
-| Baseline (memcpy):  | 3798.3032 MB/s    | 3798.3032 MB/s |
-| Baseline (file):    | 923.0447 MB/s     | 2373.3384 MB/s |
-| Memory storage:     | 343.6533 MB/s     | 163.1137 MB/s  |
-| File storage:       | 167.2110 MB/s     | 130.3693 MB/s  |
+|                     | Read            | Write          |
+| ------------------- | --------------- | -------------- |
+| Baseline (memcpy):  | 3798.30 MB/s    | 3798.30 MB/s   |
+| Baseline (file):    | 923.04 MB/s     | 2373.33 MB/s   |
+| Memory storage:     | 343.65 MB/s     | 163.11 MB/s    |
+| File storage:       | 167.21 MB/s     | 130.37 MB/s    |
 
 To run the performance test on your own computer, please follow the
 instructions in [CONTRIBUTING.md](CONTRIBUTING.md#run-performance-test).
