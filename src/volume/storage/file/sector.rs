@@ -15,12 +15,10 @@ use base::crypto::{Crypto, HashKey, Key};
 use base::lru::{CountMeter, Lru, PinChecker};
 use base::utils::{align_offset, align_offset_u64};
 use trans::Txid;
+use volume::storage::span::{SpanList, BLK_SIZE};
+use volume::storage::space::{LocId, Space};
 use super::remove_file;
-use super::span::SpanList;
 use super::vio::imp as vio_imp;
-
-// block size, in bytes
-pub const BLK_SIZE: usize = 4 * 1024;
 
 // how many blocks in a sector, must be 2^n and less than u16::MAX
 pub const SECTOR_BLK_CNT: usize = 4096;
@@ -55,86 +53,6 @@ fn size_level(size: usize) -> u8 {
         lvl += 1;
     }
     lvl
-}
-
-/// Location Id
-#[derive(Debug, Clone, Copy, Hash, Default, PartialEq, Eq)]
-pub struct LocId {
-    pub(super) txid: Txid,
-    pub(super) idx: u64,
-}
-
-impl LocId {
-    const BYTES_LEN: usize = 16;
-
-    pub fn new(txid: Txid, idx: u64) -> Self {
-        LocId { txid, idx }
-    }
-
-    fn lower_blk_bound(&self) -> u64 {
-        self.idx * SECTOR_BLK_CNT as u64
-    }
-
-    fn upper_blk_bound(&self) -> u64 {
-        (self.idx + 1) * SECTOR_BLK_CNT as u64
-    }
-}
-
-/// Space
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Space {
-    pub(super) txid: Txid,
-    pub(super) spans: SpanList,
-}
-
-impl Space {
-    pub fn new(txid: Txid, spans: SpanList) -> Self {
-        Space { txid, spans }
-    }
-
-    pub fn len(&self) -> usize {
-        self.spans.len
-    }
-
-    pub fn set_len(&mut self, len: usize) {
-        self.spans.len = len;
-    }
-
-    pub fn append(&mut self, other: &Space) {
-        assert_eq!(self.txid, other.txid);
-        let offset = self.spans.len as u64;
-        for span in other.spans.iter() {
-            let mut span = span.clone();
-            span.offset += offset;
-            self.spans.append(span, 0);
-        }
-        self.spans.len += other.len();
-    }
-
-    fn divide_into_sectors(&self) -> Vec<(LocId, SpanList)> {
-        let mut ret: Vec<(LocId, SpanList)> = Vec::new();
-        for span in self.spans.iter() {
-            let mut span = span.clone();
-            let begin = span.begin / SECTOR_BLK_CNT as u64;
-            let end = span.end / SECTOR_BLK_CNT as u64 + 1;
-            for sec_idx in begin..end {
-                let sec_id = LocId::new(self.txid, sec_idx);
-                let ubound = min(span.end, sec_id.upper_blk_bound());
-                let split = span.split_to(ubound);
-                if split.is_empty() {
-                    continue;
-                }
-                if let Some(&mut (loc, ref mut spans)) = ret.last_mut() {
-                    if loc.idx == sec_idx {
-                        spans.append(split, split.blk_len());
-                        continue;
-                    }
-                }
-                ret.push((sec_id, split.into_span_list(split.blk_len())));
-            }
-        }
-        ret
-    }
 }
 
 /// Sector
@@ -215,11 +133,7 @@ impl SectorMgr {
 
     // generate sector file path from sector id
     fn sec_path(&self, sec_id: LocId) -> PathBuf {
-        let mut buf = Vec::with_capacity(16);
-        buf.put_u64::<LittleEndian>(sec_id.txid.val());
-        buf.put_u64::<LittleEndian>(sec_id.idx);
-        let hash = Crypto::hash_with_key(&buf, &self.hash_key);
-        let s = hash.to_string();
+        let s = sec_id.unique_str(&self.hash_key);
         self.base.join(&s[0..2]).join(&s[2..4]).join(&s)
     }
 
@@ -332,7 +246,7 @@ impl SectorMgr {
         }
 
         for &(sec_id, ref spans) in space
-            .divide_into_sectors()
+            .divide_into_sectors(SECTOR_BLK_CNT)
             .iter()
             .skip_while(|&&(_, ref spans)| offset < spans.offset())
         {
@@ -393,7 +307,7 @@ impl SectorMgr {
         let mut start = offset;
 
         for &(sec_id, ref spans) in space
-            .divide_into_sectors()
+            .divide_into_sectors(SECTOR_BLK_CNT)
             .iter()
             .skip_while(|&&(_, ref spans)| offset < spans.offset())
         {
@@ -408,7 +322,8 @@ impl SectorMgr {
             let mut data_file = self.open_sec_data(&path)?;
 
             for span in spans.iter().skip_while(|s| offset >= s.end_offset()) {
-                let sec_offset = span.offset_in_sec(start);
+                let sec_offset =
+                    span.offset_in_sec(start, SECTOR_BLK_CNT as u64);
                 let ubound = {
                     let mut blk_align =
                         align_offset_u64(span.end, SECTOR_BLK_CNT as u64);
@@ -534,7 +449,9 @@ impl SectorMgr {
         // collect each sector's retired spans
         let mut tracks: HashMap<LocId, SpanList> = HashMap::new();
         for space in retired {
-            for &(sec_id, ref val) in space.divide_into_sectors().iter() {
+            for &(sec_id, ref val) in
+                space.divide_into_sectors(SECTOR_BLK_CNT).iter()
+            {
                 let spans = tracks.entry(sec_id).or_insert(SpanList::new());
                 spans.join(val);
             }
@@ -549,7 +466,7 @@ impl SectorMgr {
 
             // open sector files
             let mut sec = self.open_sec(*sec_id)?;
-            let base_bid = sec_id.lower_blk_bound();
+            let base_bid = sec_id.lower_blk_bound(SECTOR_BLK_CNT);
             let mut freed_size = 0;
 
             // mark blocks as deleted and sum up total size to be freed
@@ -643,7 +560,7 @@ impl Debug for SectorMgr {
 
 #[cfg(test)]
 mod tests {
-    use volume::storage::file::span::Span;
+    use volume::storage::span::Span;
     use super::*;
 
     #[test]
@@ -654,7 +571,7 @@ mod tests {
         let span = Span::new(0, 1, 0);
         let spans = span.clone().into_span_list(123);
         let s = Space::new(txid, spans);
-        let t = s.divide_into_sectors();
+        let t = s.divide_into_sectors(SECTOR_BLK_CNT);
         assert_eq!(t.len(), 1);
         let &(loc_id, ref spans) = t.first().unwrap();
         assert_eq!(loc_id, LocId::new(txid, 0));
@@ -666,7 +583,7 @@ mod tests {
         let span = Span::new(0, SECTOR_BLK_CNT as u64, 0);
         let spans = span.clone().into_span_list(123);
         let s = Space::new(txid, spans);
-        let t = s.divide_into_sectors();
+        let t = s.divide_into_sectors(SECTOR_BLK_CNT);
         assert_eq!(t.len(), 1);
         let &(loc_id, ref spans) = t.first().unwrap();
         assert_eq!(loc_id, LocId::new(txid, 0));
@@ -678,7 +595,7 @@ mod tests {
         let span = Span::new(0, SECTOR_BLK_CNT as u64 + 1, 0);
         let spans = span.clone().into_span_list(123);
         let s = Space::new(txid, spans);
-        let t = s.divide_into_sectors();
+        let t = s.divide_into_sectors(SECTOR_BLK_CNT);
         assert_eq!(t.len(), 2);
         let &(loc_id, ref spans) = t.first().unwrap();
         assert_eq!(loc_id, LocId::new(txid, 0));
@@ -708,7 +625,7 @@ mod tests {
         spans.append(span, span.blk_len());
         spans.append(span2, span2.blk_len());
         let s = Space::new(txid, spans);
-        let t = s.divide_into_sectors();
+        let t = s.divide_into_sectors(SECTOR_BLK_CNT);
         assert_eq!(t.len(), 1);
         let &(loc_id, ref spans) = t.first().unwrap();
         assert_eq!(loc_id, LocId::new(txid, 0));
@@ -724,7 +641,7 @@ mod tests {
         spans.append(span, span.blk_len());
         spans.append(span2, span2.blk_len());
         let s = Space::new(txid, spans);
-        let t = s.divide_into_sectors();
+        let t = s.divide_into_sectors(SECTOR_BLK_CNT);
         assert_eq!(t.len(), 1);
         let &(loc_id, ref spans) = t.first().unwrap();
         assert_eq!(loc_id, LocId::new(txid, 0));
@@ -742,7 +659,7 @@ mod tests {
         spans.append(span2, span2.blk_len());
         spans.append(span3, span3.blk_len());
         let s = Space::new(txid, spans);
-        let t = s.divide_into_sectors();
+        let t = s.divide_into_sectors(SECTOR_BLK_CNT);
         assert_eq!(t.len(), 2);
         let &(loc_id, ref spans) = t.first().unwrap();
         assert_eq!(loc_id, LocId::new(txid, 0));

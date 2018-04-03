@@ -1,2 +1,35 @@
+use std::sync::{Arc, RwLock};
+use std::io::Result as IoResult;
+
+use base::IntoRef;
+use super::http_client::{HttpClient, HttpClientRef};
+
 #[derive(Debug)]
-pub struct Estore {}
+pub struct Estore {
+    client: HttpClientRef,
+}
+
+impl Estore {
+    pub fn new(client: &HttpClientRef) -> Self {
+        Estore {
+            client: client.clone(),
+        }
+    }
+
+    pub fn get(
+        &mut self,
+        buf: &mut [u8],
+        key: &str,
+        offset: u64,
+    ) -> IoResult<usize> {
+        Ok(0)
+    }
+
+    pub fn put(&mut self, key: &str, buf: &[u8]) -> IoResult<()> {
+        Ok(())
+    }
+}
+
+impl IntoRef for Estore {}
+
+pub type EstoreRef = Arc<RwLock<Estore>>;

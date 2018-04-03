@@ -1,146 +1,69 @@
-use std::io::Result as IoResult;
+use std::error::Error as StdError;
+use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write};
 use std::fmt::{self, Display};
 use std::time::Duration;
 use std::path::{Path, PathBuf};
-use std::collections::HashSet;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use serde::Serialize;
 use reqwest::{header, Client, Response, StatusCode};
 
-use error::Result;
+use error::{Error, Result};
+use base::IntoRef;
 use base::crypto::{Crypto, Key};
 use trans::{Eid, Txid};
 use volume::storage::Storage;
+use volume::storage::space::{LocId, Space};
+use super::sector::SectorMgr;
 use super::emap::Emap;
-use super::estore::Estore;
-use super::http_client::HttpClient;
-
-// transaction session status
-#[derive(Debug, PartialEq, Clone, Copy)]
-enum SessionStatus {
-    Init,      // initial status
-    Started,   // transaction started
-    Prepare,   // committing preparation started
-    Recycle,   // recycling started
-    Committed, // transaction committed
-    Dispose,   // dispose a committed transaction
-}
-
-impl Default for SessionStatus {
-    #[inline]
-    fn default() -> Self {
-        SessionStatus::Init
-    }
-}
-
-impl Display for SessionStatus {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            SessionStatus::Init => write!(f, "init"),
-            SessionStatus::Started => write!(f, "started"),
-            SessionStatus::Prepare => write!(f, "prepare"),
-            SessionStatus::Recycle => write!(f, "recycle"),
-            SessionStatus::Committed => write!(f, "committed"),
-            SessionStatus::Dispose => write!(f, "dispose"),
-        }
-    }
-}
-
-impl<'a> From<&'a str> for SessionStatus {
-    fn from(val: &str) -> SessionStatus {
-        match val {
-            "started" => SessionStatus::Started,
-            "prepare" => SessionStatus::Prepare,
-            "recycle" => SessionStatus::Recycle,
-            "committed" => SessionStatus::Committed,
-            "dispose" => SessionStatus::Dispose,
-            _ => unreachable!(),
-        }
-    }
-}
-
-// transaction session
-#[derive(Debug)]
-struct Session {
-    seq: u64,
-    txid: Txid,
-    status: SessionStatus,
-    wmark: u64,
-    emap: Emap,
-    deleted: HashSet<Eid>, // deleted entities
-    recycle: Vec<Space>,
-    base: PathBuf,
-    skey: Key,
-    crypto: Crypto,
-}
-
-impl Session {
-    fn new(
-        seq: u64,
-        txid: Txid,
-        base: &Path,
-        skey: &Key,
-        crypto: &Crypto,
-    ) -> Self {
-        let mut ret = Session {
-            seq,
-            txid,
-            status: SessionStatus::Init,
-            wmark: 0,
-            emap: Emap::new(base, txid),
-            deleted: HashSet::new(),
-            recycle: Vec::new(),
-            base: base.to_path_buf(),
-            skey: skey.clone(),
-            crypto: crypto.clone(),
-        };
-        ret.emap.set_crypto_key(crypto, skey);
-        ret
-    }
-}
-
-#[derive(Debug)]
-struct Cache {
-    client: HttpClient,
-}
-
-impl Cache {
-    fn new(repo_id: &str, access_key: &str) -> Result<Self> {
-        Ok(Cache {
-            client: HttpClient::new(repo_id, access_key)?,
-        })
-    }
-
-    #[inline]
-    pub fn client(&self) -> &HttpClient {
-        &self.client
-    }
-
-    #[inline]
-    pub fn client_mut(&mut self) -> &mut HttpClient {
-        &mut self.client
-    }
-}
+use super::estore::{Estore, EstoreRef};
+use super::http_client::{HttpClient, HttpClientRef};
+use super::session::Session;
 
 /// Zbox Storage
 #[derive(Debug)]
 pub struct ZboxStorage {
+    // tx sequence number
+    seq: u64,
+
     emap: Emap,
-    cache: Cache,
+
+    // transaction sessions
+    sessions: HashMap<Txid, Session>,
+
+    // sector manager
+    secmgr: SectorMgr,
+
+    estore: EstoreRef,
+
+    client: HttpClientRef,
+
+    skey: Key, // storage encryption key
+    crypto: Crypto,
 }
 
 impl ZboxStorage {
     pub fn new(repo_id: &str, access_key: &str) -> Result<Self> {
+        let client = HttpClient::new(repo_id, access_key)?.into_ref();
+        let estore = Estore::new(&client).into_ref();
+
         Ok(ZboxStorage {
-            emap: Emap::new(),
-            cache: Cache::new(repo_id, access_key)?,
+            seq: 0,
+            emap: Emap::new(Txid::from(0)),
+            sessions: HashMap::new(),
+            secmgr: SectorMgr::new(&estore),
+            estore,
+            client,
+            skey: Key::new_empty(),
+            crypto: Crypto::default(),
         })
     }
 }
 
 impl Storage for ZboxStorage {
     fn exists(&self, _location: &str) -> Result<bool> {
-        let client = self.cache.client();
+        let client = self.client.read().unwrap();
         let url = client.base_url().to_owned() + "super";
         let resp = client.head(&url)?;
         match resp.status() {
@@ -162,11 +85,11 @@ impl Storage for ZboxStorage {
     }
 
     fn get_super_blk(&self) -> Result<Vec<u8>> {
-        self.cache.client().get("super")
+        self.client.read().unwrap().get("super")
     }
 
     fn put_super_blk(&mut self, super_blk: &[u8]) -> Result<()> {
-        self.cache.client_mut().put("super", super_blk)
+        self.client.write().unwrap().put("super", super_blk)
     }
 
     fn open(
@@ -185,7 +108,20 @@ impl Storage for ZboxStorage {
         buf: &mut [u8],
         txid: Txid,
     ) -> IoResult<usize> {
-        Ok(0)
+        if !txid.is_empty() {
+            let session =
+                map_io_err!(self.sessions.get(&txid).ok_or(Error::NoTrans))?;
+            if let Some(space) = session.emap().get(id) {
+                return self.secmgr.read(buf, space, offset);
+            }
+        }
+        match self.emap.get(id) {
+            Some(space) => self.secmgr.read(buf, space, offset),
+            None => Err(IoError::new(
+                ErrorKind::NotFound,
+                Error::NoEntity.description(),
+            )),
+        }
     }
 
     fn write(
@@ -195,6 +131,33 @@ impl Storage for ZboxStorage {
         buf: &[u8],
         txid: Txid,
     ) -> IoResult<usize> {
+        let session =
+            map_io_err!(self.sessions.get_mut(&txid).ok_or(Error::NoTrans))?;
+        let buf_len = buf.len();
+        let mut space;
+        let curr = match session.get(id) {
+            Some(s) => Some(s.clone()),
+            None => self.emap.get(id).map(|s| s.clone()),
+        };
+
+        match curr {
+            Some(curr_space) => {
+                // TODO
+                space = session.alloc(buf_len);
+            }
+            None => {
+                // new entity
+                assert_eq!(offset, 0);
+                space = session.alloc(buf_len);
+            }
+        }
+
+        // write data to sector
+        self.secmgr.write(buf, &space, offset)?;
+
+        // update emap
+        *session.entry(id.clone()).or_insert(space) = space.clone();
+
         Ok(0)
     }
 
@@ -203,17 +166,54 @@ impl Storage for ZboxStorage {
     }
 
     fn begin_trans(&mut self, txid: Txid) -> Result<()> {
-        let loc = format!("trans/{}", txid);
-        self.cache.client_mut().put(&loc, &[])
+        if self.sessions.contains_key(&txid) {
+            return Err(Error::InTrans);
+        }
+
+        // create new session and change status to started
+        let mut session = Session::new(
+            self.seq,
+            txid,
+            &self.client,
+            &self.skey,
+            &self.crypto,
+        );
+        session.status_started()?;
+
+        // increase tx sequence and add session to session list
+        self.seq += 1;
+        self.sessions.insert(txid, session);
+        debug!("begin tx#{}", txid);
+
+        Ok(())
     }
 
     fn abort_trans(&mut self, txid: Txid) -> Result<()> {
+        debug!("abort tx#{}", txid);
+        let status = {
+            let session = self.sessions.get(&txid).ok_or(Error::NoTrans)?;
+            assert!(!session.is_committing());
+            session.status()
+        };
+        //self.cleanup(txid, status)?;
+        debug!("tx#{} is aborted", txid);
         Ok(())
     }
 
     fn commit_trans(&mut self, txid: Txid) -> Result<()> {
-        let loc = format!("trans/{}", txid);
-        self.cache.client_mut().delete(&loc)
+        // all other transactions must be completed
+        if self.sessions.values().any(|s| s.is_committing()) {
+            return Err(Error::Uncompleted);
+        }
+
+        Ok(())
+        /*match self.commit(txid) {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                self.rollback(txid)?;
+                Err(err)
+            }
+        }*/
     }
 }
 

@@ -1,9 +1,11 @@
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use serde::Serialize;
 use reqwest::{header, Client, Response, StatusCode};
 
 use error::Result;
+use base::IntoRef;
 
 #[derive(Debug)]
 pub struct HttpClient {
@@ -81,3 +83,7 @@ impl HttpClient {
         Ok(())
     }
 }
+
+impl IntoRef for HttpClient {}
+
+pub type HttpClientRef = Arc<RwLock<HttpClient>>;

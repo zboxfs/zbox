@@ -1,5 +1,7 @@
 mod file;
 mod mem;
+mod space;
+mod span;
 #[cfg(feature = "zbox-cloud")]
 mod zbox;
 
@@ -12,6 +14,8 @@ use trans::{Eid, Txid};
 
 pub use self::file::FileStorage;
 pub use self::mem::MemStorage;
+#[cfg(feature = "zbox-cloud")]
+pub use self::zbox::ZboxStorage;
 
 /// Storage trait
 pub trait Storage: Debug {

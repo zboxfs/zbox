@@ -12,9 +12,10 @@ use base::crypto::{Crypto, Key};
 use base::utils::align_ceil;
 use trans::{Eid, Txid};
 use volume::storage::Storage;
+use volume::storage::span::{Span, BLK_SIZE};
+use volume::storage::space::{LocId, Space};
 use super::{load_obj, remove_file, save_obj};
-use super::span::Span;
-use super::sector::{LocId, SectorMgr, Space, BLK_SIZE};
+use super::sector::SectorMgr;
 use super::emap::Emap;
 use super::vio::imp as vio_imp;
 
@@ -327,7 +328,7 @@ impl Session {
 /// File Storage
 #[derive(Debug)]
 pub struct FileStorage {
-    // sequence number
+    // tx sequence number
     seq: u64,
 
     // path config

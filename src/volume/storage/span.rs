@@ -1,7 +1,9 @@
 use std::slice::Iter;
 
 use base::utils::align_offset_u64;
-use super::sector::{BLK_SIZE, SECTOR_BLK_CNT};
+
+// block size, in bytes
+pub const BLK_SIZE: usize = 4 * 1024;
 
 /// Span
 #[derive(Debug, Clone, Copy, Default, PartialEq, Deserialize, Serialize)]
@@ -37,10 +39,10 @@ impl Span {
     }
 
     #[inline]
-    pub fn offset_in_sec(&self, offset: u64) -> u64 {
+    pub fn offset_in_sec(&self, offset: u64, sector_blk_cnt: u64) -> u64 {
         assert!(self.offset <= offset && offset <= self.end_offset());
-        align_offset_u64(self.begin, SECTOR_BLK_CNT as u64) * BLK_SIZE as u64
-            + offset - self.offset
+        align_offset_u64(self.begin, sector_blk_cnt) * BLK_SIZE as u64 + offset
+            - self.offset
     }
 
     pub fn into_span_list(self, len: usize) -> SpanList {
@@ -80,6 +82,10 @@ impl SpanList {
     #[inline]
     pub fn offset(&self) -> u64 {
         self.list.first().unwrap().offset
+    }
+
+    pub fn blk_len(&self) -> usize {
+        self.list.iter().fold(0, |sum, &s| sum + s.blk_len())
     }
 
     /// Append span to span list, merge it if possible

@@ -1,7 +1,6 @@
 mod emap;
 mod file;
 mod sector;
-mod span;
 mod vio;
 
 pub use self::file::FileStorage;

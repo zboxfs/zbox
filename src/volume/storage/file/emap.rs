@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use error::Result;
 use base::crypto::{Crypto, Key};
 use trans::{Eid, Txid};
+use volume::storage::space::Space;
 use super::{load_obj, remove_dir_all, save_obj};
-use super::sector::Space;
 use super::vio::imp as vio_imp;
 
 // entity map bucket count
