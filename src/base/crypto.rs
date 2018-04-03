@@ -371,9 +371,11 @@ impl Debug for Hash {
 
 impl ToString for Hash {
     fn to_string(&self) -> String {
-        let strs: Vec<String> =
-            self.0.iter().map(|b| format!("{:x}", b)).collect();
-        strs.join("")
+        self.0
+            .iter()
+            .map(|b| format!("{:x}", b))
+            .collect::<Vec<String>>()
+            .join("")
     }
 }
 

@@ -219,10 +219,7 @@ impl SectorMgr {
         buf.put_u64::<LittleEndian>(sec_id.txid.val());
         buf.put_u64::<LittleEndian>(sec_id.idx);
         let hash = Crypto::hash_with_key(&buf, &self.hash_key);
-        let s = hash.iter()
-            .map(|b| format!("{:x}", b))
-            .collect::<Vec<String>>()
-            .join("");
+        let s = hash.to_string();
         self.base.join(&s[0..2]).join(&s[2..4]).join(&s)
     }
 
