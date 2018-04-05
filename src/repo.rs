@@ -629,7 +629,7 @@ impl Repo {
                     return Err(Error::AlreadyExists);
                 }
             }
-            Err(ref err) if *err == Error::NotFound => {
+            Err(ref err) if *err == Error::NotFound && opts.create => {
                 self.fs
                     .create_fnode(path, FileType::File, opts.version_limit)?;
             }
