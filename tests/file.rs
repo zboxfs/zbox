@@ -304,6 +304,26 @@ fn file_read_write() {
         f.write_once(&buf[..]).unwrap();
         verify_content(&mut f, &buf[..]);
     }
+
+    // #15, test create open flag
+    {
+        assert!(!repo.is_file("/file15"));
+        assert_eq!(
+            OpenOptions::new()
+                .create(false)
+                .open(&mut repo, "/file15")
+                .unwrap_err(),
+            Error::NotFound
+        );
+        OpenOptions::new()
+            .create(true)
+            .open(&mut repo, "/file15")
+            .unwrap();
+        OpenOptions::new()
+            .create(false)
+            .open(&mut repo, "/file9")
+            .unwrap();
+    }
 }
 
 #[test]
