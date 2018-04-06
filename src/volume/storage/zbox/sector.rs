@@ -82,7 +82,12 @@ impl SectorMgr {
         {
             for span in spans.iter().skip_while(|s| offset >= s.end_offset()) {
                 let sec_str = sec_id.unique_str(&self.hash_key);
-                self.estore.write().unwrap().get(buf, &sec_str, offset);
+                let read_len = 0;
+                self.estore.write().unwrap().get(
+                    &mut buf[read..read + read_len],
+                    &sec_str,
+                    offset,
+                );
             }
         }
 

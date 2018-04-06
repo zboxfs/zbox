@@ -2,10 +2,12 @@ use std::sync::{Arc, RwLock};
 use std::io::Result as IoResult;
 
 use base::IntoRef;
+use base::lru::Lru;
 use super::http_client::{HttpClient, HttpClientRef};
 
 #[derive(Debug)]
 pub struct Estore {
+    map: HashMap<Vec<u8>,
     client: HttpClientRef,
 }
 
