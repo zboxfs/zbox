@@ -582,22 +582,26 @@ fn file_seek() {
 
         // seek from start
         let mut dst = Vec::new();
-        f.seek(SeekFrom::Start(2)).unwrap();
+        let pos = f.seek(SeekFrom::Start(2)).unwrap();
+        assert_eq!(pos, 2);
         let result = f.read_to_end(&mut dst).unwrap();
         assert_eq!(result, buf.len() - 2);
         assert_eq!(&dst[..], &buf[2..]);
 
         // seek from end
         let mut dst = Vec::new();
-        f.seek(SeekFrom::End(-2)).unwrap();
+        let pos = f.seek(SeekFrom::End(-2)).unwrap();
+        assert_eq!(pos, 1);
         let result = f.read_to_end(&mut dst).unwrap();
         assert_eq!(result, buf.len() - 1);
         assert_eq!(&dst[..], &buf[1..]);
 
         // seek from current
         let mut dst = Vec::new();
-        f.seek(SeekFrom::Start(1)).unwrap();
-        f.seek(SeekFrom::Current(1)).unwrap();
+        let pos = f.seek(SeekFrom::Start(1)).unwrap();
+        assert_eq!(pos, 1);
+        let pos = f.seek(SeekFrom::Current(1)).unwrap();
+        assert_eq!(pos, 2);
         let result = f.read_to_end(&mut dst).unwrap();
         assert_eq!(result, buf.len() - 2);
         assert_eq!(&dst[..], &buf[2..]);
