@@ -341,8 +341,8 @@ impl File {
         VersionReader::new(&self.handle, ver_num)
     }
 
-    // calculate seek position based on file current size
-    fn seek_pos(&self, pos: SeekFrom) -> SeekFrom {
+    // calculate the seek position from the start based on file current size
+    fn seek_pos(&self, pos: SeekFrom) -> u64 {
         let curr_len = self.curr_len();
         let pos: i64 = match pos {
             SeekFrom::Start(p) => p as i64,
@@ -353,7 +353,7 @@ impl File {
                 SeekFrom::Current(_) => unreachable!(),
             },
         };
-        SeekFrom::Start(pos as u64)
+        pos as u64
     }
 
     fn begin_write(&mut self) -> Result<()> {
@@ -377,7 +377,7 @@ impl File {
                     self.set_len(pos)?;
 
                     // then seek to new EOF
-                    self.pos = self.seek_pos(SeekFrom::End(0));
+                    self.pos = SeekFrom::Start(self.seek_pos(SeekFrom::End(0)));
                 }
             }
             _ => unreachable!(),
@@ -388,7 +388,7 @@ impl File {
         tx_handle.run(|| {
             let mut wtr =
                 FnodeWriter::new(self.handle.clone(), tx_handle.txid)?;
-            wtr.seek(self.seek_pos(self.pos))?;
+            wtr.seek(SeekFrom::Start(self.seek_pos(self.pos)))?;
             self.wtr = Some(wtr);
             Ok(())
         })?;
@@ -559,17 +559,18 @@ impl Seek for File {
             ));
         }
 
-        let mut sought = 0;
+        let sought = match self.rdr {
+            Some(ref mut rdr) => rdr.seek(pos)?,
+            None => 0,
+        };
 
-        if let Some(ref mut rdr) = self.rdr {
-            sought = rdr.seek(pos)?;
-        }
-        if sought == 0 {
-            self.pos = self.seek_pos(pos);
-        } else {
-            self.pos = SeekFrom::Start(sought);
-        }
-        Ok(sought)
+        let pos = match sought {
+            0 => self.seek_pos(pos),
+            _ => sought,
+        };
+
+        self.pos = SeekFrom::Start(pos);
+        Ok(pos)
     }
 }
 
