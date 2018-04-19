@@ -263,7 +263,7 @@ impl<'a> Seek for VersionReader<'a> {
 /// [`write_once`]: struct.File.html#method.write_once
 pub struct File {
     handle: Handle,
-    pos: SeekFrom, // always SeekFrom::Start
+    pos: SeekFrom, // must always be SeekFrom::Start
     rdr: Option<FnodeReader>,
     wtr: Option<FnodeWriter>,
     tx_handle: Option<TxHandle>,
@@ -342,18 +342,18 @@ impl File {
     }
 
     // calculate the seek position from the start based on file current size
-    fn seek_pos(&self, pos: SeekFrom) -> u64 {
+    fn seek_pos(&self, pos: SeekFrom) -> SeekFrom {
         let curr_len = self.curr_len();
         let pos: i64 = match pos {
             SeekFrom::Start(p) => p as i64,
             SeekFrom::End(p) => curr_len as i64 + p,
             SeekFrom::Current(p) => match self.pos {
                 SeekFrom::Start(q) => p + q as i64,
-                SeekFrom::End(q) => curr_len as i64 + p + q,
+                SeekFrom::End(_) => unreachable!(),
                 SeekFrom::Current(_) => unreachable!(),
             },
         };
-        pos as u64
+        SeekFrom::Start(pos as u64)
     }
 
     fn begin_write(&mut self) -> Result<()> {
@@ -377,7 +377,7 @@ impl File {
                     self.set_len(pos)?;
 
                     // then seek to new EOF
-                    self.pos = SeekFrom::Start(self.seek_pos(SeekFrom::End(0)));
+                    self.pos = self.seek_pos(SeekFrom::End(0));
                 }
             }
             _ => unreachable!(),
@@ -388,7 +388,7 @@ impl File {
         tx_handle.run(|| {
             let mut wtr =
                 FnodeWriter::new(self.handle.clone(), tx_handle.txid)?;
-            wtr.seek(SeekFrom::Start(self.seek_pos(self.pos)))?;
+            wtr.seek(self.seek_pos(self.pos))?;
             self.wtr = Some(wtr);
             Ok(())
         })?;
@@ -559,18 +559,15 @@ impl Seek for File {
             ));
         }
 
-        let sought = match self.rdr {
-            Some(ref mut rdr) => rdr.seek(pos)?,
-            None => 0,
+        self.pos = match self.rdr {
+            Some(ref mut rdr) => SeekFrom::Start(rdr.seek(pos)?),
+            None => self.seek_pos(pos),
         };
 
-        let pos = match sought {
-            0 => self.seek_pos(pos),
-            _ => sought,
-        };
-
-        self.pos = SeekFrom::Start(pos);
-        Ok(pos)
+        match self.pos {
+            SeekFrom::Start(pos) => Ok(pos),
+            _ => unreachable!(),
+        }
     }
 }
 
