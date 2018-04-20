@@ -159,12 +159,9 @@ where
 
     /// Get mutable reference of inner object
     /// without adding to transaction
-    pub fn make_mut_naive(&mut self) -> Result<&mut T> {
-        if self.txid.is_some() {
-            return Err(Error::InTrans);
-        }
+    pub fn make_mut_naive(&mut self) -> &mut T {
         let curr_switch = self.switch;
-        Ok(self.index_mut_by(curr_switch))
+        self.index_mut_by(curr_switch)
     }
 
     /// Mark cow as to be deleted

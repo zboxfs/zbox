@@ -696,24 +696,72 @@ fn file_delete() {
 #[test]
 fn file_rename() {
     let mut env = common::TestEnv::new();
-    let mut repo = &mut env.repo;
+    let repo = &mut env.repo;
 
+    // #1, rename non-existing file
     {
-        OpenOptions::new()
-            .create(true)
-            .open(&mut repo, "/file")
-            .unwrap();
-        repo.rename("/file", "/file2").unwrap();
-
-        repo.open_file("/file").is_err();
-        repo.open_file("/file2").unwrap();
+        assert_eq!(
+            repo.rename("/non-existing", "/foo").unwrap_err(),
+            Error::NotFound
+        );
     }
 
+    // #2, rename existing file to non-existing file
     {
-        OpenOptions::new()
+        repo.create_file("/file2").unwrap();
+        repo.rename("/file2", "/file2a").unwrap();
+
+        assert!(!repo.path_exists("/file2"));
+        assert!(repo.path_exists("/file2a"));
+        let dirs = repo.read_dir("/").unwrap();
+        assert_eq!(dirs.len(), 1);
+        assert_eq!(dirs[0].path().to_str().unwrap(), "/file2a");
+    }
+
+    // #3, rename existing file to existing file
+    {
+        let buf = [1u8, 2u8, 3u8];
+        let mut f = OpenOptions::new()
             .create(true)
-            .open(&mut repo, "/file")
+            .open(repo, "/file3")
             .unwrap();
-        repo.rename("/file", "/file2").is_err();
+        f.write_once(&buf[..]).unwrap();
+        repo.create_file("/file3a").unwrap();
+        repo.rename("/file3", "/file3a").unwrap();
+
+        assert!(!repo.path_exists("/file3"));
+        assert!(repo.path_exists("/file3a"));
+        let dirs = repo.read_dir("/").unwrap();
+        assert_eq!(dirs.len(), 2);
+
+        let mut f = OpenOptions::new().open(repo, "/file3a").unwrap();
+        verify_content(&mut f, &buf);
+    }
+
+    // #4, rename existing file to dir
+    {
+        repo.create_file("/file4").unwrap();
+        repo.create_dir("/dir4").unwrap();
+        assert_eq!(repo.rename("/file4", "/dir4").unwrap_err(), Error::IsDir);
+
+        assert!(repo.path_exists("/file4"));
+        assert!(repo.path_exists("/dir4"));
+    }
+
+    // #5, rename existing dir to file
+    {
+        repo.create_dir("/dir5").unwrap();
+        repo.create_file("/file5").unwrap();
+        assert_eq!(repo.rename("/dir5", "/file5").unwrap_err(), Error::NotDir);
+
+        assert!(repo.path_exists("/file5"));
+        assert!(repo.path_exists("/dir5"));
+    }
+
+    // #6, rename existing file to itself
+    {
+        repo.create_file("/file6").unwrap();
+        repo.rename("/file6", "/file6").unwrap();
+        assert!(repo.path_exists("/file6"));
     }
 }

@@ -164,6 +164,10 @@ impl Node {
         }
     }
 
+    fn is_file(&self) -> bool {
+        !self.is_dir()
+    }
+
     fn is_dir(&self) -> bool {
         self.ftype.is_dir()
     }
@@ -264,7 +268,8 @@ impl Step {
             let data_len = cur.get_u64::<LittleEndian>() as usize;
             let mut s = vec![0u8; 32];
             cur.copy_to_slice(&mut s);
-            let name = String::from_utf8(s).unwrap();
+            let p = s.iter().position(|c| *c == 0).unwrap();
+            let name = String::from_utf8(s[..p].to_vec()).unwrap();
             let step = Step {
                 round,
                 action,
@@ -323,6 +328,57 @@ fn write_data_to_file(f: &mut File, step: &Step, data: &[u8]) {
     f.seek(SeekFrom::Start(step.file_pos as u64)).unwrap();
     f.write_all(&data[..]).unwrap();
     f.finish().unwrap();
+}
+
+fn handle_rename(
+    new_path: &Path,
+    node: &Node,
+    nodes: &mut Vec<Node>,
+    repo: &mut Repo,
+) {
+    let mut new_path_exists = false;
+    let mut new_path_is_dir = false;
+    if let Some(nd) = nodes.iter().find(|n| &n.path == &new_path) {
+        new_path_exists = true;
+        new_path_is_dir = nd.is_dir();
+    }
+    let new_path_has_child = nodes
+        .iter()
+        .filter(|n| n.path.starts_with(&new_path))
+        .count() > 1;
+    let result = repo.rename(&node.path, &new_path);
+
+    if new_path == node.path {
+        result.unwrap();
+        return;
+    }
+    if new_path.starts_with(&node.path) {
+        assert_eq!(result.unwrap_err(), Error::InvalidArgument);
+        return;
+    }
+    if new_path_exists {
+        if node.is_file() && new_path_is_dir {
+            assert_eq!(result.unwrap_err(), Error::IsDir);
+            return;
+        } else if node.is_dir() && !new_path_is_dir {
+            assert_eq!(result.unwrap_err(), Error::NotDir);
+            return;
+        } else if node.is_dir() && new_path_has_child {
+            assert_eq!(result.unwrap_err(), Error::NotEmpty);
+            return;
+        }
+    }
+
+    result.unwrap();
+
+    if new_path_exists {
+        nodes.retain(|n| &n.path != &new_path);
+    }
+
+    for nd in nodes.iter_mut().filter(|n| n.path.starts_with(&node.path)) {
+        let child = nd.path.strip_prefix(&node.path).unwrap().to_path_buf();
+        nd.path = new_path.join(child);
+    }
 }
 
 fn test_round(env: &mut fuzz::TestEnv, step: &Step, nodes: &mut Vec<Node>) {
@@ -502,21 +558,7 @@ fn test_round(env: &mut fuzz::TestEnv, step: &Step, nodes: &mut Vec<Node>) {
             }
 
             let new_path = node.path.parent().unwrap().join(&step.name);
-            let result = env.repo.rename(&node.path, &new_path);
-            if new_path == node.path {
-                assert_eq!(result.unwrap_err(), Error::InvalidArgument);
-            } else if nodes.iter().any(|n| &n.path == &new_path) {
-                assert_eq!(result.unwrap_err(), Error::AlreadyExists);
-            } else {
-                result.unwrap();
-                for nd in
-                    nodes.iter_mut().filter(|n| n.path.starts_with(&node.path))
-                {
-                    let child =
-                        nd.path.strip_prefix(&node.path).unwrap().to_path_buf();
-                    nd.path = new_path.join(child);
-                }
-            }
+            handle_rename(&new_path, &node, nodes, &mut env.repo);
         }
 
         Action::Move => {
@@ -536,21 +578,7 @@ fn test_round(env: &mut fuzz::TestEnv, step: &Step, nodes: &mut Vec<Node>) {
             } else {
                 tgt.path.clone()
             };
-            let result = env.repo.rename(&node.path, &new_path);
-            if new_path.starts_with(&node.path) {
-                assert_eq!(result.unwrap_err(), Error::InvalidArgument);
-            } else if nodes.iter().any(|n| &n.path == &new_path) {
-                assert_eq!(result.unwrap_err(), Error::AlreadyExists);
-            } else {
-                result.unwrap();
-                for nd in
-                    nodes.iter_mut().filter(|n| n.path.starts_with(&node.path))
-                {
-                    let child =
-                        nd.path.strip_prefix(&node.path).unwrap().to_path_buf();
-                    nd.path = new_path.join(child);
-                }
-            }
+            handle_rename(&new_path, &node, nodes, &mut env.repo);
         }
 
         Action::Copy => {
@@ -585,40 +613,41 @@ fn verify(env: &mut fuzz::TestEnv, nodes: &mut Vec<Node>) {
     println!("Start verifying...");
     nodes.sort_by(|a, b| a.path.cmp(&b.path));
     for (idx, node) in nodes.iter().enumerate() {
-        if node.is_dir() {
-            // find node's immediate children
-            let mut children: Vec<Node> = Vec::new();
-            let mut pos = idx + 1;
-            while let Some(nd) = nodes.get(pos) {
-                match nd.path.strip_prefix(&node.path) {
-                    Ok(p) => {
-                        if p.components().count() == 1
-                            && children
-                                .binary_search_by(|c| c.path.cmp(&nd.path))
-                                .is_err()
-                        {
-                            children.push(nd.clone());
-                        }
-                        pos += 1;
-                    }
-                    Err(_) => break,
-                }
-            }
-
-            // get node's immediate children from repo
-            let mut subdirs = env.repo.read_dir(&node.path).unwrap();
-            subdirs.sort_by(|a, b| a.path().cmp(b.path()));
-
-            // then compare them
-            assert_eq!(subdirs.len(), children.len());
-            for (i, child) in children.iter().enumerate() {
-                let subdir = &subdirs[i];
-                assert_eq!(&child.path, subdir.path());
-                assert_eq!(child.is_dir(), subdir.metadata().is_dir());
-            }
-        } else {
+        if node.is_file() {
             // if node is file, compare its content
             compare_file_content(&mut env.repo, &node);
+            continue;
+        }
+
+        // find node's immediate children
+        let mut children: Vec<Node> = Vec::new();
+        let mut pos = idx + 1;
+        while let Some(nd) = nodes.get(pos) {
+            match nd.path.strip_prefix(&node.path) {
+                Ok(p) => {
+                    if p.components().count() == 1
+                        && children
+                            .binary_search_by(|c| c.path.cmp(&nd.path))
+                            .is_err()
+                    {
+                        children.push(nd.clone());
+                    }
+                    pos += 1;
+                }
+                Err(_) => break,
+            }
+        }
+
+        // get node's immediate children from repo
+        let mut subdirs = env.repo.read_dir(&node.path).unwrap();
+        subdirs.sort_by(|a, b| a.path().cmp(b.path()));
+
+        // then compare them
+        assert_eq!(subdirs.len(), children.len());
+        for (i, child) in children.iter().enumerate() {
+            let subdir = &subdirs[i];
+            assert_eq!(&child.path, subdir.path());
+            assert_eq!(child.is_dir(), subdir.metadata().is_dir());
         }
     }
     println!("Completed.");
@@ -729,6 +758,6 @@ fn fuzz_fs_mt(rounds: usize) {
 #[test]
 fn fuzz_fs() {
     fuzz_fs_st(30);
-    //fuzz_fs_reproduce("fs_1513717382");
+    //fuzz_fs_reproduce("fs_1524202959");
     fuzz_fs_mt(30);
 }

@@ -161,9 +161,10 @@ fn test_round(
             let name = format!("{}", fuzz::random_usize(round));
             let tgt_parent = ctl_grp[fuzz::random_usize(ctl_grp.len())].clone();
             let path = tgt_parent.join(name);
-            //println!("rename to path: {}", path.display());
-            if node == root || path.starts_with(&node)
-                || ctl_grp.iter().filter(|p| *p == &path).count() > 0
+            if node == path {
+                repo.rename(&node, &path).unwrap();
+            } else if node == root || path.starts_with(&node)
+                || ctl_grp.iter().filter(|p| p.starts_with(&path)).count() > 1
             {
                 assert!(repo.rename(&node, &path).is_err());
             } else {
@@ -253,6 +254,6 @@ fn dir_fuzz_mt(rounds: usize) {
 #[test]
 fn fuzz_dir() {
     dir_fuzz_st(200);
-    //dir_fuzz_reproduce("dir-1513286719");
+    //dir_fuzz_reproduce("dir_1524198910");
     dir_fuzz_mt(200);
 }

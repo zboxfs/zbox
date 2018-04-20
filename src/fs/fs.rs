@@ -199,8 +199,7 @@ impl Fs {
         // loop through path component and skip root
         for name in path.iter().skip(1) {
             let name = name.to_str().unwrap();
-            let fc = fnode.clone();
-            fnode = Fnode::child(fc, name, &self.fcache, &self.vol)?;
+            fnode = Fnode::child(&fnode, name, &self.fcache, &self.vol)?;
         }
         Ok(fnode)
     }
@@ -441,30 +440,58 @@ impl Fs {
             return Err(Error::ReadOnly);
         }
 
+        if from == to {
+            return Ok(());
+        }
+
         if to.starts_with(from) {
             return Err(Error::InvalidArgument);
         }
 
         let src = self.open_fnode(from)?;
+
         {
-            let fnode = src.fnode.read().unwrap();
-            if fnode.is_root() {
+            let src_fnode = src.fnode.read().unwrap();
+            if src_fnode.is_root() {
                 return Err(Error::IsRoot);
+            }
+
+            if let Ok(tgt_handle) = self.open_fnode(to) {
+                let tgt_fnode = tgt_handle.fnode.read().unwrap();
+                if tgt_fnode.is_root() {
+                    return Err(Error::IsRoot);
+                }
+                if src_fnode.is_file() && tgt_fnode.is_dir() {
+                    return Err(Error::IsDir);
+                }
+                if src_fnode.is_dir() {
+                    if tgt_fnode.is_file() {
+                        return Err(Error::NotDir);
+                    }
+                    if tgt_fnode.children_cnt() > 0 {
+                        return Err(Error::NotEmpty);
+                    }
+                }
             }
         }
 
         let (tgt_parent, name) = self.resolve_parent(to)?;
-        {
-            let parent = tgt_parent.read().unwrap();
-            if parent.has_child(&name) {
-                return Err(Error::AlreadyExists);
-            }
-        }
 
         // begin and run transaction
         TxMgr::begin_trans(&self.txmgr)?.run_all(|| {
             // remove from source
             Fnode::unlink(&src.fnode)?;
+
+            // remove target if it exists
+            if let Ok(tgt_handle) = self.open_fnode(to) {
+                Fnode::unlink(&tgt_handle.fnode)?;
+                let mut tgt_fnode = tgt_handle.fnode.write().unwrap();
+                if tgt_fnode.is_file() {
+                    tgt_fnode.make_mut()?.clear_vers()?;
+                }
+                tgt_fnode.make_del()?;
+                self.fcache.remove(tgt_fnode.id());
+            }
 
             // and then add to target
             Fnode::add_child(&tgt_parent, &src.fnode, &name)

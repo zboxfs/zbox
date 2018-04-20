@@ -6,6 +6,8 @@ mod common;
 use std::{thread, time};
 use std::sync::{Arc, RwLock};
 
+use zbox::Error;
+
 #[test]
 fn dir_create() {
     let mut env = common::TestEnv::new();
@@ -132,5 +134,27 @@ fn dir_rename() {
     repo.create_dir_all("/0/3").unwrap();
     repo.create_dir_all("/0/4").unwrap();
     repo.create_dir("/17").unwrap();
-    assert!(repo.rename("/17", "/0/4").is_err());
+    repo.rename("/17", "/0/4").unwrap();
+    assert!(!repo.path_exists("/17"));
+    assert!(repo.path_exists("/0/3"));
+    assert!(repo.path_exists("/0/4"));
+
+    // rename dir to non-empty dir
+    repo.create_dir_all("/1/2").unwrap();
+    repo.create_dir_all("/1/3").unwrap();
+    repo.create_dir("/18").unwrap();
+    assert_eq!(repo.rename("/18", "/1").unwrap_err(), Error::NotEmpty);
+
+    // rename dir to empty dir
+    repo.create_dir_all("/2/2").unwrap();
+    repo.create_dir_all("/2/3").unwrap();
+    repo.create_dir("/19").unwrap();
+    repo.rename("/2", "/19").unwrap();
+    assert!(!repo.path_exists("/2"));
+    assert!(repo.path_exists("/19/2"));
+    assert!(repo.path_exists("/19/3"));
+
+    // rename dir to root
+    repo.create_dir("/4").unwrap();
+    assert_eq!(repo.rename("/4", "/").unwrap_err(), Error::IsRoot);
 }

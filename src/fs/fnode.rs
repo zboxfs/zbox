@@ -335,7 +335,7 @@ impl Fnode {
         let root = Cow::<Fnode>::load_cow(root_id, txmgr, vol)?;
         {
             let mut root_cow = root.write().unwrap();
-            let root = root_cow.make_mut_naive()?;
+            let root = root_cow.make_mut_naive();
             root.store = store.clone();
         }
         Ok(root)
@@ -369,7 +369,7 @@ impl Fnode {
                 // set parent, store and volume for the child
                 {
                     let mut child_cow = child.write().unwrap();
-                    let c = child_cow.make_mut_naive()?;
+                    let c = child_cow.make_mut_naive();
                     c.parent = Some(self_ref);
                     c.store = self.store.clone();
                 }
@@ -381,23 +381,25 @@ impl Fnode {
             })
     }
 
+    #[inline]
     pub fn has_child(&self, name: &str) -> bool {
         self.kids.iter().position(|ref c| c.name == name).is_some()
     }
 
+    #[inline]
     pub fn children_cnt(&self) -> usize {
         self.kids.len()
     }
 
     /// Get single child fnode
     pub fn child(
-        parent: FnodeRef,
+        parent: &FnodeRef,
         name: &str,
         cache: &Cache,
         vol: &VolumeRef,
     ) -> Result<FnodeRef> {
         let mut par = parent.write().unwrap();
-        par.make_mut_naive()?
+        par.make_mut_naive()
             .load_child(name, parent.clone(), cache, vol)
     }
 
@@ -413,7 +415,7 @@ impl Fnode {
         vol: &VolumeRef,
     ) -> Result<Vec<DirEntry>> {
         let mut par = parent.write().unwrap();
-        let par = par.make_mut_naive()?;
+        let par = par.make_mut_naive();
         if !par.is_dir() {
             return Err(Error::NotDir);
         }
