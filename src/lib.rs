@@ -40,6 +40,7 @@
 //! ```
 //! # use zbox::{init_env, RepoOpener};
 //! use std::io::prelude::*;
+//! use std::io::{Seek, SeekFrom};
 //! use zbox::OpenOptions;
 //! # init_env();
 //! # let mut repo = RepoOpener::new()
@@ -61,6 +62,7 @@
 //!
 //! // read file content using std::io::Read trait
 //! let mut content = String::new();
+//! file.seek(SeekFrom::Start(0)).unwrap();
 //! file.read_to_string(&mut content).unwrap();
 //! assert_eq!(content, "Hello, world!");
 //! ```

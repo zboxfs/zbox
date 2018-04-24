@@ -188,11 +188,16 @@ int test_file() {
     // read
     uint8_t dst[3] = { 0 };
     ret = zbox_file_read(dst, 3, file);
+    assert(ret == 0);
+    ret = zbox_file_seek(file, 0, SEEK_SET);
+    assert(ret == 0);
+    ret = zbox_file_read(dst, 3, file);
     assert(ret == 3);
     assert(!memcmp(dst, buf, 3));
 
     // write once
     buf[0] = 4; buf[1] = 5; buf[2] = 6;
+    assert(zbox_file_seek(file, 0, SEEK_SET) == 0);
     ret = zbox_file_write_once(file, buf, 3);
     assert(!ret);
 

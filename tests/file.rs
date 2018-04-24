@@ -40,6 +40,9 @@ fn file_read_write() {
 
     let buf = [1u8, 2u8, 3u8];
     let buf2 = [4u8, 5u8, 6u8, 7u8, 8u8];
+    let mut buf3 = Vec::new();
+    buf3.extend_from_slice(&buf);
+    buf3.extend_from_slice(&buf2);
 
     // #1, create and write a new file
     {
@@ -203,13 +206,12 @@ fn file_read_write() {
             .unwrap();
 
         f.write_once(&buf[..]).unwrap();
-
         f.write_once(&buf2[..]).unwrap();
 
-        verify_content(&mut f, &buf2);
+        verify_content(&mut f, &buf3);
 
         let meta = f.metadata().unwrap();
-        assert_eq!(meta.len(), buf2.len());
+        assert_eq!(meta.len(), buf3.len());
         assert_eq!(f.history().unwrap().len(), 1);
     }
 
@@ -222,22 +224,21 @@ fn file_read_write() {
             .unwrap();
 
         f.write_once(&buf[..]).unwrap();
-
         f.write_once(&buf2[..]).unwrap();
 
-        verify_content(&mut f, &buf2);
+        verify_content(&mut f, &buf3);
 
         let meta = f.metadata().unwrap();
         let history = f.history().unwrap();
-        assert_eq!(meta.len(), buf2.len());
+        assert_eq!(meta.len(), buf3.len());
         assert_eq!(history.len(), 2);
 
         let ver_num = history.last().unwrap().num();
         let mut rdr = f.version_reader(ver_num).unwrap();
         let mut dst = Vec::new();
         let result = rdr.read_to_end(&mut dst).unwrap();
-        assert_eq!(result, buf2.len());
-        assert_eq!(&dst[..], &buf2[..]);
+        assert_eq!(result, buf3.len());
+        assert_eq!(&dst[..], &buf3[..]);
 
         let mut rdr = f.version_reader(ver_num - 1).unwrap();
         let mut dst = Vec::new();
@@ -261,7 +262,7 @@ fn file_read_write() {
         let mut rdr = f.version_reader(curr_ver).unwrap();
         let mut dst = Vec::new();
         rdr.read_to_end(&mut dst).unwrap();
-        assert_eq!(&dst[..], &buf2[..]);
+        assert_eq!(&dst[..], &buf3[..]);
 
         let mut rdr = f.version_reader(curr_ver - 1).unwrap();
         let mut dst = Vec::new();
@@ -301,8 +302,11 @@ fn file_read_write() {
         verify_content(&mut f, &buf[..]);
         f.set_len(1).unwrap();
         verify_content(&mut f, &buf[..1]);
+
+        // note here file position is 3 which is beyond EOF,
+        // the file is extended with zero and then write with data
         f.write_once(&buf[..]).unwrap();
-        verify_content(&mut f, &buf[..]);
+        verify_content(&mut f, &[1, 0, 0, 1, 2, 3]);
     }
 
     // #15, test create open flag
@@ -323,6 +327,30 @@ fn file_read_write() {
             .create(false)
             .open(&mut repo, "/file9")
             .unwrap();
+    }
+
+    // #16, read while file is in writing
+    {
+        let mut f = OpenOptions::new()
+            .create(true)
+            .open(&mut repo, "/file16")
+            .unwrap();
+        f.write_once(&[0, 1, 2, 3, 4, 5, 6]).unwrap();
+
+        f.seek(SeekFrom::Start(1)).unwrap();
+        f.write_once(&[20, 21]).unwrap();
+
+        // now the file position is 3
+        let mut buf = [0u8; 1];
+        f.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf[..], &[3]);
+
+        // create a new version and continue read
+        f.write_once(&[30, 31]).unwrap();
+        f.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf[..], &[6]);
+
+        verify_content(&mut f, &[0, 20, 21, 3, 30, 31, 6]);
     }
 }
 
@@ -620,6 +648,7 @@ fn file_seek() {
 
         // verify
         let mut dst = Vec::new();
+        f.seek(SeekFrom::Start(0)).unwrap();
         let result = f.read_to_end(&mut dst).unwrap();
         assert_eq!(result, buf.len() + 1);
         assert_eq!(&dst[..], &[1, 1, 2, 3]);
@@ -649,6 +678,7 @@ fn file_seek() {
 
         // verify
         let mut dst = Vec::new();
+        f.seek(SeekFrom::Start(0)).unwrap();
         let result = f.read_to_end(&mut dst).unwrap();
         assert_eq!(result, buf.len() * 2 + 1);
         assert_eq!(&dst[..], &[1, 2, 3, 0, 1, 2, 3]);

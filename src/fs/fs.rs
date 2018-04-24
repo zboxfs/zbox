@@ -351,7 +351,8 @@ impl Fs {
             let mut rdr = FnodeReader::new_current(src.fnode.clone())?;
             let mut wtr = FnodeWriter::new(tgt.clone(), tx_handle.txid)?;
             io::copy(&mut rdr, &mut wtr)?;
-            wtr.finish()
+            wtr.finish()?;
+            Ok(())
         })?;
 
         Ok(())

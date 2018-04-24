@@ -678,22 +678,29 @@ pub type FnodeWeakRef = CowWeakRef<Fnode>;
 /// Fnode Reader
 #[derive(Debug)]
 pub struct Reader {
+    ver: usize,
     rdr: ContentReader,
 }
 
 impl Reader {
+    #[inline]
+    pub fn ver(&self) -> usize {
+        self.ver
+    }
+
     /// Create a reader for specified version
     pub fn new(fnode: FnodeRef, ver: usize) -> Result<Self> {
         let fnode = fnode.read().unwrap();
         let rdr = fnode.version_reader(ver)?;
-        Ok(Reader { rdr })
+        Ok(Reader { ver, rdr })
     }
 
     /// Create a reader for current version
     pub fn new_current(fnode: FnodeRef) -> Result<Self> {
         let fnode = fnode.read().unwrap();
-        let rdr = fnode.version_reader(fnode.curr_ver_num())?;
-        Ok(Reader { rdr })
+        let ver = fnode.curr_ver_num();
+        let rdr = fnode.version_reader(ver)?;
+        Ok(Reader { ver, rdr })
     }
 }
 
@@ -727,7 +734,7 @@ impl Writer {
         Ok(Writer { inner, handle })
     }
 
-    pub fn finish(self) -> Result<()> {
+    pub fn finish(self) -> Result<usize> {
         let stg_ctn = self.inner.finish()?;
         let handle = &self.handle;
 
@@ -747,7 +754,7 @@ impl Writer {
             Content::unlink(&ctn, &mut fnode.chk_map, &handle.store)?;
         }
 
-        Ok(())
+        Ok(stg_ctn.end_offset())
     }
 }
 

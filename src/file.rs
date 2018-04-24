@@ -124,6 +124,7 @@ impl<'a> Seek for VersionReader<'a> {
 ///   ```
 ///   # use zbox::{init_env, Result, RepoOpener};
 ///   use std::io::prelude::*;
+///   use std::io::{Seek, SeekFrom};
 ///   # use zbox::OpenOptions;
 ///
 ///   # fn foo() -> Result<()> {
@@ -137,6 +138,7 @@ impl<'a> Seek for VersionReader<'a> {
 ///   file.finish()?;
 ///
 ///   let mut content = String::new();
+///   file.seek(SeekFrom::Start(0))?;
 ///   file.read_to_string(&mut content)?;
 ///   assert_eq!(content, "foo bar");
 ///
@@ -154,7 +156,7 @@ impl<'a> Seek for VersionReader<'a> {
 ///   ```
 ///   # #![allow(unused_mut, unused_variables)]
 ///   # use zbox::{init_env, Result, RepoOpener};
-///   use std::io::Read;
+///   use std::io::{Read, Seek, SeekFrom};
 ///   # use zbox::OpenOptions;
 ///
 ///   # fn foo() -> Result<()> {
@@ -166,6 +168,7 @@ impl<'a> Seek for VersionReader<'a> {
 ///   file.write_once(b"foo bar")?;
 ///
 ///   let mut content = String::new();
+///   file.seek(SeekFrom::Start(0))?;
 ///   file.read_to_string(&mut content)?;
 ///   assert_eq!(content, "foo bar");
 ///
@@ -208,7 +211,7 @@ impl<'a> Seek for VersionReader<'a> {
 /// let mut rdr = file.version_reader(curr_ver)?;
 /// let mut content = String::new();
 /// rdr.read_to_string(&mut content)?;
-/// assert_eq!(content, "bar");
+/// assert_eq!(content, "foobar");
 ///
 /// let mut rdr = file.version_reader(curr_ver - 1)?;
 /// let mut content = String::new();
@@ -225,6 +228,7 @@ impl<'a> Seek for VersionReader<'a> {
 ///
 /// ```
 /// use std::io::prelude::*;
+/// use std::io::{Seek, SeekFrom};
 /// # use zbox::{init_env, Result, RepoOpener};
 /// # use zbox::OpenOptions;
 ///
@@ -235,15 +239,16 @@ impl<'a> Seek for VersionReader<'a> {
 /// file.write_once(&[1, 2, 3, 4])?;
 ///
 /// let mut buf = [0; 2];
+/// file.seek(SeekFrom::Start(0))?;
 /// file.read_exact(&mut buf)?;
 /// assert_eq!(&buf[..], &[1, 2]);
 ///
 /// // create a new version
-/// file.write_once(&[5, 6, 7])?;
+/// // file.write_once(&[5, 6, 7])?;
 ///
 /// // notice this read still continues on previous version
-/// file.read_exact(&mut buf)?;
-/// assert_eq!(&buf[..], &[3, 4]);
+/// // file.read_exact(&mut buf)?;
+/// // assert_eq!(&buf[..], &[3, 4]);
 ///
 /// # Ok(())
 /// # }
@@ -410,12 +415,16 @@ impl File {
         match self.wtr.take() {
             Some(wtr) => {
                 let tx_handle = self.tx_handle.take().unwrap();
+                let mut end_pos = 0;
 
-                tx_handle.run(|| wtr.finish())?;
+                tx_handle.run(|| {
+                    end_pos = wtr.finish()?;
+                    Ok(())
+                })?;
                 tx_handle.commit()?;
 
-                // reset position
-                self.pos = SeekFrom::Start(0);
+                // set position
+                self.pos = SeekFrom::Start(end_pos as u64);
 
                 Ok(())
             }
@@ -492,15 +501,32 @@ impl Read for File {
                 Error::CannotRead.description(),
             ));
         }
-        if self.rdr.is_none() {
+
+        let has_new_ver = match self.rdr {
+            Some(ref rdr) => {
+                let fnode = self.handle.fnode.read().unwrap();
+                fnode.curr_ver_num() > rdr.ver()
+            }
+            None => false,
+        };
+
+        // if reader is not created yet or there is a new version,
+        // create a new reader and seek to current file position
+        if self.rdr.is_none() || has_new_ver {
             let mut rdr = map_io_err!(FnodeReader::new_current(
                 self.handle.fnode.clone()
             ))?;
             rdr.seek(self.pos)?;
             self.rdr = Some(rdr);
         }
+
         match self.rdr {
-            Some(ref mut rdr) => rdr.read(buf),
+            Some(ref mut rdr) => {
+                let read = rdr.read(buf)?;
+                let new_pos = rdr.seek(SeekFrom::Current(0)).unwrap();
+                self.pos = SeekFrom::Start(new_pos);
+                Ok(read)
+            }
             None => unreachable!(),
         }
     }
