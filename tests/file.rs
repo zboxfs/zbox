@@ -352,6 +352,25 @@ fn file_read_write() {
 
         verify_content(&mut f, &[0, 20, 21, 3, 30, 31, 6]);
     }
+
+    // #17, read after set_len
+    {
+        let mut f = OpenOptions::new()
+            .create(true)
+            .open(&mut repo, "/file17")
+            .unwrap();
+        f.write_once(&[0, 1, 2, 3]).unwrap();
+
+        let mut buf = [0u8; 2];
+        f.seek(SeekFrom::Start(1)).unwrap();
+        f.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf[..], &[1, 2]);
+
+        f.set_len(2).unwrap();
+
+        let mut buf = Vec::new();
+        assert_eq!(f.read_to_end(&mut buf).unwrap(), 0);
+    }
 }
 
 #[test]

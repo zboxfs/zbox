@@ -683,11 +683,6 @@ pub struct Reader {
 }
 
 impl Reader {
-    #[inline]
-    pub fn ver(&self) -> usize {
-        self.ver
-    }
-
     /// Create a reader for specified version
     pub fn new(fnode: FnodeRef, ver: usize) -> Result<Self> {
         let fnode = fnode.read().unwrap();

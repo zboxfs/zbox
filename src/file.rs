@@ -110,10 +110,10 @@ impl<'a> Seek for VersionReader<'a> {
 /// # Writing
 ///
 /// The file content is cached internally for deduplication and will be handled
-/// automatically, thus calling [`flush`] is not recommendated.
+/// automatically, thus calling [`flush`] is **not** recommendated.
 ///
 /// `File` is multi-versioned, each time updating the content will create a new
-/// permanent [`Version`]. There are two ways of writing data:
+/// permanent [`Version`]. There are two ways of writing data to a file:
 ///
 /// - **Multi-part Write**
 ///
@@ -124,7 +124,7 @@ impl<'a> Seek for VersionReader<'a> {
 ///   ```
 ///   # use zbox::{init_env, Result, RepoOpener};
 ///   use std::io::prelude::*;
-///   use std::io::{Seek, SeekFrom};
+///   use std::io::SeekFrom;
 ///   # use zbox::OpenOptions;
 ///
 ///   # fn foo() -> Result<()> {
@@ -179,17 +179,46 @@ impl<'a> Seek for VersionReader<'a> {
 ///
 /// # Reading
 ///
-/// As `File` contains multiple versions, [`Read`] operation must be
-/// associated with a version. By default, the latest version is binded for
-/// reading. To read a specific version, a [`VersionReader`], which supports
-/// [`Read`] trait, can be used.
-///
-/// `File` internally maintain a reader, which will be opened for current
-/// version when it is used at first time. Once the reader is opened,
-/// subsequent write operations have no effect on it. So be carefull when
-/// doing both reading and writing at the same time.
+/// As `File` can contain multiple versions, [`Read`] operation can be
+/// associated with different versions. By default, reading on `File` object is
+/// always binded to the latest version. To read a specific version, a
+/// [`VersionReader`], which supports [`Read`] trait as well, can be used.
 ///
 /// ## Examples
+///
+/// Read the file content while it is in writing, notice that reading is always
+/// binded to latest content version.
+///
+/// ```
+/// use std::io::prelude::*;
+/// use std::io::SeekFrom;
+/// # use zbox::{init_env, Result, RepoOpener};
+/// # use zbox::OpenOptions;
+///
+/// # fn foo() -> Result<()> {
+/// # init_env();
+/// # let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
+/// let mut file = OpenOptions::new().create(true).open(&mut repo, "/foo.txt")?;
+/// file.write_once(&[1, 2, 3, 4, 5, 6])?;
+///
+/// // read the first 2 bytes
+/// let mut buf = [0; 2];
+/// file.seek(SeekFrom::Start(0))?;
+/// file.read_exact(&mut buf)?;
+/// assert_eq!(&buf[..], &[1, 2]);
+///
+/// // create a new version, now the file content is [1, 2, 7, 8, 5, 6]
+/// file.write_once(&[7, 8])?;
+///
+/// // notice that reading is on the latest version
+/// file.seek(SeekFrom::Current(-2))?;
+/// file.read_exact(&mut buf)?;
+/// assert_eq!(&buf[..], &[7, 8]);
+///
+/// # Ok(())
+/// # }
+/// # foo().unwrap();
+/// ```
 ///
 /// Read multiple versions using [`VersionReader`].
 ///
@@ -208,47 +237,17 @@ impl<'a> Seek for VersionReader<'a> {
 /// // get latest version number
 /// let curr_ver = file.curr_version()?;
 ///
+/// // create a version reader and read its content
 /// let mut rdr = file.version_reader(curr_ver)?;
 /// let mut content = String::new();
 /// rdr.read_to_string(&mut content)?;
 /// assert_eq!(content, "foobar");
 ///
+/// // create another version reader and read its content
 /// let mut rdr = file.version_reader(curr_ver - 1)?;
 /// let mut content = String::new();
 /// rdr.read_to_string(&mut content)?;
 /// assert_eq!(content, "foo");
-///
-/// # Ok(())
-/// # }
-/// # foo().unwrap();
-/// ```
-///
-/// Read the file content while it is in writing, notice that the read is not
-/// affected by the following write.
-///
-/// ```
-/// use std::io::prelude::*;
-/// use std::io::{Seek, SeekFrom};
-/// # use zbox::{init_env, Result, RepoOpener};
-/// # use zbox::OpenOptions;
-///
-/// # fn foo() -> Result<()> {
-/// # init_env();
-/// # let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
-/// let mut file = OpenOptions::new().create(true).open(&mut repo, "/foo.txt")?;
-/// file.write_once(&[1, 2, 3, 4])?;
-///
-/// let mut buf = [0; 2];
-/// file.seek(SeekFrom::Start(0))?;
-/// file.read_exact(&mut buf)?;
-/// assert_eq!(&buf[..], &[1, 2]);
-///
-/// // create a new version
-/// // file.write_once(&[5, 6, 7])?;
-///
-/// // notice this read still continues on previous version
-/// // file.read_exact(&mut buf)?;
-/// // assert_eq!(&buf[..], &[3, 4]);
 ///
 /// # Ok(())
 /// # }
@@ -402,6 +401,14 @@ impl File {
         Ok(())
     }
 
+    // re-create reader on latest version
+    fn renew_reader(&mut self) -> Result<()> {
+        let mut rdr = FnodeReader::new_current(self.handle.fnode.clone())?;
+        rdr.seek(self.pos)?;
+        self.rdr = Some(rdr);
+        Ok(())
+    }
+
     /// Complete multi-part write to create a new version.
     ///
     /// # Errors
@@ -412,6 +419,7 @@ impl File {
     /// [`Error::NotWrite`]: enum.Error.html
     pub fn finish(&mut self) -> Result<()> {
         self.check_closed()?;
+
         match self.wtr.take() {
             Some(wtr) => {
                 let tx_handle = self.tx_handle.take().unwrap();
@@ -425,11 +433,16 @@ impl File {
 
                 // set position
                 self.pos = SeekFrom::Start(end_pos as u64);
-
-                Ok(())
             }
-            None => Err(Error::NotWrite),
+            None => return Err(Error::NotWrite),
         }
+
+        // re-create reader if there is an existing reader
+        if !self.rdr.is_none() {
+            self.renew_reader()?;
+        }
+
+        Ok(())
     }
 
     /// Single-part write to create a new version.
@@ -488,6 +501,12 @@ impl File {
         tx_handle.run_all(|| {
             Fnode::set_len(self.handle.clone(), len, tx_handle.txid)
         })?;
+
+        // re-create reader if there is an existing reader
+        if !self.rdr.is_none() {
+            self.renew_reader()?;
+        }
+
         Ok(())
     }
 }
@@ -502,22 +521,10 @@ impl Read for File {
             ));
         }
 
-        let has_new_ver = match self.rdr {
-            Some(ref rdr) => {
-                let fnode = self.handle.fnode.read().unwrap();
-                fnode.curr_ver_num() > rdr.ver()
-            }
-            None => false,
-        };
-
-        // if reader is not created yet or there is a new version,
-        // create a new reader and seek to current file position
-        if self.rdr.is_none() || has_new_ver {
-            let mut rdr = map_io_err!(FnodeReader::new_current(
-                self.handle.fnode.clone()
-            ))?;
-            rdr.seek(self.pos)?;
-            self.rdr = Some(rdr);
+        // if reader is not created yet, create a new reader and seek to
+        // the current file position
+        if self.rdr.is_none() {
+            map_io_err!(self.renew_reader())?;
         }
 
         match self.rdr {
