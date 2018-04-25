@@ -121,6 +121,7 @@ impl<'a> Seek for VersionReader<'a> {
 ///   operations, [`finish`] must be called to create a new version.
 ///
 ///   ## Examples
+///
 ///   ```
 ///   # use zbox::{init_env, Result, RepoOpener};
 ///   use std::io::prelude::*;
@@ -153,6 +154,7 @@ impl<'a> Seek for VersionReader<'a> {
 ///   internally to create a new version.
 ///
 ///   ## Examples
+///
 ///   ```
 ///   # #![allow(unused_mut, unused_variables)]
 ///   # use zbox::{init_env, Result, RepoOpener};

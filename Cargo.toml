@@ -1,6 +1,6 @@
 [package]
 name = "zbox"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Bo Lu"]
 description = "Zbox is a zero-details, privacy-focused embeddable file system."
 documentation = "https://docs.rs/zbox"
@@ -33,20 +33,20 @@ vio-test = []
 
 [dependencies]
 bytes = "0.4.6"
-env_logger = "0.5.4"
+env_logger = "0.5.9"
 log = "0.4.1"
 lz4 = "1.22.0"
 rmp-serde = "0.13.7"
-serde = "1.0.27"
-serde_derive = "1.0.27"
+serde = "1.0.43"
+serde_derive = "1.0.43"
 
 [dependencies.linked-hash-map]
 version = "0.5.1"
 features = ["serde_impl"]
 
 [dev-dependencies]
-tempdir = "0.3.6"
+tempdir = "0.3.7"
 rand = "0.4.1"
 
 [build-dependencies]
-pkg-config = "0.3.9"
+pkg-config = "0.3.11"
