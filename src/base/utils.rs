@@ -4,12 +4,6 @@ pub fn align_offset(x: usize, size: usize) -> usize {
     x & (size - 1)
 }
 
-/// Calculate u64 align offset, size must be 2^n integer
-#[inline]
-pub fn align_offset_u64(x: u64, size: u64) -> u64 {
-    x & (size - 1)
-}
-
 /// Align usize to floor, size must be 2^n integer
 #[allow(dead_code)]
 #[inline]

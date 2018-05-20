@@ -784,6 +784,7 @@ impl Crypto {
     }
 
     /// Generic purpose hashing with key
+    #[inline]
     pub fn hash_with_key(inbuf: &[u8], key: &HashKey) -> Hash {
         Crypto::hash_raw(
             inbuf.as_ptr(),
@@ -794,6 +795,7 @@ impl Crypto {
     }
 
     /// Generic purpose hashing without key
+    #[inline]
     pub fn hash(inbuf: &[u8]) -> Hash {
         Crypto::hash_raw(inbuf.as_ptr(), inbuf.len(), ptr::null(), 0)
     }
@@ -1124,6 +1126,22 @@ impl Default for Crypto {
             enc_fn: crypto_aead_xchacha20poly1305_ietf_encrypt,
             dec_fn: crypto_aead_xchacha20poly1305_ietf_decrypt,
         }
+    }
+}
+
+/// Crypto context
+#[derive(Debug, Default)]
+pub struct CryptoCtx {
+    pub crypto: Crypto,
+    pub key: Key,
+    pub hash_key: HashKey,
+}
+
+impl CryptoCtx {
+    pub fn set_with(&mut self, crypto: &Crypto, key: &Key) {
+        self.crypto = crypto.clone();
+        self.key = key.clone();
+        self.hash_key = Crypto::derive_from_key(key, 0).unwrap();
     }
 }
 

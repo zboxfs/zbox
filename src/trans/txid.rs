@@ -1,6 +1,7 @@
 use std::result::Result as StdResult;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::cell::RefCell;
+use std::u64;
 
 use serde::{Deserialize, Serialize};
 use serde::ser::Serializer;
@@ -8,18 +9,28 @@ use serde::de::{self, Deserializer};
 
 use error::{Error, Result};
 
+// per-thread txid
 thread_local!{
     // per-thread tranaction ID, with initial value 0
     static TXID: RefCell<u64> = RefCell::new(0);
 }
+
+// a special txid only used for entity deletion
+const DEL_TXID: u64 = u64::MAX;
 
 /// Transaction ID, one per thread
 #[derive(Hash, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Txid(u64);
 
 impl Txid {
+    #[inline]
     pub fn new_empty() -> Self {
         Self::default()
+    }
+
+    #[inline]
+    pub fn new_del_txid() -> Self {
+        Txid(DEL_TXID)
     }
 
     #[inline]
@@ -32,6 +43,11 @@ impl Txid {
         self.0
     }
 
+    #[inline]
+    pub fn is_del_txid(&self) -> bool {
+        self.0 == DEL_TXID
+    }
+
     /// Check if thread is already in transaction
     pub fn is_in_trans() -> bool {
         let cur = TXID.with(|t| *t.borrow());
@@ -41,13 +57,14 @@ impl Txid {
     /// Get current thread transaction ID
     pub fn current() -> Result<Self> {
         let cur = TXID.with(|t| *t.borrow());
-        // zero is not a valid transaction id
+        // zero is not treated as a valid transaction id
         if cur == 0 {
             return Err(Error::NotInTrans);
         }
         Ok(Txid(cur))
     }
 
+    #[inline]
     pub fn current_or_empty() -> Self {
         Txid::current().unwrap_or(Txid::new_empty())
     }
@@ -56,20 +73,24 @@ impl Txid {
         TXID.with(|t| *t.borrow_mut() = 0);
     }
 
+    /// Get next txid by increase one
     pub fn next(&mut self) -> Txid {
-        let (mut next, is_overflowed) = self.0.overflowing_add(1);
-        if is_overflowed {
-            next = 1;
-        }
-        self.0 = next;
-        TXID.with(|t| *t.borrow_mut() = next);
-        Txid(next)
+        self.0 = self.0
+            .checked_add(1)
+            .and_then(|t| if t == DEL_TXID { None } else { Some(t) })
+            .unwrap();
+        TXID.with(|t| *t.borrow_mut() = self.0);
+        Txid(self.0)
     }
 }
 
 impl Debug for Txid {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Txid({})", self.0)
+        if self.is_del_txid() {
+            write!(f, "Txid(del)")
+        } else {
+            write!(f, "Txid({})", self.0)
+        }
     }
 }
 

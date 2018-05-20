@@ -76,6 +76,15 @@ where
     }
 
     #[inline]
+    pub fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut V>
+    where
+        K: Borrow<Q>,
+        Q: Eq + Hash,
+    {
+        self.map.get_mut(k)
+    }
+
+    #[inline]
     pub fn get_refresh<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut V>
     where
         K: Borrow<Q>,

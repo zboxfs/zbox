@@ -46,12 +46,15 @@ impl TxMgr {
         // create new txid and tx
         let mut tm = txmgr.write().unwrap();
         let txid = tm.txid_src.next();
-        let tx = Trans::new(txid).into_ref();
-        tm.txs.insert(txid, tx);
+        let tx = Trans::new(txid);
 
         // begin volume transaction
-        let mut vol = tm.vol.write().unwrap();
-        vol.begin_trans(txid)?;
+        {
+            let mut vol = tm.vol.write().unwrap();
+            vol.begin_trans(txid)?;
+        }
+
+        tm.txs.insert(txid, tx.into_ref());
 
         Ok(TxHandle {
             txid,

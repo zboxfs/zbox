@@ -112,7 +112,7 @@ impl Fs {
             payload.put(root.id().as_ref());
             payload.put(version_limit);
             let mut vol = vol.write().unwrap();
-            vol.write_payload(pwd, &payload)?;
+            vol.init_payload(pwd, &payload)?;
         }
 
         Ok(Fs {

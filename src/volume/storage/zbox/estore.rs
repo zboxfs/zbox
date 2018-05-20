@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::io::Result as IoResult;
 
@@ -7,13 +8,14 @@ use super::http_client::{HttpClient, HttpClientRef};
 
 #[derive(Debug)]
 pub struct Estore {
-    map: HashMap<Vec<u8>,
+    map: HashMap<u8, Vec<u8>>,
     client: HttpClientRef,
 }
 
 impl Estore {
     pub fn new(client: &HttpClientRef) -> Self {
         Estore {
+            map: HashMap::new(),
             client: client.clone(),
         }
     }

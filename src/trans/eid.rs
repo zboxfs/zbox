@@ -1,6 +1,8 @@
 use std::fmt::{self, Debug};
 use std::ops::Index;
 
+use bytes::{BufMut, LittleEndian};
+
 use base::crypto::Crypto;
 use super::txid::Txid;
 
@@ -25,9 +27,6 @@ impl Eid {
     pub(crate) fn new() -> Self {
         let mut eid = Eid::new_empty();
         Crypto::random_buf(&mut eid.0);
-        if let Ok(txid) = Txid::current() {
-            eid.0[0] = txid.val() as u8;
-        }
         eid
     }
 
@@ -36,11 +35,6 @@ impl Eid {
         let mut ret = Eid::new_empty();
         ret.0.copy_from_slice(buf);
         ret
-    }
-
-    #[inline]
-    pub(crate) fn to_short_string(&self) -> String {
-        (&self.to_string()[..8]).to_string()
     }
 }
 
@@ -71,6 +65,42 @@ impl ToString for Eid {
         let strs: Vec<String> =
             self.0.iter().map(|b| format!("{:x}", b)).collect();
         strs.join("")
+    }
+}
+
+/// Entity locator
+#[derive(Clone, Deserialize, Serialize)]
+pub struct Loc {
+    pub eid: Eid,
+    pub txid: Txid,
+}
+
+impl Loc {
+    #[inline]
+    pub fn new(id: &Eid, txid: Txid) -> Self {
+        Loc {
+            eid: id.clone(),
+            txid,
+        }
+    }
+
+    // derive locator id from entity id and txid
+    pub fn id(&self) -> Eid {
+        let mut buf = Vec::with_capacity(Eid::EID_SIZE + 8);
+        buf.put(self.eid.as_ref());
+        buf.put_u64::<LittleEndian>(self.txid.val());
+        let hash = Crypto::hash(&buf);
+        Eid::from_slice(&hash)
+    }
+}
+
+impl Debug for Loc {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("TxLogs")
+            .field("eid", &self.eid)
+            .field("txid", &self.txid)
+            .field("id", &self.id())
+            .finish()
     }
 }
 

@@ -7,7 +7,7 @@ use std::error::Error as StdError;
 use error::Result;
 use base::IntoRef;
 use base::lru::{Lru, Meter, PinChecker};
-use trans::{CloneNew, Eid, Id, TxMgrRef, Txid};
+use trans::{CloneNew, Eid, Id, Loc, TxMgrRef, Txid};
 use trans::trans::{Action, Transable};
 use trans::cow::{CowCache, CowRef, IntoCow};
 use volume::{Persistable, Volume, VolumeRef, Writer as VolWriter};
@@ -91,14 +91,14 @@ impl<'de> Persistable<'de> for SegData {
     }
 
     fn save(&self, txid: Txid, vol: &VolumeRef) -> Result<()> {
-        let mut writer = Volume::writer(self.id(), txid, vol);
+        let mut writer = VolWriter::new(self.id(), txid, vol);
         writer.write_all(&self.data)?;
         Ok(())
     }
 
     fn remove(id: &Eid, txid: Txid, vol: &VolumeRef) -> Result<Option<Eid>> {
         let mut vol = vol.write().unwrap();
-        vol.del(id, txid)
+        vol.del(&Loc::new(id, txid))
     }
 }
 
@@ -308,7 +308,7 @@ impl Segment {
 
         // write new segment data to volume
         let new_data_id = Eid::new();
-        let mut data_wtr = Volume::writer(&new_data_id, txid, vol);
+        let mut data_wtr = VolWriter::new(&new_data_id, txid, vol);
         data_wtr.write_all(&buf)?;
 
         // add dummy segment data to transaction
@@ -408,7 +408,7 @@ pub struct Writer {
 impl Writer {
     pub fn new(txid: Txid, txmgr: &TxMgrRef, vol: &VolumeRef) -> Result<Self> {
         let seg = Segment::new();
-        let data_wtr = Volume::writer(&seg.data_id, txid, vol);
+        let data_wtr = VolWriter::new(&seg.data_id, txid, vol);
 
         // add dummy segment data to transaction
         SegData::add_dummy_to_trans(&seg.data_id, Action::New, txid, txmgr)?;
@@ -438,7 +438,7 @@ impl Writer {
 
         // create new segment and segment data
         let seg = Segment::new();
-        self.data_wtr = Volume::writer(&seg.data_id, self.txid, &self.vol);
+        self.data_wtr = VolWriter::new(&seg.data_id, self.txid, &self.vol);
         self.seg = seg.into_cow(&self.txmgr)?;
 
         Ok(())

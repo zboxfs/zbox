@@ -5,7 +5,6 @@ use std::error::Error as StdError;
 use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write};
 use std::cmp::min;
 
-use bytes::{BufMut, ByteOrder, LittleEndian};
 use serde::{Deserialize, Serialize};
 use rmp_serde::{Deserializer, Serializer};
 use lz4::{Decoder as Lz4Decoder, Encoder as Lz4Encoder,
@@ -13,140 +12,12 @@ use lz4::{Decoder as Lz4Decoder, Encoder as Lz4Encoder,
 
 use error::{Error, Result};
 use base::{IntoRef, Time, Version};
-use base::crypto::{Cipher, Cost, Crypto, Key, PwdHash, Salt, KEY_SIZE,
-                   SALT_SIZE};
-use trans::{Eid, Id, Txid};
-use super::storage::{FileStorage, MemStorage, Storage};
-
-// subkey id for key derivation
-const SUBKEY_ID: u64 = 42;
-
-/// Super block
-#[derive(Debug)]
-struct SuperBlk {
-    volume_id: Eid,
-    pwd_hash: PwdHash,
-    key: Key,
-    crypto: Crypto,
-    ver: Version,
-    ctime: Time,
-    payload: Vec<u8>,
-}
-
-impl SuperBlk {
-    // header: salt + cost + cipher
-    const HEADER_LEN: usize = SALT_SIZE + Cost::BYTES_LEN + Cipher::BYTES_LEN;
-
-    // body: volume id + version + ctime + master key
-    const BODY_LEN: usize =
-        Eid::EID_SIZE + Version::BYTES_LEN + Time::BYTES_LEN + KEY_SIZE;
-
-    fn new(
-        volume_id: &Eid,
-        pwd: &str,
-        key: &Key,
-        crypto: &Crypto,
-        payload: &[u8],
-    ) -> Result<SuperBlk> {
-        // hash user specified plaintext password
-        let pwd_hash = crypto.hash_pwd(pwd, &Salt::new())?;
-
-        Ok(SuperBlk {
-            volume_id: volume_id.clone(),
-            pwd_hash,
-            key: key.clone(),
-            crypto: crypto.clone(),
-            ver: Version::current(),
-            ctime: Time::now(),
-            payload: payload.to_vec(),
-        })
-    }
-
-    fn serialize(&self) -> Result<Vec<u8>> {
-        // encrypt body using volume key which is the user password hash
-        let vkey = &self.pwd_hash.value;
-        let mut body = Vec::with_capacity(SuperBlk::BODY_LEN);
-        body.put(self.volume_id.as_ref());
-        body.put(&self.ver.serialize()[..]);
-        body.put_u64::<LittleEndian>(self.ctime.as_secs());
-        body.put(self.key.as_slice());
-        let enc_body =
-            self.crypto
-                .encrypt_with_ad(&body, vkey, &[Self::BODY_LEN as u8])?;
-
-        // encrypt payload using volume key
-        let enc_payload = self.crypto.encrypt(&self.payload, vkey)?;
-
-        // serialize super block
-        let len = Self::HEADER_LEN + enc_body.len() + enc_payload.len();
-        let mut ret = Vec::with_capacity(len);
-        ret.put(self.pwd_hash.salt.as_ref());
-        ret.put_u8(self.crypto.cost.to_u8());
-        ret.put_u8(self.crypto.cipher.into());
-        ret.put(&enc_body);
-        ret.put(&enc_payload);
-
-        Ok(ret)
-    }
-
-    fn deserialize(buf: &[u8], pwd: &str) -> Result<Self> {
-        if buf.len() < Self::HEADER_LEN {
-            return Err(Error::InvalidSuperBlk);
-        }
-
-        // read header
-        let mut pos = 0;
-        let salt = Salt::from_slice(&buf[..SALT_SIZE]);
-        pos += SALT_SIZE;
-        let cost = Cost::from_u8(buf[pos])?;
-        pos += Cost::BYTES_LEN;
-        let cipher = Cipher::from_u8(buf[pos])?;
-        pos += Cipher::BYTES_LEN;
-
-        // create crypto
-        let crypto = Crypto::new(cost, cipher)?;
-
-        // read encryped body
-        let enc_body_len = crypto.encrypted_len(Self::BODY_LEN);
-        if (buf.len() - pos) < enc_body_len {
-            return Err(Error::InvalidSuperBlk);
-        }
-        let body_buf = &buf[pos..pos + enc_body_len];
-        pos += enc_body_len;
-        let payload_buf = &buf[pos..];
-
-        // derive volume key and use it to decrypt body
-        let pwd_hash = crypto.hash_pwd(pwd, &salt)?;
-        let vkey = &pwd_hash.value;
-        let body =
-            crypto.decrypt_with_ad(body_buf, vkey, &[Self::BODY_LEN as u8])?;
-        pos = Eid::EID_SIZE;
-        let volume_id = Eid::from_slice(&body[..pos]);
-        let ver = Version::deserialize(&body[pos..pos + Version::BYTES_LEN]);
-        pos += Version::BYTES_LEN;
-        let ctime =
-            Time::from_secs(LittleEndian::read_u64(&body[pos..pos + 8]));
-        pos += 8;
-        let key = Key::from_slice(&body[pos..pos + KEY_SIZE]);
-
-        // decrypt payload using volume key
-        let payload = if payload_buf.is_empty() {
-            Vec::new()
-        } else {
-            crypto.decrypt(payload_buf, vkey)?
-        };
-
-        Ok(SuperBlk {
-            volume_id,
-            pwd_hash: PwdHash::new(),
-            key,
-            crypto,
-            ver,
-            ctime,
-            payload,
-        })
-    }
-}
+use base::crypto::{Cipher, Cost, Crypto, Key};
+use trans::{Eid, Id, Loc, Txid};
+use super::super_blk::SuperBlk;
+use super::storage::{FileStorage, MemStorage, StorageRef};
+use super::emap::Emap;
+use super::txlog::TxLogMgr;
 
 /// Volume metadata
 #[derive(Debug, Default, Clone)]
@@ -163,24 +34,26 @@ pub struct Meta {
 #[derive(Debug)]
 pub struct Volume {
     meta: Meta,
-    key: Key, // master key
+    emap: Emap,
+    txlog_mgr: TxLogMgr,
+    storage: StorageRef,
     crypto: Crypto,
-    storage: Box<Storage + Send + Sync>,
+    key: Key,
 }
 
 impl Volume {
+    // subkey ids identifiers
+    const SUBKEY_ID_EMAP: u64 = 42;
+    const SUBKEY_ID_TXLOG: u64 = 43;
+
     /// Create volume object
     pub fn new(uri: &str) -> Result<Self> {
         let mut vol = Volume::default();
 
-        vol.storage = if uri.starts_with("file://") {
-            let path = Path::new(&uri[7..]);
-            Box::new(FileStorage::new(path))
-        } else if uri.starts_with("mem://") {
-            Box::new(MemStorage::new())
-        } else {
-            return Err(Error::InvalidUri);
-        };
+        // create storage and associate it to emap and txlog manager
+        vol.storage = Self::create_storage(uri)?;
+        vol.emap.set_storage(&vol.storage);
+        vol.txlog_mgr.set_storage(&vol.storage);
 
         vol.meta.id = Eid::new();
         vol.meta.uri = uri.to_string();
@@ -188,13 +61,19 @@ impl Volume {
         Ok(vol)
     }
 
-    /// Check volume if it exists
+    /// Check specified volume if it exists
     pub fn exists(uri: &str) -> Result<bool> {
+        let storage = Self::create_storage(uri)?;
+        SuperBlk::exists(&storage)
+    }
+
+    // create storage specified by URI
+    fn create_storage(uri: &str) -> Result<StorageRef> {
         if uri.starts_with("file://") {
             let path = Path::new(&uri[7..]);
-            FileStorage::new(path).exists(path.to_str().unwrap())
+            Ok(FileStorage::new(path).into_ref())
         } else if uri.starts_with("mem://") {
-            MemStorage::new().exists(&uri[6..])
+            Ok(MemStorage::new().into_ref())
         } else {
             Err(Error::InvalidUri)
         }
@@ -202,38 +81,38 @@ impl Volume {
 
     /// Initialise volume
     pub fn init(&mut self, cost: Cost, cipher: Cipher) -> Result<()> {
+        // create crypto and generate random master key
         self.crypto = Crypto::new(cost, cipher)?;
-
-        // generate random master key
         self.key = Key::new();
-
-        // derive storage key from master key and initialise storage
-        let skey = Crypto::derive_from_key(&self.key, SUBKEY_ID)?;
-        self.storage.init(&self.meta.id, &self.crypto, &skey)?;
 
         self.meta.ver = Version::current();
         self.meta.cost = cost;
         self.meta.cipher = cipher;
 
+        // set crypto context for emap and txlog manager
+        self.emap
+            .set_crypto_ctx(&self.crypto, &self.key, Self::SUBKEY_ID_EMAP);
+        self.txlog_mgr.set_crypto_ctx(
+            &self.crypto,
+            &self.key,
+            Self::SUBKEY_ID_TXLOG,
+        );
+
+        // initialise txlog manager
+        self.txlog_mgr.init();
+
         Ok(())
     }
 
-    /// Open volume
+    /// Open volume, return last txid and super block payload
     pub fn open(&mut self, pwd: &str) -> Result<(Txid, Vec<u8>)> {
-        // read super block from storage
-        let super_blk =
-            SuperBlk::deserialize(&self.storage.get_super_blk()?, pwd)?;
+        // load super block from storage
+        let super_blk = SuperBlk::load(pwd, &self.storage)?;
 
-        // check volume version if it is match
+        // check volume version
         if !super_blk.ver.match_current_minor() {
             return Err(Error::WrongVersion);
         }
-
-        // derive storage key from master key and open storage
-        let skey = Crypto::derive_from_key(&super_blk.key, SUBKEY_ID)?;
-        let last_txid =
-            self.storage
-                .open(&super_blk.volume_id, &super_blk.crypto, &skey)?;
 
         // set volume properties
         self.meta.id = super_blk.volume_id.clone();
@@ -244,24 +123,34 @@ impl Volume {
         self.crypto = super_blk.crypto.clone();
         self.key.copy_from(&super_blk.key);
 
-        Ok((last_txid, super_blk.payload.clone()))
+        // set emap and txlog manager crypto context
+        self.emap
+            .set_crypto_ctx(&self.crypto, &self.key, Self::SUBKEY_ID_EMAP);
+        self.txlog_mgr.set_crypto_ctx(
+            &self.crypto,
+            &self.key,
+            Self::SUBKEY_ID_TXLOG,
+        );
+
+        // open txlog manager
+        let txid_wm = self.txlog_mgr.open()?;
+
+        // redo aborting uncompleted trans if any
+        self.redo_abort_trans()?;
+
+        Ok((txid_wm, super_blk.payload.clone()))
     }
 
-    /// Write super block with payload
-    pub fn write_payload(&mut self, pwd: &str, payload: &[u8]) -> Result<()> {
-        let super_blk = SuperBlk::new(
-            &self.meta.id,
-            pwd,
-            &self.key,
-            &self.crypto,
-            payload,
-        )?;
-        let buf = super_blk.serialize()?;
+    /// Write super block with initial payload
+    pub fn init_payload(&mut self, pwd: &str, payload: &[u8]) -> Result<()> {
+        let mut super_blk =
+            SuperBlk::new(&self.meta.id, &self.key, &self.crypto, payload)?;
         self.meta.ctime = super_blk.ctime;
-        self.storage.put_super_blk(&buf)
+        super_blk.save(pwd, &self.storage)
     }
 
     /// Get volume metadata
+    #[inline]
     pub fn meta(&self) -> Meta {
         self.meta.clone()
     }
@@ -273,67 +162,161 @@ impl Volume {
         new_pwd: &str,
         cost: Cost,
     ) -> Result<()> {
-        // read existing super block from storage
-        let old_super_blk =
-            SuperBlk::deserialize(&self.storage.get_super_blk()?, old_pwd)?;
+        // load current super block from storage
+        let mut super_blk = SuperBlk::load(old_pwd, &self.storage)?;
 
         // create new crypto with new cost, but keep cipher as same
-        let crypto = Crypto::new(cost, self.crypto.cipher)?;
+        super_blk.crypto = Crypto::new(cost, self.crypto.cipher)?;
+        super_blk.save(new_pwd, &self.storage)?;
 
-        // create a new super block and save it to storage
-        let new_super_blk = SuperBlk::new(
-            &self.meta.id,
-            new_pwd,
-            &self.key,
-            &crypto,
-            &old_super_blk.payload,
-        )?;
-        let buf = new_super_blk.serialize()?;
-        self.storage.put_super_blk(&buf)?;
-
-        // update volume
-        self.meta.cost = crypto.cost;
-        self.crypto = crypto;
+        // update volume cost and crypto
+        self.meta.cost = super_blk.crypto.cost;
+        self.crypto = super_blk.crypto.clone();
 
         Ok(())
     }
 
     /// Get volume reader
     pub fn reader(id: &Eid, txid: Txid, vol: &VolumeRef) -> Reader {
-        Reader::new(id, txid, vol)
+        Reader::new(Loc::new(id, txid), vol)
     }
 
-    /// Get volume writer
-    pub fn writer(id: &Eid, txid: Txid, vol: &VolumeRef) -> Writer {
-        Writer::new(id, txid, vol)
+    // read entity data
+    fn read(
+        &mut self,
+        dst: &mut [u8],
+        loc: &Loc,
+        offset: u64,
+    ) -> Result<usize> {
+        let cell = self.emap.get(loc)?;
+        let mut storage = self.storage.write().unwrap();
+        let loc_id = Loc::new(&loc.eid, cell.txid).id();
+        storage.get(dst, &loc_id, offset)
+    }
+
+    // write entity data
+    fn write(&mut self, loc: &Loc, buf: &[u8], offset: u64) -> Result<usize> {
+        match self.emap.get(loc) {
+            Ok(cell) => {
+                // add an update txlog entry
+                if cell.txid < loc.txid {
+                    assert_eq!(offset, 0);
+                    self.txlog_mgr.add_update_entry(
+                        loc,
+                        cell.txid,
+                        cell.pre_txid,
+                    )?;
+                }
+            }
+            Err(ref err) if *err == Error::NotFound => {
+                // add a new txlog entry
+                assert_eq!(offset, 0);
+                self.txlog_mgr.add_new_entry(loc)?;
+            }
+            Err(err) => return Err(err),
+        }
+
+        // write entity data to storage
+        let written = {
+            let mut storage = self.storage.write().unwrap();
+            storage.put(&loc.id(), buf, offset)?
+        };
+
+        // update emap
+        self.emap.put(&loc)?;
+
+        Ok(written)
     }
 
     /// Delete entity
-    pub fn del(&mut self, id: &Eid, txid: Txid) -> Result<Option<Eid>> {
-        self.storage.del(id, txid)
+    pub fn del(&mut self, loc: &Loc) -> Result<Option<Eid>> {
+        match self.emap.get(loc) {
+            Ok(cell) => {
+                // add a delete txlog entry
+                self.txlog_mgr
+                    .add_delete_entry(loc, cell.txid, cell.pre_txid)?;
+            }
+            Err(ref err) if *err == Error::NotFound => return Ok(None),
+            Err(err) => return Err(err),
+        }
+
+        self.emap.del(loc)?;
+        Ok(Some(loc.eid.clone()))
     }
 
     pub fn begin_trans(&mut self, txid: Txid) -> Result<()> {
-        self.storage.begin_trans(txid)
-    }
+        debug!("begin tx#{}", txid);
 
-    pub fn abort_trans(&mut self, txid: Txid) -> Result<()> {
-        self.storage.abort_trans(txid)
+        // redo abort all uncompleted trans if any
+        self.redo_abort_trans()?;
+
+        self.txlog_mgr.start_log(txid)
     }
 
     pub fn commit_trans(&mut self, txid: Txid) -> Result<()> {
-        self.storage.commit_trans(txid)
+        debug!("start committing tx#{}", txid);
+        {
+            let txlog = self.txlog_mgr.active_logs().get(&txid).unwrap();
+            for ent in txlog.iter() {
+                // commit emap
+                self.emap.commit(&Loc::new(ent.id(), txid))?;
+            }
+        }
+
+        // recyle trans
+        let to_removed = self.txlog_mgr.recycle()?;
+        for id in to_removed {
+            self.emap.remove(&id)?;
+        }
+
+        // commit txlog
+        self.txlog_mgr.commit(txid)?;
+        debug!("tx#{} is committed", txid);
+
+        Ok(())
+    }
+
+    // redo abort all uncompleted trans
+    fn redo_abort_trans(&mut self) -> Result<()> {
+        let uncompleted: Vec<Txid> =
+            self.txlog_mgr.inactive_logs().keys().map(|t| *t).collect();
+        if !uncompleted.is_empty() {
+            debug!("found {} uncompleted trans", uncompleted.len());
+            for txid in uncompleted {
+                debug!("redo abort tx#{}", txid);
+                self.abort_trans(txid)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn abort_trans(&mut self, txid: Txid) -> Result<()> {
+        debug!("abort tx#{}", txid);
+        self.txlog_mgr.deactivate(txid);
+
+        // abort emap
+        {
+            let txlog = self.txlog_mgr.inactive_logs().get(&txid).unwrap();
+            for ent in txlog.iter() {
+                self.emap.abort(&Loc::new(ent.id(), txid))?;
+            }
+        }
+
+        // abort txlog
+        self.txlog_mgr.abort(txid)
     }
 }
 
 impl Default for Volume {
     fn default() -> Self {
-        let storage = MemStorage::new();
+        let storage = MemStorage::new().into_ref();
         Volume {
             meta: Meta::default(),
+            emap: Emap::new(storage.clone()),
+            txlog_mgr: TxLogMgr::new(storage.clone()),
+            storage,
             crypto: Crypto::default(),
             key: Key::new_empty(),
-            storage: Box::new(storage),
         }
     }
 }
@@ -343,14 +326,13 @@ impl IntoRef for Volume {}
 /// Volume reference type
 pub type VolumeRef = Arc<RwLock<Volume>>;
 
-// encrypt/decrypt frame size
+// encrypt/decrypt frame buffer size
 const CRYPT_FRAME_SIZE: usize = 64 * 1024;
 
 /// Crypto Reader
 struct CryptoReader {
-    id: Eid,
+    loc: Loc,
     read: u64, // accumulate bytes read from underlying storage
-    txid: Txid,
     vol: VolumeRef,
 
     // encrypted frame read from storage, max length is CRYPT_FRAME_SIZE
@@ -363,15 +345,14 @@ struct CryptoReader {
 }
 
 impl CryptoReader {
-    fn new(id: &Eid, txid: Txid, vol: &VolumeRef) -> Self {
+    fn new(loc: Loc, vol: &VolumeRef) -> Self {
         let decbuf_len = {
             let vol = vol.read().unwrap();
             vol.crypto.encrypted_len(CRYPT_FRAME_SIZE)
         };
         let mut ret = CryptoReader {
-            id: id.clone(),
+            loc,
             read: 0,
-            txid,
             vol: vol.clone(),
             frame: vec![0u8; CRYPT_FRAME_SIZE],
             dec: vec![0u8; decbuf_len],
@@ -415,12 +396,11 @@ impl Read for CryptoReader {
         let mut frame_offset = 0;
         {
             loop {
-                let read = vol.storage.read(
-                    &self.id,
-                    self.read,
+                let read = map_io_err!(vol.read(
                     &mut self.frame[frame_offset..],
-                    self.txid,
-                )?;
+                    &self.loc,
+                    self.read,
+                ))?;
                 frame_offset += read;
                 self.read += read as u64;
                 if read == 0 || frame_offset >= CRYPT_FRAME_SIZE {
@@ -453,9 +433,9 @@ pub struct Reader {
 }
 
 impl Reader {
-    fn new(id: &Eid, txid: Txid, vol: &VolumeRef) -> Self {
+    fn new(loc: Loc, vol: &VolumeRef) -> Self {
         Reader {
-            rdr: Lz4Decoder::new(CryptoReader::new(id, txid, vol)).unwrap(),
+            rdr: Lz4Decoder::new(CryptoReader::new(loc, vol)).unwrap(),
         }
     }
 }
@@ -468,8 +448,7 @@ impl Read for Reader {
 
 /// Crypto Writer
 struct CryptoWriter {
-    id: Eid,
-    txid: Txid,
+    loc: Loc,
     vol: VolumeRef,
 
     // encrypted frame, max length is CRYPT_FRAME_SIZE
@@ -482,14 +461,13 @@ struct CryptoWriter {
 }
 
 impl CryptoWriter {
-    fn new(id: &Eid, txid: Txid, vol: &VolumeRef) -> Self {
+    fn new(loc: Loc, vol: &VolumeRef) -> Self {
         let src_len = {
             let vol = vol.read().unwrap();
             vol.crypto.decrypted_len(CRYPT_FRAME_SIZE)
         };
         let mut ret = CryptoWriter {
-            id: id.clone(),
-            txid,
+            loc,
             vol: vol.clone(),
             frame: vec![0u8; CRYPT_FRAME_SIZE],
             frame_offset: 0,
@@ -528,12 +506,11 @@ impl Write for CryptoWriter {
             &self.src[..self.src_written],
             &vol.key,
         )).and_then(|enc_len| {
-            vol.storage.write(
-                &self.id,
-                self.frame_offset,
+            map_io_err!(vol.write(
+                &self.loc,
                 &self.frame[..enc_len],
-                self.txid,
-            )
+                self.frame_offset,
+            ))
         })
             .and_then(|written| {
                 self.frame_offset += written as u64;
@@ -548,8 +525,9 @@ pub struct Writer {
 }
 
 impl Writer {
-    fn new(id: &Eid, txid: Txid, vol: &VolumeRef) -> Self {
-        let crypto_wtr = CryptoWriter::new(id, txid, vol);
+    pub fn new(id: &Eid, txid: Txid, vol: &VolumeRef) -> Self {
+        let loc = Loc::new(id, txid);
+        let crypto_wtr = CryptoWriter::new(loc, vol);
         Writer {
             wtr: Some(
                 Lz4EncoderBuilder::new()
@@ -606,23 +584,21 @@ pub trait Persistable<'de>: Id + Deserialize<'de> + Serialize {
     fn save(&self, txid: Txid, vol: &VolumeRef) -> Result<()> {
         let mut buf = Vec::new();
         self.serialize(&mut Serializer::new(&mut buf))?;
-        let mut writer = Volume::writer(self.id(), txid, vol);
+        let mut writer = Writer::new(self.id(), txid, vol);
         writer.write_all(&buf)?;
         Ok(())
     }
 
     fn remove(id: &Eid, txid: Txid, vol: &VolumeRef) -> Result<Option<Eid>> {
         let mut vol = vol.write().unwrap();
-        vol.del(id, txid)
+        vol.del(&Loc::new(id, txid))
     }
 }
 
 #[cfg(test)]
-mod tests {
-    extern crate tempdir;
-
+mod tests2 {
+    use std::{thread, time};
     use std::time::{Duration, Instant};
-    use self::tempdir::TempDir;
 
     use base::init_env;
     use base::crypto::{Cost, Crypto, Hash, RandomSeed, RANDOM_SEED_SIZE};
@@ -637,79 +613,138 @@ mod tests {
         vol.into_ref()
     }
 
-    fn setup_file_vol() -> (VolumeRef, TempDir) {
-        init_env();
-        let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
-        let dir = tmpdir.path().to_path_buf();
-        /*let dir = ::std::path::PathBuf::from("./tt");
-        if dir.exists() {
-            ::std::fs::remove_dir_all(&dir).unwrap();
-        }*/
-        let uri = "file://".to_string() + dir.to_str().unwrap();
-
-        let cost = Cost::default();
-        let mut vol = Volume::new(&uri).unwrap();
-        vol.init(cost, Cipher::Xchacha).unwrap();
-
-        (vol.into_ref(), tmpdir)
+    fn write_to_entity(id: &Eid, buf: &[u8], txid: Txid, vol: &VolumeRef) {
+        {
+            let mut vol = vol.write().unwrap();
+            vol.begin_trans(txid).unwrap();
+        }
+        {
+            let mut wtr = Writer::new(&id, txid, &vol);
+            wtr.write_all(&buf).unwrap();
+        }
+        {
+            let mut vol = vol.write().unwrap();
+            vol.commit_trans(txid).unwrap();
+        }
     }
 
-    fn read_write(vol: &VolumeRef) {
-        // round #1
+    fn verify_entity_in_tx(id: &Eid, buf: &[u8], txid: Txid, vol: &VolumeRef) {
+        let loc = Loc::new(&id, txid);
+        let mut rdr = Reader::new(loc, &vol);
+        let mut dst = Vec::new();
+        rdr.read_to_end(&mut dst).unwrap();
+        assert_eq!(&dst[..], &buf[..]);
+    }
+
+    fn verify_entity(id: &Eid, buf: &[u8], vol: &VolumeRef) {
+        verify_entity_in_tx(id, buf, Txid::new_empty(), vol);
+    }
+
+    #[test]
+    fn read_write() {
+        let vol = setup_mem_vol();
         let id = Eid::new();
         let buf = [1, 2, 3];
+        let buf2 = [4, 5, 6];
+
+        // tx #1, new
+        write_to_entity(&id, &buf, Txid::from(1), &vol);
+        verify_entity(&id, &buf, &vol);
+
+        // tx #2, update
+        write_to_entity(&id, &buf2, Txid::from(2), &vol);
+        verify_entity(&id, &buf2, &vol);
+
+        // delete
         {
-            // write
-            let txid = Txid::from(42);
-            let mut wtr = Volume::writer(&id, txid, &vol);
+            let txid = Txid::from(3);
+            let loc = Loc::new(&id, txid);
+            let mut vol = vol.write().unwrap();
+            vol.begin_trans(txid).unwrap();
+            vol.del(&loc).unwrap();
+            vol.commit_trans(txid).unwrap();
+            let loc = Loc::new(&id, Txid::from(0));
+            assert_eq!(vol.emap.get(&loc).unwrap_err(), Error::NotFound);
+        }
+    }
+
+    #[test]
+    fn abort_trans_on_failure() {
+        let vol = setup_mem_vol();
+        let id = Eid::new();
+        let buf = [1, 2, 3];
+        let buf2 = [4, 5, 6];
+
+        // tx #1, new
+        write_to_entity(&id, &buf, Txid::from(1), &vol);
+
+        // tx #2, update and then abort
+        {
+            let txid = Txid::from(2);
             {
                 let mut vol = vol.write().unwrap();
                 vol.begin_trans(txid).unwrap();
             }
-            wtr.write_all(&buf).unwrap();
-            drop(wtr);
+            {
+                let mut wtr = Writer::new(&id, txid, &vol);
+                wtr.write_all(&buf2).unwrap();
+            }
+
             {
                 let mut vol = vol.write().unwrap();
-                vol.commit_trans(txid).unwrap();
+                vol.abort_trans(txid).unwrap();
             }
-        }
-        {
-            // read
-            let txid = Txid::new_empty();
-            let mut rdr = Volume::reader(&id, txid, &vol);
-            let mut dst = Vec::new();
-            rdr.read_to_end(&mut dst).unwrap();
-            assert_eq!(&dst[..], &buf[..]);
+
+            verify_entity(&id, &buf, &vol);
         }
 
-        // round #2
+        // tx #3, update again
+        write_to_entity(&id, &buf2, Txid::from(3), &vol);
+        verify_entity(&id, &buf2, &vol);
+    }
+
+    #[test]
+    fn multi_thread_emap_mask() {
+        let vol = setup_mem_vol();
         let id = Eid::new();
-        let buf_len = CRYPT_FRAME_SIZE + 42;
-        let mut buf = vec![3u8; buf_len];
-        buf[0] = 42u8;
-        buf[buf_len - 1] = 42u8;
+        let buf = [1, 2, 3];
+        let buf2 = [4, 5, 6];
+        let mut children = vec![];
+
+        // tx #1, new
+        write_to_entity(&id, &buf, Txid::from(1), &vol);
+
+        // thread #1, tx #2, update but don't commit
         {
-            // write
-            let txid = Txid::from(43);
-            let mut wtr = Volume::writer(&id, txid, &vol);
-            {
-                let mut vol = vol.write().unwrap();
-                vol.begin_trans(txid).unwrap();
-            }
-            wtr.write_all(&buf).unwrap();
-            drop(wtr);
-            {
-                let mut vol = vol.write().unwrap();
-                vol.commit_trans(txid).unwrap();
-            }
+            let id = id.clone();
+            let vol = vol.clone();
+            children.push(thread::spawn(move || {
+                let txid = Txid::from(2);
+                {
+                    let mut vol = vol.write().unwrap();
+                    vol.begin_trans(txid).unwrap();
+                }
+                {
+                    let mut wtr = Writer::new(&id, txid, &vol);
+                    wtr.write_all(&buf2).unwrap();
+                }
+                verify_entity_in_tx(&id, &buf2, txid, &vol);
+            }));
         }
+
+        thread::sleep(time::Duration::from_millis(200));
+
+        // thread #2, read
         {
-            // read
-            let txid = Txid::new_empty();
-            let mut rdr = Volume::reader(&id, txid, &vol);
-            let mut dst = Vec::new();
-            rdr.read_to_end(&mut dst).unwrap();
-            assert_eq!(&dst[..], &buf[..]);
+            let id = id.clone();
+            let vol = vol.clone();
+            children.push(thread::spawn(move || {
+                verify_entity(&id, &buf, &vol);
+            }));
+        }
+
+        for child in children {
+            let _ = child.join();
         }
     }
 
@@ -735,28 +770,15 @@ mod tests {
     }
 
     fn read_write_perf(vol: &VolumeRef, prefix: &str) {
-        let id = Eid::new();
         const DATA_LEN: usize = 10 * 1024 * 1024;
+        let id = Eid::new();
         let mut buf = vec![0u8; DATA_LEN];
         let seed = RandomSeed::from(&[0u8; RANDOM_SEED_SIZE]);
         Crypto::random_buf_deterministic(&mut buf, &seed);
 
         // write
         let now = Instant::now();
-        {
-            let txid = Txid::from(100);
-            let mut wtr = Volume::writer(&id, txid, &vol);
-            {
-                let mut vol = vol.write().unwrap();
-                vol.begin_trans(txid).unwrap();
-            }
-            wtr.write_all(&buf).unwrap();
-            drop(wtr);
-            {
-                let mut vol = vol.write().unwrap();
-                vol.commit_trans(txid).unwrap();
-            }
-        }
+        write_to_entity(&id, &buf, Txid::from(1), &vol);
         let write_time = now.elapsed();
 
         // read
@@ -773,17 +795,9 @@ mod tests {
     }
 
     #[test]
-    fn read_write_mem() {
+    fn mem_storage_perf() {
         let vol = setup_mem_vol();
-        read_write(&vol);
         read_write_perf(&vol, "Volume (memory storage)");
-    }
-
-    #[test]
-    fn read_write_file() {
-        let (vol, _tmpdir) = setup_file_vol();
-        read_write(&vol);
-        read_write_perf(&vol, "Volume (file storage)");
     }
 
     const RND_DATA_LEN: usize = 4 * 1024 * 1024;
@@ -881,16 +895,14 @@ mod tests {
 
     #[test]
     fn fuzz_read_write() {
-        let (vol, _tmpdir) = setup_file_vol();
+        let vol = setup_mem_vol();
 
         // setup
         // -----------
         // make random test data
-        let (seed, permu, data) = make_test_data();
-        //println!("seed: {:?}", seed);
-        //println!("permu: {:?}", permu);
-        let _ = seed;
-        let _ = permu;
+        let (_seed, _permu, data) = make_test_data();
+        //println!("seed: {:?}", _seed);
+        //println!("permu: {:?}", _permu);
 
         // init test entry list
         let mut ents: Vec<Entry> = Vec::new();
@@ -925,8 +937,8 @@ mod tests {
                     };
                     ents.push(ent.clone());
                     {
-                        let mut wtr = Volume::writer(&ent.id, txid, &vol);
-                        wtr.write_all(buf).unwrap();
+                        let mut wtr = Writer::new(&ent.id, txid, &vol);
+                        wtr.write_all(&buf).unwrap();
                     }
                 }
                 Action::Update => {
@@ -947,8 +959,8 @@ mod tests {
                     ));
                     ent.hash = Crypto::hash(buf);
                     {
-                        let mut wtr = Volume::writer(&ent.id, txid, &vol);
-                        wtr.write_all(buf).unwrap();
+                        let mut wtr = Writer::new(&ent.id, txid, &vol);
+                        wtr.write_all(&buf).unwrap();
                     }
                 }
                 Action::Delete => {
@@ -961,7 +973,7 @@ mod tests {
                     ent.acts.push((act, round, Span { pos: 0, len: 0 }));
                     ent.hash = Hash::new_empty();
                     let mut v = vol.write().unwrap();
-                    v.del(&ent.id, txid).unwrap();
+                    v.del(&Loc::new(&ent.id, txid)).unwrap();
                 }
             }
 
@@ -1002,7 +1014,7 @@ mod tests {
     #[cfg_attr(rustfmt, rustfmt_skip)]
     #[allow(dead_code)]
     fn reproduce_bug() {
-        let (vol, tmpdir) = setup_file_vol();
+        let vol = setup_mem_vol();
 
         // reproduce random data buffer
         let seed = RandomSeed::from(
@@ -1045,14 +1057,13 @@ mod tests {
                     let buf = &data[pos..pos + len];
                     ent.hash = Crypto::hash(buf);
                     {
-                        let mut wtr =
-                            Volume::writer(&ent.id, txid, &vol);
-                        wtr.write_all(buf).unwrap();
+                        let mut wtr = Writer::new(&ent.id, txid, &vol);
+                        wtr.write_all(&buf).unwrap();
                     }
                 }
                 Action::Delete => {
                     let mut v = vol.write().unwrap();
-                    v.del(&ent.id, txid).unwrap();
+                    v.del(&Loc::new(&ent.id, txid)).unwrap();
                 }
             }
 
@@ -1083,7 +1094,5 @@ mod tests {
                 }
             }
         }
-
-        drop(tmpdir);
     }
 }
