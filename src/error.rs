@@ -1,14 +1,11 @@
-use std::error::Error as StdError;
-use std::result;
-use std::io::Error as IoError;
 use std::env::VarError;
+use std::error::Error as StdError;
 use std::fmt::{self, Display, Formatter};
+use std::io::Error as IoError;
+use std::result;
 
-use rmp_serde::encode::Error as EncodeError;
 use rmp_serde::decode::Error as DecodeError;
-
-#[cfg(feature = "zbox-cloud")]
-use reqwest::Error as HttpError;
+use rmp_serde::encode::Error as EncodeError;
 
 /// The error type for operations with [`Repo`] and [`File`].
 ///
@@ -65,8 +62,6 @@ pub enum Error {
     Decode(DecodeError),
     Var(VarError),
     Io(IoError),
-
-    #[cfg(feature = "zbox-cloud")] Http(HttpError),
 }
 
 impl Display for Error {
@@ -121,9 +116,6 @@ impl Display for Error {
             Error::Decode(ref err) => err.fmt(f),
             Error::Var(ref err) => err.fmt(f),
             Error::Io(ref err) => err.fmt(f),
-
-            #[cfg(feature = "zbox-cloud")]
-            Error::Http(ref err) => err.fmt(f),
         }
     }
 }
@@ -180,9 +172,6 @@ impl StdError for Error {
             Error::Decode(ref err) => err.description(),
             Error::Var(ref err) => err.description(),
             Error::Io(ref err) => err.description(),
-
-            #[cfg(feature = "zbox-cloud")]
-            Error::Http(ref err) => err.description(),
         }
     }
 
@@ -192,9 +181,6 @@ impl StdError for Error {
             Error::Decode(ref err) => Some(err),
             Error::Var(ref err) => Some(err),
             Error::Io(ref err) => Some(err),
-
-            #[cfg(feature = "zbox-cloud")]
-            Error::Http(ref err) => Some(err),
 
             _ => None,
         }
@@ -222,13 +208,6 @@ impl From<VarError> for Error {
 impl From<IoError> for Error {
     fn from(err: IoError) -> Error {
         Error::Io(err)
-    }
-}
-
-#[cfg(feature = "zbox-cloud")]
-impl From<HttpError> for Error {
-    fn from(err: HttpError) -> Error {
-        Error::Http(err)
     }
 }
 
@@ -285,8 +264,6 @@ impl Into<i32> for Error {
             Error::Var(_) => -2020,
             Error::Io(_) => -2030,
 
-            #[cfg(feature = "zbox-cloud")]
-            Error::Http(_) => -2040,
         }
     }
 }
@@ -343,9 +320,6 @@ impl PartialEq for Error {
             (&Error::Decode(_), &Error::Decode(_)) => true,
             (&Error::Var(_), &Error::Var(_)) => true,
             (&Error::Io(ref a), &Error::Io(ref b)) => a.kind() == b.kind(),
-
-            #[cfg(feature = "zbox-cloud")]
-            (&Error::Http(ref _a), &Error::Http(ref _b)) => true,
 
             (_, _) => false,
         }

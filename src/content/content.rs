@@ -1,20 +1,22 @@
+use std::cmp::min;
 use std::error::Error as StdError;
 use std::fmt::{self, Debug};
-use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Seek,
-              SeekFrom, Write};
-use std::cmp::min;
+use std::io::{
+    Error as IoError, ErrorKind, Read, Result as IoResult, Seek, SeekFrom,
+    Write,
+};
 
-use error::Result;
-use base::crypto::{Crypto, Hash};
-use volume::{Persistable, VolumeRef};
-use trans::{CloneNew, Eid, Id, TxMgrRef, Txid};
-use trans::cow::{CowCache, CowRef, IntoCow};
-use super::StoreRef;
 use super::chunk::ChunkMap;
-use super::span::{Extent, Span};
 use super::entry::{CutableList, EntryList};
-use super::segment::Writer as SegWriter;
 use super::merkle_tree::{Leaves, MerkleTree, Writer as MerkleTreeWriter};
+use super::segment::Writer as SegWriter;
+use super::span::{Extent, Span};
+use super::StoreRef;
+use base::crypto::{Crypto, Hash};
+use error::Result;
+use trans::cow::{CowCache, CowRef, Cowable, IntoCow};
+use trans::{Eid, Finish, Id, TxMgrRef, Txid};
+use volume::VolumeRef;
 
 /// Content
 #[derive(Default, Clone, Deserialize, Serialize)]
@@ -24,7 +26,8 @@ pub struct Content {
     ents: EntryList,
 
     // merkle tree leaves
-    #[serde(skip_serializing, skip_deserializing, default)] leaves: Leaves,
+    #[serde(skip_serializing, skip_deserializing, default)]
+    leaves: Leaves,
 }
 
 impl Content {
@@ -59,67 +62,42 @@ impl Content {
     }
 
     /// Write into content with another content
-    pub fn replace(
-        dst: &ContentRef,
-        other: &Content,
-        store: &StoreRef,
-    ) -> Result<()> {
-        let mut new_mtree;
-
-        // write other content into destination content
+    pub fn replace(&mut self, other: &Content, store: &StoreRef) -> Result<()> {
+        // write other content into self
         {
             let store = store.read().unwrap();
-            let mut ctn_cow = dst.write().unwrap();
-            let ctn = ctn_cow.make_mut()?;
-            let (head, tail) = ctn.ents.write_with(&other.ents, &store)?;
-            head.link(&store).and(tail.link(&store))?;
-            new_mtree = ctn.mtree.clone();
+            let (_head, _tail) = self.ents.write_with(&other.ents, &store)?;
         }
 
         // merge merkle tree
-        let mut rdr = Reader::new(dst, store);
-        new_mtree.merge(&other.leaves, &mut rdr)?;
-        let mut ctn_cow = dst.write().unwrap();
-        let ctn = ctn_cow.make_mut()?;
-        ctn.mtree = new_mtree;
+        let mut rdr = Reader::new(self.clone(), store);
+        self.mtree.merge(&other.leaves, &mut rdr)?;
 
         Ok(())
     }
 
-    pub fn truncate(
-        ctn: &ContentRef,
-        at: usize,
-        store: &StoreRef,
-    ) -> Result<()> {
-        let mut new_mtree;
-
+    pub fn truncate(&mut self, at: usize, store: &StoreRef) -> Result<()> {
         // truncate content
         {
             let store = store.read().unwrap();
-            let mut ctn_cow = ctn.write().unwrap();
-            let ctn = ctn_cow.make_mut()?;
-            assert!(at <= ctn.len());
-            let pos = ctn.ents.locate(at);
-            let seg_ref = store.get_seg(ctn.ents[pos].seg_id())?;
+            assert!(at <= self.len());
+            let pos = self.ents.locate(at);
+            let seg_ref = store.get_seg(self.ents[pos].seg_id())?;
             let seg = seg_ref.read().unwrap();
-            ctn.ents.split_off(at, &seg);
-            new_mtree = ctn.mtree.clone();
+            self.ents.split_off(at, &seg);
         }
 
         // truncate merkle tree
-        let mut rdr = Reader::new(ctn, store);
-        new_mtree.truncate(at, &mut rdr)?;
-        let mut ctn_cow = ctn.write().unwrap();
-        let ctn = ctn_cow.make_mut()?;
-        ctn.mtree = new_mtree;
+        let mut rdr = Reader::new(self.clone(), store);
+        self.mtree.truncate(at, &mut rdr)?;
 
         Ok(())
     }
 
-    pub fn link(ctn: ContentRef, store: &StoreRef) -> Result<()> {
-        let ctn = ctn.read().unwrap();
+    #[inline]
+    pub fn link(&self, store: &StoreRef) -> Result<()> {
         let mut store = store.write().unwrap();
-        ctn.ents.link(&mut store)
+        self.ents.link(&mut store)
     }
 
     pub fn unlink(
@@ -148,30 +126,15 @@ impl Seek for Content {
 impl Debug for Content {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Content")
-            .field("id", &self.id)
             .field("hash", self.hash())
             .field("ents", &self.ents)
             .finish()
     }
 }
 
-impl Id for Content {
-    #[inline]
-    fn id(&self) -> &Eid {
-        &self.id
-    }
-
-    #[inline]
-    fn id_mut(&mut self) -> &mut Eid {
-        &mut self.id
-    }
-}
-
-impl CloneNew for Content {}
+impl Cowable for Content {}
 
 impl<'de> IntoCow<'de> for Content {}
-
-impl<'de> Persistable<'de> for Content {}
 
 /// Content reference type
 pub type ContentRef = CowRef<Content>;
@@ -180,15 +143,15 @@ pub type ContentRef = CowRef<Content>;
 #[derive(Debug)]
 pub struct Reader {
     pos: u64,
-    content: ContentRef,
+    content: Content,
     store: StoreRef,
 }
 
 impl Reader {
-    pub fn new(content: &ContentRef, store: &StoreRef) -> Self {
+    pub fn new(content: Content, store: &StoreRef) -> Self {
         Reader {
             pos: 0,
-            content: content.clone(),
+            content,
             store: store.clone(),
         }
     }
@@ -200,12 +163,16 @@ impl Read for Reader {
             return Ok(0);
         }
 
-        let ctn = self.content.read().unwrap();
         let store = self.store.read().unwrap();
         let start = self.pos as usize;
         let mut buf_read = 0;
 
-        for ent in ctn.ents.iter().skip_while(|e| e.end_offset() <= start) {
+        for ent in self
+            .content
+            .ents
+            .iter()
+            .skip_while(|e| e.end_offset() <= start)
+        {
             let seg_ref = map_io_err!(store.get_seg(ent.seg_id()))?;
             let seg = seg_ref.read().unwrap();
             let segdata_ref = map_io_err!(store.get_segdata(seg.data_id()))?;
@@ -245,8 +212,7 @@ impl Seek for Reader {
                 self.pos = pos;
             }
             SeekFrom::End(pos) => {
-                let ctn = self.content.read().unwrap();
-                self.pos = (ctn.len() as i64 + pos) as u64;
+                self.pos = (self.content.len() as i64 + pos) as u64;
             }
             SeekFrom::Current(pos) => {
                 self.pos = (self.pos as i64 + pos) as u64;
@@ -278,7 +244,7 @@ impl Writer {
         Ok(Writer {
             ctn: Content::new(),
             chk_map,
-            seg_wtr: SegWriter::new(txid, txmgr, vol)?,
+            seg_wtr: SegWriter::new(txid, store, txmgr, vol)?,
             mtree_wtr: MerkleTreeWriter::new(),
             txid,
             store: store.clone(),
@@ -286,7 +252,6 @@ impl Writer {
     }
 
     // append chunk to segment and content
-    // return appended chunk index in segment
     fn append_chunk(&mut self, chunk: &[u8], hash: &Hash) -> IoResult<()> {
         let chunk_len = chunk.len();
 
@@ -295,7 +260,7 @@ impl Writer {
         let mut written = self.seg_wtr.write(chunk)?;
         if written == 0 {
             // segment is full
-            map_io_err!(self.seg_wtr.renew())?;
+            map_io_err!(self.seg_wtr.renew(&self.store))?;
             written = self.seg_wtr.write(chunk)?;
         }
         assert_eq!(written, chunk_len); // must written in whole
@@ -314,12 +279,12 @@ impl Writer {
         Ok(())
     }
 
-    pub fn finish(mut self) -> Result<Content> {
-        // save current segment
-        self.seg_wtr.save_seg()?;
+    pub fn finish_with_content(mut self) -> Result<Content> {
+        // finish segment writer
+        self.seg_wtr.finish()?;
 
         // finish merkel tree
-        self.ctn.leaves = self.mtree_wtr.finish();
+        self.ctn.leaves = self.mtree_wtr.finish_with_leaves();
 
         Ok(self.ctn)
     }

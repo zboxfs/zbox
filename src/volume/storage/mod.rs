@@ -1,52 +1,49 @@
 mod file;
 mod mem;
-//#[cfg(feature = "zbox-cloud")]
-//mod zbox;
-
-use std::fmt::Debug;
-use std::sync::{Arc, RwLock};
-
-use error::Result;
-use trans::Eid;
+mod storage;
 
 pub use self::file::FileStorage;
 pub use self::mem::MemStorage;
-//#[cfg(feature = "zbox-cloud")]
-//pub use self::zbox::ZboxStorage;
+pub use self::storage::{Reader, Storage, StorageRef, Writer};
 
-/// Storage trait
-pub trait Storage: Debug + Send + Sync {
-    fn get(&mut self, dst: &mut [u8], id: &Eid, offset: u64) -> Result<usize>;
-    fn put(&mut self, id: &Eid, buf: &[u8], offset: u64) -> Result<usize>;
-    fn del(&mut self, id: &Eid) -> Result<()>;
+use std::fmt::Debug;
 
-    fn get_all(&mut self, dst: &mut Vec<u8>, id: &Eid) -> Result<usize> {
-        let mut offset = 0;
-        dst.clear();
-        loop {
-            if offset >= dst.len() {
-                let new_len = dst.len() + 4096;
-                dst.resize(new_len, 0);
-            }
-            let got = self.get(&mut dst[offset..], id, offset as u64)?;
-            if got == 0 {
-                break;
-            }
-            offset += got
-        }
-        dst.truncate(offset);
-        Ok(offset)
-    }
+use base::crypto::{Crypto, Key};
+use error::Result;
+use trans::Eid;
 
-    fn put_all(&mut self, id: &Eid, buf: &[u8]) -> Result<()> {
-        let mut offset = 0;
-        while offset < buf.len() {
-            let written = self.put(id, &buf[offset..], offset as u64)?;
-            offset += written;
-        }
-        Ok(())
-    }
+/// Storable trait
+pub trait Storable: Debug + Send + Sync {
+    // check if storage exists
+    fn exists(&self) -> Result<bool>;
+
+    // initial a storage
+    fn init(&mut self, crypto: Crypto, key: Key) -> Result<()>;
+
+    // open a storage
+    fn open(&mut self, crypto: Crypto, key: Key) -> Result<()>;
+
+    // super block operations
+    fn get_super_block(&self, suffix: u64) -> Result<Vec<u8>>;
+    fn put_super_block(&mut self, super_blk: &[u8], suffix: u64) -> Result<()>;
+
+    // address operations
+    fn get_addr(&mut self, id: &Eid) -> Result<Vec<u8>>;
+    fn put_addr(&mut self, id: &Eid, addr: &[u8]) -> Result<()>;
+    fn del_addr(&mut self, id: &Eid) -> Result<()>;
+
+    // block operations
+    fn get_blocks(
+        &mut self,
+        dst: &mut [u8],
+        start_idx: u64,
+        cnt: usize,
+    ) -> Result<()>;
+    fn put_blocks(
+        &mut self,
+        start_idx: u64,
+        cnt: usize,
+        blks: &[u8],
+    ) -> Result<()>;
+    fn del_blocks(&mut self, start_idx: u64, cnt: usize) -> Result<()>;
 }
-
-/// Storage reference type
-pub type StorageRef = Arc<RwLock<Storage>>;

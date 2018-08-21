@@ -1,12 +1,13 @@
 use std::error::Error as StdError;
-use std::io::{self, Error as IoError, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::fmt::{self, Debug};
+use std::io::{self, Error as IoError, ErrorKind, Read, Seek, SeekFrom, Write};
 
-use trans::{TxHandle, TxMgr};
-use fs::Handle;
-use fs::fnode::{Fnode, Metadata, Reader as FnodeReader, Version,
-                Writer as FnodeWriter};
 use super::{Error, Result};
+use fs::fnode::{
+    Fnode, Metadata, Reader as FnodeReader, Version, Writer as FnodeWriter,
+};
+use fs::Handle;
+use trans::{Finish, TxHandle, TxMgr};
 
 /// A reader for a specific vesion of file content.
 ///

@@ -1,20 +1,21 @@
-use std::sync::{Arc, RwLock};
-use std::path::Path;
 use std::io;
+use std::path::Path;
+use std::sync::{Arc, RwLock};
 
 use bytes::BufMut;
 
-use error::{Error, Result};
+use super::fnode::{
+    Cache as FnodeCache, DirEntry, FileType, Fnode, FnodeRef, Metadata,
+    Reader as FnodeReader, Version, Writer as FnodeWriter,
+};
+use super::{Config, Handle};
+use base::crypto::Cost;
 use base::IntoRef;
-use base::crypto::{Cipher, Cost};
 use content::{Store, StoreRef};
-use trans::{Eid, Id, TxMgr, TxMgrRef, Txid};
+use error::{Error, Result};
 use trans::cow::IntoCow;
-use volume::{Meta as VolumeMeta, Volume, VolumeRef};
-use super::Handle;
-use super::fnode::{Cache as FnodeCache, DirEntry, FileType, Fnode, FnodeRef,
-                   Metadata, Reader as FnodeReader, Version,
-                   Writer as FnodeWriter};
+use trans::{Eid, Finish, Id, TxMgr, TxMgrRef};
+use volume::{Info as VolumeInfo, Volume, VolumeRef};
 
 // default cache size
 const FNODE_CACHE_SIZE: usize = 16;
@@ -24,7 +25,7 @@ const FNODE_CACHE_SIZE: usize = 16;
 pub struct Meta {
     pub version_limit: u8,
     pub read_only: bool,
-    pub vol_meta: VolumeMeta,
+    pub vol_info: VolumeInfo,
 }
 
 /// Shutter
@@ -66,63 +67,56 @@ pub struct Fs {
 
 impl Fs {
     /// Check if fs exists
-    #[inline]
     pub fn exists(uri: &str) -> Result<bool> {
-        Volume::exists(uri)
+        let vol = Volume::new(uri)?;
+        vol.exists()
     }
 
     /// Create new fs
-    pub fn create(
-        uri: &str,
-        pwd: &str,
-        cost: Cost,
-        cipher: Cipher,
-        version_limit: u8,
-    ) -> Result<Fs> {
+    pub fn create(uri: &str, pwd: &str, cfg: &Config) -> Result<Fs> {
+        let root_id = Eid::new();
+        let walq_id = Eid::new();
+        let store_id = Eid::new();
+
+        // super block payload: root_id + wqlq_id + store_id + version_limit
+        let mut payload = Vec::new();
+        payload.put(root_id.as_ref());
+        payload.put(walq_id.as_ref());
+        payload.put(store_id.as_ref());
+        payload.put(cfg.version_limit);
+
         // create and initialise volume
         let mut vol = Volume::new(uri)?;
-        vol.init(cost, cipher)?;
+        vol.init(pwd, cfg, &payload)?;
+
         let vol = vol.into_ref();
 
-        // create fs components
-        let txmgr = TxMgr::new(Txid::from(0), &vol).into_ref();
+        // create tx manager and fnode cache
+        let txmgr = TxMgr::new(&walq_id, &vol).into_ref();
         let fcache = FnodeCache::new(FNODE_CACHE_SIZE, &txmgr);
 
-        // the initial transaction, it must be successful
+        // the initial transaction to create root fnode and save store,
+        // it must be successful
         let mut store_ref: Option<StoreRef> = None;
         let mut root_ref: Option<FnodeRef> = None;
         TxMgr::begin_trans(&txmgr)?.run_all(|| {
-            let store_cow = Store::new(&txmgr, &vol).into_cow(&txmgr)?;
-            let root_cow =
-                Fnode::new(FileType::Dir, 0, &store_cow).into_cow(&txmgr)?;
+            let store_cow =
+                Store::new(&txmgr, &vol).into_cow_with_id(&store_id, &txmgr)?;
+            let root_cow = Fnode::new(FileType::Dir, 0, &store_cow)
+                .into_cow_with_id(&root_id, &txmgr)?;
             root_ref = Some(root_cow);
             store_ref = Some(store_cow);
             Ok(())
         })?;
 
-        // write volume super block with payload
-        // payload: store_id + root_id + version_limit
-        let store = store_ref.unwrap();
-        let root = root_ref.unwrap();
-        {
-            let mut payload = Vec::with_capacity(2 * Eid::EID_SIZE + 1);
-            let store = store.read().unwrap();
-            let root = root.read().unwrap();
-            payload.put(store.id().as_ref());
-            payload.put(root.id().as_ref());
-            payload.put(version_limit);
-            let mut vol = vol.write().unwrap();
-            vol.init_payload(pwd, &payload)?;
-        }
-
         Ok(Fs {
-            root,
+            root: root_ref.unwrap(),
             fcache,
-            store,
+            store: store_ref.unwrap(),
             txmgr,
             vol,
             shutter: Shutter::new(),
-            version_limit,
+            version_limit: cfg.version_limit,
             read_only: false,
         })
     }
@@ -132,16 +126,22 @@ impl Fs {
         let mut vol = Volume::new(uri)?;
 
         // open volume
-        let (last_txid, payload) = vol.open(pwd)?;
+        let payload = vol.open(pwd)?;
+
+        // decompose super block payload
         let mut iter = payload.chunks(Eid::EID_SIZE);
-        let store_id = Eid::from_slice(iter.next().unwrap());
         let root_id = Eid::from_slice(iter.next().unwrap());
+        let walq_id = Eid::from_slice(iter.next().unwrap());
+        let store_id = Eid::from_slice(iter.next().unwrap());
         let version_limit = iter.next().unwrap()[0];
+
         let vol = vol.into_ref();
 
+        // open transaction manager
+        let txmgr = TxMgr::open(&walq_id, &vol)?.into_ref();
+
         // create file sytem components
-        let txmgr = TxMgr::new(last_txid, &vol).into_ref();
-        let store = Store::load_store(&store_id, &txmgr, &vol)?;
+        let store = Store::open(&store_id, &txmgr, &vol)?;
         let root = Fnode::load_root(&root_id, &txmgr, &store, &vol)?;
         let fcache = FnodeCache::new(FNODE_CACHE_SIZE, &txmgr);
 
@@ -168,7 +168,7 @@ impl Fs {
         Meta {
             version_limit: self.version_limit,
             read_only: self.read_only,
-            vol_meta: vol.meta(),
+            vol_info: vol.info(),
         }
     }
 
@@ -207,7 +207,8 @@ impl Fs {
     // resolve path to parent fnode and child file name
     fn resolve_parent(&self, path: &Path) -> Result<(FnodeRef, String)> {
         let parent_path = path.parent().ok_or(Error::IsRoot)?;
-        let file_name = path.file_name()
+        let file_name = path
+            .file_name()
             .and_then(|s| s.to_str())
             .ok_or(Error::InvalidPath)?;
         let parent = self.resolve(parent_path)?;

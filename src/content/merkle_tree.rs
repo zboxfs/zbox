@@ -1,10 +1,10 @@
-use std::fmt::{self, Debug};
 use std::cmp::{max, min};
+use std::fmt::{self, Debug};
 use std::io::{Read, Result as IoResult, Seek, SeekFrom, Write};
 
-use error::Result;
 use base::crypto::{Crypto, Hash, HashState, HASH_STATE_SIZE};
 use base::utils;
+use error::Result;
 
 // data piece size, must be 2^n
 const PIECE_SIZE: usize = 256 * 1024;
@@ -39,7 +39,7 @@ fn parent(n: usize, lvl_begin: usize, lvl_node_cnt: usize) -> usize {
     upper_lvl_begin + (n - lvl_begin) / 2
 }
 
-// read once data piece and calculate its hash
+// read one data piece and calculate its hash
 fn piece_hash<R: Read + Seek>(offset: usize, rdr: &mut R) -> IoResult<Hash> {
     rdr.seek(SeekFrom::Start(align_piece_floor(offset) as u64))?;
     let mut buf = vec![0u8; PIECE_SIZE];
@@ -324,7 +324,7 @@ impl MerkleTree {
 impl Default for MerkleTree {
     fn default() -> Self {
         let wtr = Writer::new();
-        let leaves = wtr.finish();
+        let leaves = wtr.finish_with_leaves();
         MerkleTree::build(&leaves)
     }
 }
@@ -345,7 +345,7 @@ impl Writer {
         }
     }
 
-    pub fn finish(mut self) -> Leaves {
+    pub fn finish_with_leaves(mut self) -> Leaves {
         if self.leaves.len == 0 || align_piece_offset(self.hash_offset) != 0 {
             self.leaves.nodes.push(Crypto::hash_final(&mut self.state));
         }
@@ -413,10 +413,10 @@ impl Debug for Writer {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
-    use base::init_env;
-    use base::crypto::RandomSeed;
     use super::*;
+    use base::crypto::RandomSeed;
+    use base::init_env;
+    use std::io::Cursor;
 
     fn calculate_merkle_hash(buf: &[u8]) -> Hash {
         let mut parent = Vec::new();
@@ -453,7 +453,7 @@ mod tests {
         for chunk in buf.chunks(PIECE_SIZE) {
             wtr.write(&chunk[..]).unwrap();
         }
-        wtr.finish()
+        wtr.finish_with_leaves()
     }
 
     fn build_mtree(buf: &[u8]) -> MerkleTree {

@@ -4,12 +4,12 @@
 extern crate rand;
 extern crate zbox;
 
+use std::env;
 use std::fs;
 use std::io::{self, Read, Write};
-use std::time::{Duration, Instant};
 use std::path::Path;
-use std::env;
 use std::ptr;
+use std::time::{Duration, Instant};
 
 use rand::{Rng, SeedableRng, XorShiftRng};
 use zbox::{init_env, File, OpenOptions, Repo, RepoOpener};

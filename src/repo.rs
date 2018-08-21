@@ -1,14 +1,14 @@
-use std::path::Path;
-use std::io::SeekFrom;
-use std::time::SystemTime;
 use std::fmt::{self, Debug};
+use std::io::SeekFrom;
+use std::path::Path;
+use std::time::SystemTime;
 
-use error::Error;
-use base::{self, Time};
-use base::crypto::{Cipher, Cost, Crypto, MemLimit, OpsLimit};
-use trans::Eid;
-use fs::{DirEntry, FileType, Fnode, Fs, Metadata, Version};
 use super::{File, Result};
+use base::crypto::{Cipher, Cost, MemLimit, OpsLimit};
+use base::{self, Time};
+use error::Error;
+use fs::{Config, DirEntry, FileType, Fs, Metadata, Version};
+use trans::Eid;
 
 /// A builder used to create a repository [`Repo`] in various manners.
 ///
@@ -61,13 +61,11 @@ use super::{File, Result};
 /// [`new`]: struct.RepoOpener.html#method.new
 /// [`open`]: struct.RepoOpener.html#method.open
 /// [`Result`]: type.Result.html
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct RepoOpener {
-    cost: Cost,
-    cipher: Cipher,
+    cfg: Config,
     create: bool,
     create_new: bool,
-    version_limit: u8,
     read_only: bool,
 }
 
@@ -83,7 +81,7 @@ impl RepoOpener {
     /// This option is only used for creating a repository.
     /// `OpsLimit::Interactive` is the default.
     pub fn ops_limit(&mut self, ops_limit: OpsLimit) -> &mut Self {
-        self.cost.ops_limit = ops_limit;
+        self.cfg.cost.ops_limit = ops_limit;
         self
     }
 
@@ -92,7 +90,7 @@ impl RepoOpener {
     /// This option is only used for creating a repository.
     /// `MemLimit::Interactive` is the default.
     pub fn mem_limit(&mut self, mem_limit: MemLimit) -> &mut Self {
-        self.cost.mem_limit = mem_limit;
+        self.cfg.cost.mem_limit = mem_limit;
         self
     }
 
@@ -102,7 +100,7 @@ impl RepoOpener {
     /// the default if hardware supports AES-NI instructions, otherwise it will
     /// fall back to `Cipher::Xchacha`.
     pub fn cipher(&mut self, cipher: Cipher) -> &mut Self {
-        self.cipher = cipher;
+        self.cfg.cipher = cipher;
         self
     }
 
@@ -136,7 +134,16 @@ impl RepoOpener {
     /// [`version_limit`]: struct.OpenOptions.html#method.version_limit
     /// [`OpenOptions`]: struct.OpenOptions.html
     pub fn version_limit(&mut self, version_limit: u8) -> &mut Self {
-        self.version_limit = version_limit;
+        self.cfg.version_limit = version_limit;
+        self
+    }
+
+    /// Sets the option for compression.
+    ///
+    /// This options indicates whether the LZ4 compression should be used in
+    /// the repository. Default is true.
+    pub fn compression(&mut self, compression: bool) -> &mut Self {
+        self.cfg.compression = compression;
         self
     }
 
@@ -176,7 +183,7 @@ impl RepoOpener {
     /// return an error.
     pub fn open(&self, uri: &str, pwd: &str) -> Result<Repo> {
         // version limit must be greater than 0
-        if self.version_limit == 0 {
+        if self.cfg.version_limit == 0 {
             return Err(Error::InvalidArgument);
         }
 
@@ -190,35 +197,10 @@ impl RepoOpener {
                 }
                 Repo::open(uri, pwd, self.read_only)
             } else {
-                Repo::create(
-                    uri,
-                    pwd,
-                    self.cost,
-                    self.cipher,
-                    self.version_limit,
-                )
+                Repo::create(uri, pwd, &self.cfg)
             }
         } else {
             Repo::open(uri, pwd, self.read_only)
-        }
-    }
-}
-
-impl Default for RepoOpener {
-    fn default() -> Self {
-        let default_cipher = if Crypto::is_aes_hardware_available() {
-            Cipher::Aes
-        } else {
-            Cipher::Xchacha
-        };
-
-        RepoOpener {
-            cost: Cost::default(),
-            cipher: default_cipher,
-            create: false,
-            create_new: false,
-            version_limit: Fnode::DEFAULT_VERSION_LIMIT,
-            read_only: false,
         }
     }
 }
@@ -525,14 +507,8 @@ impl Repo {
     }
 
     // create repo
-    fn create(
-        uri: &str,
-        pwd: &str,
-        cost: Cost,
-        cipher: Cipher,
-        version_limit: u8,
-    ) -> Result<Repo> {
-        let fs = Fs::create(uri, pwd, cost, cipher, version_limit)?;
+    fn create(uri: &str, pwd: &str, cfg: &Config) -> Result<Repo> {
+        let fs = Fs::create(uri, pwd, cfg)?;
         Ok(Repo { fs })
     }
 
@@ -544,17 +520,16 @@ impl Repo {
 
     /// Get repository metadata infomation.
     pub fn info(&self) -> RepoInfo {
-        let fs_meta = self.fs.meta();
-        let vol_meta = &fs_meta.vol_meta;
+        let meta = self.fs.meta();
         RepoInfo {
-            volume_id: vol_meta.id.clone(),
-            ver: vol_meta.ver.clone(),
-            uri: vol_meta.uri.clone(),
-            cost: vol_meta.cost.clone(),
-            cipher: vol_meta.cipher.clone(),
-            version_limit: fs_meta.version_limit,
-            read_only: fs_meta.read_only,
-            ctime: vol_meta.ctime.clone(),
+            volume_id: meta.vol_info.id.clone(),
+            ver: meta.vol_info.ver.clone(),
+            uri: meta.vol_info.uri.clone(),
+            cost: meta.vol_info.cost.clone(),
+            cipher: meta.vol_info.cipher.clone(),
+            version_limit: meta.version_limit,
+            read_only: meta.read_only,
+            ctime: meta.vol_info.ctime.clone(),
         }
     }
 
@@ -615,7 +590,10 @@ impl Repo {
         opts: &OpenOptions,
     ) -> Result<File> {
         if self.fs.is_read_only()
-            && (opts.write || opts.append || opts.truncate || opts.create
+            && (opts.write
+                || opts.append
+                || opts.truncate
+                || opts.create
                 || opts.create_new)
         {
             return Err(Error::ReadOnly);
@@ -653,7 +631,7 @@ impl Repo {
         };
         let mut file = File::new(handle, pos, opts.read, opts.write);
 
-        if opts.truncate {
+        if opts.truncate && curr_len > 0 {
             file.set_len(0)?;
         }
 

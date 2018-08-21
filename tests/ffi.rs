@@ -34,6 +34,7 @@ fn ffi() {
             .arg(&exe)
             .arg("tests/ffi.c")
             .arg("-lzbox")
+            .arg("-v")
             .arg("-Isrc/ffi/include");
 
         if cfg!(debug_assertions) {

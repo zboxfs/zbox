@@ -1,6 +1,6 @@
+use std::cmp::min;
 use std::fmt::{self, Debug};
 use std::io::{Result as IoResult, Seek, SeekFrom, Write};
-use std::cmp::min;
 use std::ptr;
 
 // taken from pcompress implementation
@@ -224,12 +224,13 @@ impl<W: Write + Seek> Seek for Chunker<W> {
 #[cfg(test)]
 mod tests {
     use std::io::{copy, Cursor, Result as IoResult, Seek, SeekFrom, Write};
-    use std::time::{Duration, Instant};
+    use std::time::Instant;
 
-    use base::init_env;
-    use base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE};
-    use content::chunk::Chunk;
     use super::*;
+    use base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE};
+    use base::init_env;
+    use base::utils::speed_str;
+    use content::chunk::Chunk;
 
     #[derive(Debug)]
     struct Sinker {
@@ -305,13 +306,6 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), DATA_LEN as u64);
         ckr.flush().unwrap();
-    }
-
-    fn speed_str(duration: &Duration, data_len: usize) -> String {
-        let secs = duration.as_secs() as f32
-            + duration.subsec_nanos() as f32 / 1_000_000_000.0;
-        let speed = data_len as f32 / (1024.0 * 1024.0) / secs;
-        format!("{} MB/s", speed)
     }
 
     #[test]

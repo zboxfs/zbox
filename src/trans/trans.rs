@@ -1,124 +1,129 @@
+use std::collections::HashMap;
 use std::fmt::{self, Debug};
 use std::sync::{Arc, RwLock};
-use std::collections::HashMap;
 
-use error::{Error, Result};
+use super::armor::{Arm, Armor, VolumeArmor};
+use super::wal::Wal;
+use super::{Eid, EntityType, Id, Txid};
 use base::IntoRef;
+use error::{Error, Result};
 use volume::VolumeRef;
-use super::{Eid, Id, Txid};
 
 /// Cohort action in transaction
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize, Serialize)]
 pub enum Action {
     New,
     Update,
     Delete,
 }
 
-/// Transable trait, be able to do transaction
-pub trait Transable: Debug + Id {
-    fn commit(&mut self, action: Action, vol: &VolumeRef) -> Result<()>;
-    fn complete_commit(&mut self, action: Action);
-    fn abort(&mut self, action: Action);
+/// Transable trait, be able to be added in transaction
+pub trait Transable: Debug + Id + Send + Sync {
+    fn action(&self) -> Action;
+    fn commit(&mut self, vol: &VolumeRef) -> Result<()>;
+    fn complete_commit(&mut self);
+    fn abort(&mut self);
 }
 
-pub type TransableRef = Arc<RwLock<Transable + Send + Sync>>;
-
-#[derive(Debug)]
-struct Cohort {
-    entity: TransableRef,
-    action: Action,
-}
+pub type TransableRef = Arc<RwLock<Transable>>;
 
 /// Transaction
 pub struct Trans {
     txid: Txid,
-    cohorts: HashMap<Eid, Cohort>,
+    cohorts: HashMap<Eid, TransableRef>,
+    wal: Wal,
+    wal_armor: VolumeArmor<Wal>,
 }
 
 impl Trans {
-    pub fn new(txid: Txid) -> Self {
+    pub fn new(txid: Txid, vol: &VolumeRef) -> Self {
         Trans {
             txid,
             cohorts: HashMap::new(),
+            wal: Wal::new(txid),
+            wal_armor: VolumeArmor::new(vol),
         }
     }
 
-    // add entity to transaction
+    #[inline]
+    pub fn get_wal(&self) -> Wal {
+        self.wal.clone()
+    }
+
+    #[inline]
+    pub fn begin_trans(&mut self) -> Result<()> {
+        self.wal_armor.save_item(&mut self.wal)
+    }
+
+    // add an entity to this transaction
     pub fn add_entity(
         &mut self,
         id: &Eid,
         entity: TransableRef,
         action: Action,
-    ) {
-        let cohort = self.cohorts.entry(id.clone()).or_insert(Cohort {
-            entity: entity,
-            action,
-        });
-        match action {
-            Action::Update => {}
-            _ => cohort.action = action,
-        }
-    }
+        ent_type: EntityType,
+        arm: Arm,
+    ) -> Result<()> {
+        // add a wal entry and save wal
+        self.wal.add_entry(id, action, ent_type, arm);
+        self.wal_armor.save_item(&mut self.wal)?;
 
-    fn finish(&mut self) {
-        self.cohorts.clear();
-        Txid::reset_current();
-    }
-
-    // commit transaction
-    pub fn commit(&mut self, vol: &VolumeRef) -> Result<()> {
-        debug!(
-            "commit tx#{}: entity_cnt: {}",
-            self.txid,
-            self.cohorts.len()
-        );
-        //debug!("trans.commit: cohorts: {:#?}", self.cohorts);
-
-        // commit each entity
-        for cohort in self.cohorts.values() {
-            match cohort.action {
-                Action::Delete => {
-                    let using = Arc::strong_count(&cohort.entity);
-                    if using > 1 {
-                        error!(
-                            "Cannot delete entity in use (using: ({}), \
-                             cohort: {:?})",
-                            using, cohort
-                        );
-                        return Err(Error::InUse);
-                    }
-                }
-                _ => {}
-            }
-
-            let mut ent = cohort.entity.write().unwrap();
-            ent.commit(cohort.action, &vol)?;
-        }
+        // add entity to cohorts
+        self.cohorts.entry(id.clone()).or_insert(entity);
 
         Ok(())
     }
 
+    /// Commit transaction
+    pub fn commit(&mut self, vol: &VolumeRef) -> Result<Wal> {
+        //debug!("trans.commit: cohorts: {:#?}", self.cohorts);
+
+        // commit each entity
+        for entity in self.cohorts.values() {
+            let mut ent = entity.write().unwrap();
+
+            // make sure deleted entity is not in use
+            if ent.action() == Action::Delete {
+                let using_cnt = Arc::strong_count(&entity);
+                if using_cnt > 1 {
+                    error!(
+                        "cannot delete entity in use (using: {})",
+                        using_cnt,
+                    );
+                    return Err(Error::InUse);
+                }
+            }
+
+            // commit entity
+            ent.commit(&vol)?;
+        }
+
+        Ok(self.wal.clone())
+    }
+
     // complete commit
     pub fn complete_commit(&mut self) {
-        for cohort in self.cohorts.values() {
-            let mut ent = cohort.entity.write().unwrap();
-            ent.complete_commit(cohort.action);
+        for entity in self.cohorts.values() {
+            let mut ent = entity.write().unwrap();
+            ent.complete_commit();
         }
-        self.finish();
+        self.cohorts.clear();
+        Txid::reset_current();
     }
 
     // abort transaction
-    pub fn abort(&mut self) {
-        debug!("abort tx#{}", self.txid);
-
-        // notify all cohorts in this transaction to abort
-        for cohort in self.cohorts.values() {
-            let mut ent = cohort.entity.write().unwrap();
-            ent.abort(cohort.action);
+    pub fn abort(&mut self, vol: &VolumeRef) -> Result<()> {
+        // abort each entity
+        for entity in self.cohorts.values() {
+            let mut ent = entity.write().unwrap();
+            ent.abort();
         }
 
-        self.finish();
+        self.cohorts.clear();
+        Txid::reset_current();
+
+        // clean aborted entities
+        self.wal.clean_aborted(vol)
     }
 }
 

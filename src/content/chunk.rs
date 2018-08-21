@@ -1,15 +1,15 @@
-use std::sync::{Arc, RwLock};
-use std::fmt::{self, Debug};
 use std::collections::HashMap;
+use std::fmt::{self, Debug};
 use std::result::Result as StdResult;
+use std::sync::{Arc, RwLock};
 
-use serde::{Deserialize, Serialize};
-use serde::ser::Serializer;
 use serde::de::Deserializer;
+use serde::ser::Serializer;
+use serde::{Deserialize, Serialize};
 
-use error::Result;
-use base::RefCnt;
 use base::crypto::Hash;
+use base::RefCnt;
+use error::Result;
 use trans::Eid;
 
 /// Data chunk
@@ -94,7 +94,8 @@ impl ChunkMapInner {
     }
 
     fn insert(&mut self, chk_hash: &Hash, seg_id: &Eid, chk_idx: usize) {
-        let idx = self.seg_ids
+        let idx = self
+            .seg_ids
             .iter()
             .position(|s| s == seg_id)
             .unwrap_or_else(|| {

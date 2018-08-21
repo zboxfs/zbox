@@ -2,10 +2,12 @@ extern crate tempdir;
 
 extern crate zbox;
 
+use std::fs;
 use tempdir::TempDir;
 
-use zbox::{init_env, Cipher, Error, MemLimit, OpenOptions, OpsLimit,
-           RepoOpener};
+use zbox::{
+    init_env, Cipher, Error, MemLimit, OpenOptions, OpsLimit, RepoOpener,
+};
 
 #[test]
 fn repo_oper() {
@@ -14,6 +16,10 @@ fn repo_oper() {
     let pwd = "pwd";
     let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
     let dir = tmpdir.path().to_path_buf();
+    //let dir = std::path::PathBuf::from("./tt");
+    if dir.exists() {
+        fs::remove_dir_all(&dir).unwrap();
+    }
     let base = "file://".to_string() + dir.to_str().unwrap();
 
     // case #1: create a new repo with default options and then re-open it

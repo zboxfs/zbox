@@ -1,358 +1,373 @@
-use std::error::Error as StdError;
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::fmt::{self, Debug};
-use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Seek,
-              SeekFrom, Write};
-use std::slice;
 use std::cmp::min;
+use std::fmt::{self, Debug};
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
 use std::u16;
 
-use bytes::{Buf, BufMut, Bytes, IntoBuf, LittleEndian};
+use bytes::{BufMut, LittleEndian};
 
-use error::Result;
+use super::file_armor::FileArmor;
+use super::vio::imp as vio_imp;
+use super::{ensure_parents_dir, remove_empty_parent_dir};
 use base::crypto::{Crypto, HashKey, Key};
 use base::lru::{CountMeter, Lru, PinChecker};
-use base::utils::{align_offset, align_offset_u64};
-use trans::Txid;
-use volume::storage::span::{SpanList, BLK_SIZE};
-use volume::storage::space::{LocId, Space};
-use super::remove_file;
-use super::vio::imp as vio_imp;
+use base::utils::{align_floor_u64, align_offset};
+use error::{Error, Result};
+use trans::armor::{Arm, ArmAccess, Armor, Seq};
+use trans::{Eid, Id};
+use volume::BLK_SIZE;
 
 // how many blocks in a sector, must be 2^n and less than u16::MAX
-pub const SECTOR_BLK_CNT: usize = 4096;
+pub const SECTOR_BLK_CNT: usize = 4 * 1024;
 
 // sector size, in bytes
 pub const SECTOR_SIZE: usize = BLK_SIZE * SECTOR_BLK_CNT;
 
-// max number of blocks in block cache
-const BLK_CACHE_CAPACITY: usize = 2048;
-
 // block deletion mark
 const BLK_DELETE_MARK: u16 = u16::MAX;
 
-// subkey constant for hash key derivation
-const SUBKEY_ID: u64 = 42;
+// sector cache size
+const SECTOR_CACHE_SIZE: usize = 16;
 
-// get sector size level
-// [SECTOR_SIZE..SECTOR_SIZE / 4) => 0
-// ...
-// [SECTOR_SIZE / 4096..0) => 6
-fn size_level(size: usize) -> u8 {
-    assert!(size <= SECTOR_SIZE);
-    let mut high = SECTOR_SIZE;
-    let mut low = SECTOR_SIZE >> 2;
-    let mut lvl = 0;
-    while lvl < 6 {
-        if low < size && size <= high {
-            break;
-        }
-        high = low;
-        low >>= 2;
-        lvl += 1;
+// split continuous blocks into sectors
+// return: Vec(sector index, start block index, block count)
+fn split_to_sector(
+    mut start_idx: u64,
+    mut cnt: usize,
+) -> Vec<(u64, u64, usize)> {
+    let mut ret = Vec::new();
+    while cnt > 0 {
+        let sec_idx = start_idx / SECTOR_BLK_CNT as u64;
+        let end_idx = align_floor_u64(start_idx, SECTOR_BLK_CNT as u64)
+            + SECTOR_BLK_CNT as u64;
+        let blk_cnt = min(cnt, (end_idx - start_idx) as usize);
+        ret.push((sec_idx, start_idx, blk_cnt));
+        start_idx += blk_cnt as u64;
+        cnt -= blk_cnt;
     }
-    lvl
+    ret
 }
 
-/// Sector
-#[derive(Debug)]
+// sector
+#[derive(Default, Clone, Deserialize, Serialize)]
 struct Sector {
-    id: LocId,
-    blk_map: Vec<u16>, // block offset map
-    path: PathBuf,
+    id: Eid,
+    seq: u64,
+    arm: Arm,
+    idx: u64,
+
+    // sector current size in bytes, excluding deleted blocks
+    // curr_size > 0 means sector is finished writing
+    curr_size: usize,
+
+    // sector actual size in bytes, including deleted blocks
+    actual_size: usize,
+
+    // block offset map, length is SECTOR_BLK_CNT, u16::MAX means deleted
+    blk_map: Vec<u16>,
 }
 
 impl Sector {
-    const BYTES_LEN: usize = LocId::BYTES_LEN + 2 * SECTOR_BLK_CNT;
-    const BACKUP_EXT: &'static str = "bk";
-    const DATA_EXT: &'static str = "data";
-    const DATA_BACKUP_EXT: &'static str = "data_bk";
-
-    fn new(id: LocId, path: PathBuf) -> Self {
+    #[inline]
+    fn new(id: &Eid, idx: u64) -> Self {
         Sector {
-            id,
+            id: id.clone(),
+            seq: 0,
+            arm: Arm::default(),
+            idx,
+            curr_size: 0,
+            actual_size: 0,
             blk_map: (0..SECTOR_BLK_CNT as u16).collect(),
-            path,
         }
     }
 
-    // sector backup file path
-    fn backup_path(&self) -> PathBuf {
-        self.path.with_extension(Sector::BACKUP_EXT)
+    #[inline]
+    fn is_finished(&self) -> bool {
+        self.curr_size > 0
     }
 
-    // data file path
-    fn data_path(&self) -> PathBuf {
-        self.path.with_extension(Sector::DATA_EXT)
+    // if the actual size is smaller than 1/4 of current size, then it is shrinkable
+    #[inline]
+    fn is_shrinkable(&self) -> bool {
+        self.actual_size <= self.curr_size >> 2
     }
 
-    // data file backup path
-    fn data_backup_path(&self) -> PathBuf {
-        self.path.with_extension(Sector::DATA_BACKUP_EXT)
+    // mark blocks as deleted
+    fn mark_blocks_deletion(&mut self, start_idx: u64, cnt: usize) {
+        let insec_idx = align_offset(start_idx as usize, SECTOR_BLK_CNT);
+        let mut deleted_size = 0;
+
+        // mark blocks as deleted
+        for idx in insec_idx..insec_idx + cnt {
+            if self.blk_map[idx] != BLK_DELETE_MARK {
+                self.blk_map[idx] = BLK_DELETE_MARK;
+                deleted_size += BLK_SIZE;
+            }
+        }
+
+        // if sector is finished, update its actual size
+        if self.is_finished() {
+            self.actual_size -= deleted_size;
+        }
     }
 }
 
-/// Sector manager
+impl Id for Sector {
+    #[inline]
+    fn id(&self) -> &Eid {
+        &self.id
+    }
+
+    #[inline]
+    fn id_mut(&mut self) -> &mut Eid {
+        &mut self.id
+    }
+}
+
+impl Seq for Sector {
+    #[inline]
+    fn seq(&self) -> u64 {
+        self.seq
+    }
+
+    #[inline]
+    fn inc_seq(&mut self) {
+        self.seq += 1
+    }
+}
+
+impl<'de> ArmAccess<'de> for Sector {
+    #[inline]
+    fn arm(&self) -> Arm {
+        self.arm
+    }
+
+    #[inline]
+    fn arm_mut(&mut self) -> &mut Arm {
+        &mut self.arm
+    }
+}
+
+impl Debug for Sector {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Sector")
+            .field("id", &self.id)
+            .field("seq", &self.seq)
+            .field("arm", &self.arm)
+            .field("idx", &self.idx)
+            .field("curr_size", &self.curr_size)
+            .field("actual_size", &self.actual_size)
+            .finish()
+    }
+}
+
+// sector manager
 pub struct SectorMgr {
-    base: PathBuf,
-    lru: Lru<LocId, Bytes, CountMeter<Bytes>, PinChecker<Bytes>>,
-    skey: Key,
+    sec_armor: FileArmor<Sector>,
+    cache: Lru<u64, Sector, CountMeter<Sector>, PinChecker<Sector>>,
     hash_key: HashKey,
-    crypto: Crypto,
 }
 
 impl SectorMgr {
-    const DIR_NAME: &'static str = "data";
+    // sector data and shrink file file extensions
+    const SECTOR_DATA_EXT: &'static str = "data";
+    const SECTOR_SHRINK_EXT: &'static str = "shrink";
 
     pub fn new(base: &Path) -> Self {
         SectorMgr {
-            base: base.join(SectorMgr::DIR_NAME),
-            lru: Lru::new(BLK_CACHE_CAPACITY),
-            skey: Key::new_empty(),
+            sec_armor: FileArmor::new(base),
+            cache: Lru::new(SECTOR_CACHE_SIZE),
             hash_key: HashKey::new_empty(),
-            crypto: Crypto::default(),
         }
     }
 
-    pub fn init(&self) -> Result<()> {
-        vio_imp::create_dir(&self.base)?;
-        Ok(())
-    }
-
-    pub fn set_crypto_key(
+    #[inline]
+    pub fn set_crypto_ctx(
         &mut self,
-        crypto: &Crypto,
-        skey: &Key,
-    ) -> Result<()> {
-        self.crypto = crypto.clone();
-        self.skey = skey.clone();
-        self.hash_key = Crypto::derive_from_key(skey, SUBKEY_ID)?;
-        Ok(())
+        crypto: Crypto,
+        key: Key,
+        hash_key: HashKey,
+    ) {
+        self.sec_armor.set_crypto_ctx(crypto, key);
+        self.hash_key = hash_key;
     }
 
-    // generate sector file path from sector id
-    fn sec_path(&self, sec_id: LocId) -> PathBuf {
-        let s = sec_id.unique_str(&self.hash_key);
-        self.base.join(&s[0..2]).join(&s[2..4]).join(&s)
+    // convert sector index to Eid
+    fn sector_id_from(&self, sec_idx: u64) -> Eid {
+        let mut buf = Vec::with_capacity(8);
+        buf.put_u64::<LittleEndian>(sec_idx);
+        let hash = Crypto::hash_with_key(&buf, &self.hash_key);
+        Eid::from_slice(&hash)
     }
 
-    fn load_sec(&self, path: &Path) -> IoResult<Sector> {
-        // read from file
-        let mut file = vio_imp::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&path)?;
-        let mut buf = vec![0u8; self.crypto.encrypted_len(Sector::BYTES_LEN)];
-        file.read_exact(&mut buf)?;
-
-        // make ad buffer
-        let mut ad = Vec::with_capacity(4);
-        ad.put_u32::<LittleEndian>(Sector::BYTES_LEN as u32);
-
-        // decrypt
-        let dec =
-            map_io_err!(self.crypto.decrypt_with_ad(&buf, &self.skey, &ad))?;
-
-        // deserialize
-        let mut buf = dec.into_buf();
-        let mut id = LocId::default();
-        id.txid = Txid::from(buf.get_u64::<LittleEndian>());
-        id.idx = buf.get_u64::<LittleEndian>();
-        let mut blk_map = vec![0u16; SECTOR_BLK_CNT];
-        for i in 0..SECTOR_BLK_CNT {
-            blk_map[i] = buf.get_u16::<LittleEndian>();
-        }
-
-        Ok(Sector {
-            id,
-            blk_map,
-            path: path.to_path_buf(),
-        })
+    // sector data file path
+    fn sector_data_path(&self, sec_idx: u64) -> PathBuf {
+        let id = self.sector_id_from(sec_idx);
+        let mut path = self.sec_armor.id_to_path(&id);
+        path.set_extension(Self::SECTOR_DATA_EXT);
+        path
     }
 
-    fn save_sec(&self, sec: &Sector) -> IoResult<()> {
-        // serialize sector
-        let mut buf = Vec::with_capacity(Sector::BYTES_LEN);
-        buf.put_u64::<LittleEndian>(sec.id.txid.val());
-        buf.put_u64::<LittleEndian>(sec.id.idx);
-        let slice = unsafe {
-            slice::from_raw_parts(
-                sec.blk_map.as_ptr() as *const u8,
-                SECTOR_BLK_CNT * 2,
-            )
-        };
-        buf.put_slice(slice);
-
-        // make ad buffer
-        let mut ad = Vec::with_capacity(4);
-        ad.put_u32::<LittleEndian>(Sector::BYTES_LEN as u32);
-
-        // encrypt
-        let enc =
-            map_io_err!(self.crypto.encrypt_with_ad(&buf, &self.skey, &ad))?;
-
-        // write to file
-        let mut file = vio_imp::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&sec.path)?;
-        file.write_all(&enc).and(file.sync_all())
-    }
-
-    // open sector file, create if it doesn't exist
-    fn open_sec(&self, sec_id: LocId) -> IoResult<Sector> {
-        let path = self.sec_path(sec_id);
-        if path.exists() {
-            self.load_sec(&path)
-        } else {
-            vio_imp::create_dir_all(path.parent().unwrap())?;
-            let sec = Sector::new(sec_id, path);
-            self.save_sec(&sec)?;
-            Ok(sec)
-        }
-    }
-
-    // open sector data file, create if it doesn't exist
-    fn open_sec_data(&self, sec_path: &Path) -> IoResult<vio_imp::File> {
-        let path = sec_path.with_extension(Sector::DATA_EXT);
-        vio_imp::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(path)
-    }
-
-    // read data
-    pub fn read(
+    // open a sector where the block index sits in
+    fn open_sector(
         &mut self,
-        buf: &mut [u8],
-        space: &Space,
-        offset: u64,
-    ) -> IoResult<usize> {
-        let buf_len = buf.len();
-        let space_len = space.len();
-        let mut start = offset;
-        let mut read: usize = 0;
+        sec_idx: u64,
+        create: bool,
+    ) -> Result<&mut Sector> {
+        if !self.cache.contains_key(&sec_idx) {
+            let sec_id = self.sector_id_from(sec_idx);
 
-        if offset == space_len as u64 {
-            return Ok(0);
-        } else if offset > space_len as u64 {
-            return Err(IoError::new(
-                ErrorKind::UnexpectedEof,
-                "Read beyond EOF",
-            ));
-        }
-
-        for &(sec_id, ref spans) in space
-            .divide_into_sectors(SECTOR_BLK_CNT)
-            .iter()
-            .skip_while(|&&(_, ref spans)| offset < spans.offset())
-        {
-            let path = self.sec_path(sec_id);
-
-            // open sector and sector data file
-            let sec = self.open_sec(sec_id)?;
-            let mut data_file = self.open_sec_data(&path)?;
-
-            for span in spans.iter().skip_while(|s| offset >= s.end_offset()) {
-                let start_blk_idx =
-                    span.begin + (start - span.offset) / BLK_SIZE as u64;
-                for blk_idx in start_blk_idx..span.end {
-                    let blk_id = LocId::new(space.txid, blk_idx);
-
-                    if !self.lru.contains_key(&blk_id) {
-                        // block is not in cache, read it from sector data file
-                        // and add it to cache
-                        let idx =
-                            align_offset_u64(blk_idx, SECTOR_BLK_CNT as u64);
-                        let idx = sec.blk_map[idx as usize];
-                        let data_offset = idx as u64 * BLK_SIZE as u64;
-                        data_file.seek(SeekFrom::Start(data_offset as u64))?;
-                        let mut blk = vec![0u8; BLK_SIZE];
-                        data_file.read_exact(&mut blk)?;
-                        self.lru.insert(blk_id, Bytes::from(blk));
-                    }
-
-                    let blk_offset = align_offset(start as usize, BLK_SIZE);
-                    let copy_len = min(
-                        space_len - start as usize,
-                        min(buf_len - read, BLK_SIZE - blk_offset),
-                    );
-                    let blk = self.lru.get_refresh(&blk_id).unwrap();
-                    let blk = &blk[blk_offset..blk_offset + copy_len];
-
-                    // copy data to destination buffer
-                    buf[read..read + copy_len].copy_from_slice(blk);
-                    read += copy_len;
-                    start += copy_len as u64;
-                    if read >= buf_len || read >= space_len {
-                        return Ok(read);
+            // load sector and insert into cache
+            match self.sec_armor.load_item(&sec_id) {
+                Ok(sec) => {
+                    self.cache.insert(sec_idx, sec);
+                }
+                Err(ref err) if *err == Error::NotFound => {
+                    if create {
+                        // if sector doesn't exist, create a new sector
+                        // and save it to cache
+                        let mut sec = Sector::new(&sec_id, sec_idx);
+                        self.sec_armor.save_item(&mut sec)?;
+                        self.cache.insert(sec_idx, sec);
+                    } else {
+                        return Err(Error::NotFound);
                     }
                 }
+                Err(err) => return Err(Error::from(err)),
             }
         }
 
-        Ok(read)
+        let sec = self.cache.get_refresh(&sec_idx).unwrap();
+
+        Ok(sec)
     }
 
-    // write data
-    pub fn write(
+    // save sector to file
+    fn save_sector(&mut self, sec_idx: u64) -> Result<()> {
+        let mut sec = self.cache.get_refresh(&sec_idx).unwrap();
+        self.sec_armor.save_item(&mut sec)
+    }
+
+    // open sector data file
+    fn open_sector_data(
         &self,
-        mut buf: &[u8],
-        space: &Space,
-        offset: u64,
-    ) -> IoResult<()> {
-        let mut start = offset;
+        sec_idx: u64,
+        create: bool,
+    ) -> Result<vio_imp::File> {
+        let path = self.sector_data_path(sec_idx);
+        if !create && !path.exists() {
+            return Err(Error::NotFound);
+        }
+        ensure_parents_dir(&path)?;
+        let data_file = vio_imp::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&path)?;
+        Ok(data_file)
+    }
 
-        for &(sec_id, ref spans) in space
-            .divide_into_sectors(SECTOR_BLK_CNT)
-            .iter()
-            .skip_while(|&&(_, ref spans)| offset < spans.offset())
-        {
-            let path = self.sec_path(sec_id);
+    // read data blocks
+    pub fn read_blocks(
+        &mut self,
+        dst: &mut [u8],
+        start_idx: u64,
+        cnt: usize,
+    ) -> Result<()> {
+        assert_eq!(dst.len(), BLK_SIZE * cnt);
+        let mut read = 0;
+        for (sec_idx, start_idx, cnt) in split_to_sector(start_idx, cnt) {
+            let mut sec_data = self.open_sector_data(sec_idx, false)?;
+            let blk_offset = {
+                let sec = self.open_sector(sec_idx, false)?;
+                let map_idx = align_offset(start_idx as usize, SECTOR_BLK_CNT);
+                let insec_idx = sec.blk_map[map_idx];
+                if sec.blk_map[map_idx..map_idx + cnt]
+                    .iter()
+                    .any(|b| *b == BLK_DELETE_MARK)
+                {
+                    return Err(Error::NotFound);
+                }
+                insec_idx as u64 * BLK_SIZE as u64
+            };
 
-            // create sector file if it doesn't exist
-            if !path.exists() {
-                self.open_sec(sec_id)?;
+            // read blocks bytes
+            let read_len = cnt * BLK_SIZE;
+            sec_data.seek(SeekFrom::Start(blk_offset))?;
+            sec_data.read_exact(&mut dst[read..read + read_len])?;
+            read += read_len;
+        }
+
+        Ok(())
+    }
+
+    // write data blocks to sector
+    pub fn write_blocks(
+        &mut self,
+        start_idx: u64,
+        cnt: usize,
+        mut blks: &[u8],
+    ) -> Result<()> {
+        assert_eq!(blks.len(), BLK_SIZE * cnt);
+
+        for (sec_idx, start_idx, cnt) in split_to_sector(start_idx, cnt) {
+            let mut sec_data = self.open_sector_data(sec_idx, true)?;
+            let blk_offset =
+                align_offset(start_idx as usize, SECTOR_BLK_CNT) * BLK_SIZE;
+
+            // write blocks bytes to sector data file
+            let write_len = cnt * BLK_SIZE;
+            sec_data.seek(SeekFrom::Start(blk_offset as u64))?;
+            sec_data.write_all(&blks[..write_len])?;
+            blks = &blks[write_len..];
+
+            // In case of a tx contains deletion operation
+            // and that deletes blocks in the same sector, the blocks will
+            // remain as deleted if the tx aborted. This is to deal with
+            // that situation by overwriting the deletion mark.
+            let corrected_blk_cnt = {
+                // this will ensure sector is created as well
+                let sec = self.open_sector(sec_idx, true)?;
+
+                assert!(!sec.is_finished());
+                let map_idx = align_offset(start_idx as usize, SECTOR_BLK_CNT);
+                let mut corrected = 0;
+                for i in map_idx..map_idx + cnt {
+                    if sec.blk_map[i] == BLK_DELETE_MARK {
+                        sec.blk_map[i] = i as u16;
+                        corrected += 1;
+                    }
+                }
+                corrected
+            };
+            if corrected_blk_cnt > 0 {
+                warn!(
+                    "corrected {} deleted block when write blocks",
+                    corrected_blk_cnt
+                );
+                self.save_sector(sec_idx)?;
             }
 
-            // then open sector data file
-            let mut data_file = self.open_sec_data(&path)?;
-
-            for span in spans.iter().skip_while(|s| offset >= s.end_offset()) {
-                let sec_offset =
-                    span.offset_in_sec(start, SECTOR_BLK_CNT as u64);
-                let ubound = {
-                    let mut blk_align =
-                        align_offset_u64(span.end, SECTOR_BLK_CNT as u64);
-                    if blk_align == 0 {
-                        blk_align = SECTOR_BLK_CNT as u64;
-                    }
-                    blk_align * BLK_SIZE as u64
+            // if we reached the end of sector, mark it as finished
+            if (start_idx as usize + cnt) % SECTOR_BLK_CNT == 0 {
+                let is_shrinkable = {
+                    let sec = self.open_sector(sec_idx, false)?;
+                    sec.curr_size = SECTOR_SIZE;
+                    sec.actual_size = BLK_SIZE
+                        * sec
+                            .blk_map
+                            .iter()
+                            .filter(|b| **b != BLK_DELETE_MARK)
+                            .count() as usize;
+                    sec.is_shrinkable()
                 };
-                if sec_offset == ubound {
-                    continue;
-                }
-                let write_len = min(buf.len(), (ubound - sec_offset) as usize);
 
-                // write sector data
-                data_file.seek(SeekFrom::Start(sec_offset))?;
-                data_file.write_all(&buf[..write_len])?;
-                buf = buf.split_at(write_len).1;
-                start += write_len as u64;
-
-                // write padding if necessary
-                if buf.is_empty() {
-                    let padding_len =
-                        BLK_SIZE - align_offset(start as usize, BLK_SIZE);
-                    if padding_len != BLK_SIZE {
-                        let mut padding = vec![0u8; padding_len];
-                        Crypto::random_buf(&mut padding);
-                        data_file.write_all(&padding)?;
-                    }
-                    return Ok(());
+                if is_shrinkable {
+                    // shrink sector
+                    self.shrink_sector(sec_idx)?;
+                } else {
+                    // save sector
+                    self.save_sector(sec_idx)?;
                 }
             }
         }
@@ -360,189 +375,102 @@ impl SectorMgr {
         Ok(())
     }
 
-    // remove block from block cache
-    pub fn remove_cache(&mut self, blk_id: LocId) {
-        self.lru.remove(&blk_id);
-    }
+    // shrink a sector
+    fn shrink_sector(&mut self, sec_idx: u64) -> Result<()> {
+        let mut sec = self.open_sector(sec_idx, false)?.clone();
+        let mut sec_data = self.open_sector_data(sec_idx, false)?;
 
-    // shrink sector
-    fn shrink(&self, sec: &mut Sector, curr_size: usize) -> Result<()> {
-        let bk_path = sec.backup_path();
-        let data_path = sec.data_path();
-        let data_bk_path = sec.data_backup_path();
-        vio_imp::rename(&sec.path, &bk_path)?;
-        vio_imp::rename(&data_path, &data_bk_path)?;
-
-        // open sector data and shrink file
-        let mut orig_data = vio_imp::File::open(&data_bk_path)?;
-        let mut dst_data = vio_imp::OpenOptions::new()
+        // open shrink destination file
+        let data_file_path = self.sector_data_path(sec.idx);
+        let mut dst_path = data_file_path.clone();
+        dst_path.set_extension(Self::SECTOR_SHRINK_EXT);
+        let mut dst_file = vio_imp::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .open(&data_path)?;
+            .open(&dst_path)?;
 
-        // copy over not deleted blocks
+        // copy all not deleted blocks to destination file
         let mut buf = vec![0u8; BLK_SIZE];
-        let mut idx = 0;
-        for blk_idx in sec.blk_map.iter_mut() {
+        let mut written_blk_cnt = 0;
+        for insec_idx in sec.blk_map.iter_mut() {
             // skip deleted block
-            if *blk_idx == BLK_DELETE_MARK {
+            if *insec_idx == BLK_DELETE_MARK {
                 continue;
             }
 
-            let data_offset = *blk_idx as u64 * BLK_SIZE as u64;
-            if data_offset >= curr_size as u64 {
+            let data_offset = *insec_idx as usize * BLK_SIZE;
+            if data_offset >= sec.curr_size {
                 break;
             }
 
-            orig_data.seek(SeekFrom::Start(data_offset))?;
-            orig_data
-                .read_exact(&mut buf)
-                .and(dst_data.write_all(&buf))?;
+            // read from sector and write to destination
+            sec_data.seek(SeekFrom::Start(data_offset as u64))?;
+            sec_data.read_exact(&mut buf).and(dst_file.write_all(&buf))?;
 
-            *blk_idx = idx;
-            idx += 1;
+            *insec_idx = written_blk_cnt;
+            written_blk_cnt += 1;
         }
 
-        // save sector
-        self.save_sec(&sec)?;
+        // set sector new size, save sector and update sector in cache
+        sec.actual_size = written_blk_cnt as usize * BLK_SIZE;
+        sec.curr_size = sec.actual_size;
+        self.sec_armor.save_item(&mut sec)?;
+        self.cache.insert(sec.idx, sec);
 
-        // remove backup files
-        remove_file(&bk_path)?;
-        remove_file(&data_bk_path).unwrap_or(true);
+        // switch sector data file
+        vio_imp::rename(&dst_path, &data_file_path)?;
 
         Ok(())
     }
 
-    // restore sector from backup files if its status is incompleted
-    // return true if restore is successfull and ready to recycle
-    // return false if sector is fully removed
-    fn restore_sec(&self, sec_id: LocId) -> Result<bool> {
-        let sec = Sector::new(sec_id, self.sec_path(sec_id));
-        let bk_path = sec.backup_path();
-        let data_path = sec.data_path();
-        let data_bk_path = sec.data_backup_path();
+    // delete data blocks
+    pub fn del_blocks(&mut self, start_idx: u64, cnt: usize) -> Result<()> {
+        for (sec_idx, start_idx, cnt) in split_to_sector(start_idx, cnt) {
+            let sec_id;
+            let actual_size;
+            let is_finished;
+            let is_shrinkable;
 
-        if bk_path.exists() {
-            if data_bk_path.exists() {
-                vio_imp::rename(&data_bk_path, &data_path)?;
-            }
-            vio_imp::rename(&bk_path, &sec.path)?;
-            Ok(true)
-        } else {
-            if sec.path.exists() {
-                if data_bk_path.exists() {
-                    remove_file(&data_bk_path)?;
-                }
-                Ok(true)
-            } else {
-                // sector is completely removed
-                remove_file(&data_path)?;
-                remove_file(&data_bk_path)?;
-                Ok(false)
-            }
-        }
-    }
-
-    // recycle retired space
-    pub fn recycle(&self, retired: &Vec<Space>) -> Result<()> {
-        // collect each sector's retired spans
-        let mut tracks: HashMap<LocId, SpanList> = HashMap::new();
-        for space in retired {
-            for &(sec_id, ref val) in
-                space.divide_into_sectors(SECTOR_BLK_CNT).iter()
             {
-                let spans = tracks.entry(sec_id).or_insert(SpanList::new());
-                spans.join(val);
-            }
-        }
+                match self.open_sector(sec_idx, false) {
+                    Ok(sec) => {
+                        // mark blocks as deleted
+                        sec.mark_blocks_deletion(start_idx, cnt);
 
-        // recyle spans in each sector
-        for (sec_id, spans) in tracks.iter() {
-            // restore sector
-            if !self.restore_sec(*sec_id)? {
+                        sec_id = sec.id.clone();
+                        actual_size = sec.actual_size;
+                        is_finished = sec.is_finished();
+                        is_shrinkable = sec.is_shrinkable();
+                    }
+                    Err(ref err) if *err == Error::NotFound => continue,
+                    Err(err) => return Err(err),
+                }
+            }
+
+            // if this sector is not finished yet, save the sector
+            if !is_finished {
+                self.save_sector(sec_idx)?;
                 continue;
             }
 
-            // open sector files
-            let mut sec = self.open_sec(*sec_id)?;
-            let base_bid = sec_id.lower_blk_bound(SECTOR_BLK_CNT);
-            let mut freed_size = 0;
-
-            // mark blocks as deleted and sum up total size to be freed
-            for span in spans.list.iter() {
-                let (begin, end) = (span.begin - base_bid, span.end - base_bid);
-                if sec.blk_map[begin as usize] == BLK_DELETE_MARK {
-                    continue;
-                }
-                for i in begin..end {
-                    sec.blk_map[i as usize] = BLK_DELETE_MARK;
-                }
-                freed_size += span.blk_len();
-            }
-
-            if freed_size == 0 {
-                continue;
-            }
-
-            let curr_size = {
-                let data_file = self.open_sec_data(&sec.path)?;
-                data_file.metadata()?.len() as usize
-            };
-            let next_size = curr_size - freed_size;
-            let curr_size_lvl = size_level(curr_size);
-            let next_size_lvl = size_level(next_size);
-
-            debug!(
-                "recycle sector#{}.{} {}. curr: (size: {}, lv: {}), \
-                 next: (size: {}, lv: {})",
-                sec_id.txid,
-                sec_id.idx,
-                sec.path.display(),
-                curr_size,
-                curr_size_lvl,
-                next_size,
-                next_size_lvl,
-            );
-
-            // if all blocks are deleted, remove the sector
-            if next_size == 0 {
-                remove_file(&sec.path)?;
-                remove_file(&sec.data_path())?;
-            } else if next_size_lvl == curr_size_lvl {
-                // if next size is still in the same size level,
-                // no need to shrink, just update the sector
-                let backup = sec.backup_path();
-                vio_imp::rename(&sec.path, &backup)?;
-                self.save_sec(&sec)?;
-                remove_file(&backup)?;
+            // if all blocks are deleted, remove the whole sector
+            // including sector and sector data file
+            if actual_size == 0 {
+                self.sec_armor.remove_all_arms(&sec_id)?;
+                let sec_data_path = self.sector_data_path(sec_idx);
+                vio_imp::remove_file(&sec_data_path)?;
+                remove_empty_parent_dir(&sec_data_path)?;
+                self.cache.remove(&sec_idx);
+            } else if is_shrinkable {
+                // shrink sector if possible
+                self.shrink_sector(sec_idx)?;
             } else {
-                // shrink sector
-                self.shrink(&mut sec, curr_size)?;
+                // otherwise, save the sector
+                self.save_sector(sec_idx)?;
             }
         }
 
-        Ok(())
-    }
-
-    pub fn cleanup(&self, txid: Txid) -> Result<()> {
-        let mut sec_idx = 0;
-        loop {
-            let sec_id = LocId::new(txid, sec_idx);
-            let sec = Sector::new(sec_id, self.sec_path(sec_id));
-
-            // if any one file is deleted successfully, then continue
-            if remove_file(sec.backup_path())?
-                | remove_file(sec.data_backup_path())?
-                | remove_file(sec.data_path())?
-                | remove_file(&sec.path)?
-            {
-                sec_idx += 1;
-                continue;
-            }
-
-            break;
-        }
         Ok(())
     }
 }
@@ -550,137 +478,7 @@ impl SectorMgr {
 impl Debug for SectorMgr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("SectorMgr")
-            .field("base", &self.base)
-            .field("skey", &self.skey)
             .field("hash_key", &self.hash_key)
-            .field("crypto", &self.crypto)
             .finish()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use volume::storage::span::Span;
-    use super::*;
-
-    #[test]
-    fn split_space() {
-        let txid = Txid::from(42);
-
-        // case #1, [0, 1)
-        let span = Span::new(0, 1, 0);
-        let spans = span.clone().into_span_list(123);
-        let s = Space::new(txid, spans);
-        let t = s.divide_into_sectors(SECTOR_BLK_CNT);
-        assert_eq!(t.len(), 1);
-        let &(loc_id, ref spans) = t.first().unwrap();
-        assert_eq!(loc_id, LocId::new(txid, 0));
-        assert_eq!(spans.len, BLK_SIZE * span.blk_cnt());
-        assert_eq!(spans.offset(), 0);
-        assert_eq!(*spans.list.first().unwrap(), span);
-
-        // case #2, [0, 4096)
-        let span = Span::new(0, SECTOR_BLK_CNT as u64, 0);
-        let spans = span.clone().into_span_list(123);
-        let s = Space::new(txid, spans);
-        let t = s.divide_into_sectors(SECTOR_BLK_CNT);
-        assert_eq!(t.len(), 1);
-        let &(loc_id, ref spans) = t.first().unwrap();
-        assert_eq!(loc_id, LocId::new(txid, 0));
-        assert_eq!(spans.len, BLK_SIZE * span.blk_cnt());
-        assert_eq!(spans.offset(), 0);
-        assert_eq!(*spans.list.first().unwrap(), span);
-
-        // case #2, [0, 4097)
-        let span = Span::new(0, SECTOR_BLK_CNT as u64 + 1, 0);
-        let spans = span.clone().into_span_list(123);
-        let s = Space::new(txid, spans);
-        let t = s.divide_into_sectors(SECTOR_BLK_CNT);
-        assert_eq!(t.len(), 2);
-        let &(loc_id, ref spans) = t.first().unwrap();
-        assert_eq!(loc_id, LocId::new(txid, 0));
-        assert_eq!(spans.len, BLK_SIZE * SECTOR_BLK_CNT);
-        assert_eq!(spans.offset(), 0);
-        assert_eq!(
-            *spans.list.first().unwrap(),
-            Span::new(0, SECTOR_BLK_CNT as u64, 0)
-        );
-        let &(loc_id, ref spans) = t.last().unwrap();
-        assert_eq!(loc_id, LocId::new(txid, 1));
-        assert_eq!(spans.len, BLK_SIZE);
-        assert_eq!(spans.offset(), SECTOR_SIZE as u64);
-        assert_eq!(
-            *spans.list.first().unwrap(),
-            Span::new(
-                SECTOR_BLK_CNT as u64,
-                SECTOR_BLK_CNT as u64 + 1,
-                SECTOR_SIZE as u64,
-            )
-        );
-
-        // case #3, [0, 1), [2, 3)
-        let mut spans = SpanList::new();
-        let span = Span::new(0, 1, 0);
-        let span2 = Span::new(2, 3, span.end_offset());
-        spans.append(span, span.blk_len());
-        spans.append(span2, span2.blk_len());
-        let s = Space::new(txid, spans);
-        let t = s.divide_into_sectors(SECTOR_BLK_CNT);
-        assert_eq!(t.len(), 1);
-        let &(loc_id, ref spans) = t.first().unwrap();
-        assert_eq!(loc_id, LocId::new(txid, 0));
-        assert_eq!(spans.len, BLK_SIZE * 2);
-        assert_eq!(spans.offset(), 0);
-        assert_eq!(*spans.list.first().unwrap(), span);
-        assert_eq!(*spans.list.last().unwrap(), span2);
-
-        // case #4, [1, 2), [3, 4096)
-        let mut spans = SpanList::new();
-        let span = Span::new(1, 2, 42);
-        let span2 = Span::new(3, SECTOR_BLK_CNT as u64, span.end_offset());
-        spans.append(span, span.blk_len());
-        spans.append(span2, span2.blk_len());
-        let s = Space::new(txid, spans);
-        let t = s.divide_into_sectors(SECTOR_BLK_CNT);
-        assert_eq!(t.len(), 1);
-        let &(loc_id, ref spans) = t.first().unwrap();
-        assert_eq!(loc_id, LocId::new(txid, 0));
-        assert_eq!(spans.len, span.blk_len() + span2.blk_len());
-        assert_eq!(spans.offset(), 42);
-        assert_eq!(*spans.list.first().unwrap(), span);
-        assert_eq!(*spans.list.last().unwrap(), span2);
-
-        // case #5, [1, 2), [3, 4098), [4100, 4101)
-        let mut spans = SpanList::new();
-        let span = Span::new(1, 2, 0);
-        let span2 = Span::new(3, 4098, span.end_offset());
-        let span3 = Span::new(4100, 4101, span2.end_offset());
-        spans.append(span, span.blk_len());
-        spans.append(span2, span2.blk_len());
-        spans.append(span3, span3.blk_len());
-        let s = Space::new(txid, spans);
-        let t = s.divide_into_sectors(SECTOR_BLK_CNT);
-        assert_eq!(t.len(), 2);
-        let &(loc_id, ref spans) = t.first().unwrap();
-        assert_eq!(loc_id, LocId::new(txid, 0));
-        assert_eq!(spans.len, SECTOR_SIZE - BLK_SIZE * 2);
-        assert_eq!(spans.offset(), 0);
-        assert_eq!(*spans.list.first().unwrap(), span);
-        assert_eq!(
-            *spans.list.last().unwrap(),
-            Span::new(3, 4096, span.end_offset())
-        );
-        let &(loc_id, ref spans) = t.last().unwrap();
-        assert_eq!(loc_id, LocId::new(txid, 1));
-        assert_eq!(spans.len, BLK_SIZE * 3);
-        assert_eq!(spans.offset(), (SECTOR_SIZE - BLK_SIZE * 2) as u64);
-        assert_eq!(
-            *spans.list.first().unwrap(),
-            Span::new(4096, 4098, (SECTOR_SIZE - BLK_SIZE * 2) as u64)
-        );
-        assert_eq!(
-            *spans.list.last().unwrap(),
-            Span::new(4100, 4101, SECTOR_SIZE as u64)
-        );
     }
 }

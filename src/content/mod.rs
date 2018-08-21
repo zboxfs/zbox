@@ -1,10 +1,9 @@
 //! content module document
 //!
 
-mod content;
 mod chunk;
 mod chunker;
-mod content_map;
+mod content;
 mod entry;
 mod merkle_tree;
 mod segment;

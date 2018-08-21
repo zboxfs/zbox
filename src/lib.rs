@@ -108,13 +108,10 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
-#[cfg(feature = "zbox-cloud")]
-extern crate reqwest;
-
 macro_rules! map_io_err {
     ($x:expr) => {
         $x.map_err(|e| IoError::new(ErrorKind::Other, e.description()));
-    }
+    };
 }
 
 mod base;
@@ -129,10 +126,10 @@ mod volume;
 
 pub mod ffi;
 
-pub use self::error::{Error, Result};
-pub use self::base::init_env;
 pub use self::base::crypto::{Cipher, MemLimit, OpsLimit};
-pub use self::trans::Eid;
-pub use self::fs::fnode::{DirEntry, FileType, Metadata, Version};
+pub use self::base::init_env;
+pub use self::error::{Error, Result};
 pub use self::file::{File, VersionReader};
+pub use self::fs::fnode::{DirEntry, FileType, Metadata, Version};
 pub use self::repo::{OpenOptions, Repo, RepoInfo, RepoOpener};
+pub use self::trans::Eid;

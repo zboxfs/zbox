@@ -7,12 +7,12 @@ extern crate zbox;
 
 mod common;
 
-use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::cmp::min;
 use std::fmt::{self, Debug};
+use std::fs;
+use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::sync::{Arc, RwLock};
 use std::thread;
-use std::cmp::min;
-use std::fs;
 
 use bytes::{Buf, BufMut, LittleEndian};
 
@@ -273,11 +273,7 @@ fn fuzz_file_read_write_mt(rounds: usize) {
                         let step = Step::new_random(round, old_len, &env.data);
 
                         test_round(
-                            &mut file,
-                            &step,
-                            &env.data,
-                            round,
-                            rounds,
+                            &mut file, &step, &env.data, round, rounds,
                             &mut ctl,
                         );
                     }

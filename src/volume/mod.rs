@@ -1,11 +1,17 @@
 //! volume module document
 //!
 
-mod armor;
-mod emap;
+mod address;
+mod allocator;
 mod storage;
-mod super_blk;
-mod txlog;
+mod super_block;
 mod volume;
 
-pub use self::volume::{Meta, Persistable, Reader, Volume, VolumeRef, Writer};
+pub use self::allocator::{Allocator, AllocatorRef};
+pub use self::storage::StorageRef;
+pub use self::volume::{Info, Reader, Volume, VolumeRef, Writer};
+
+// block and frame size
+pub const BLK_SIZE: usize = 8 * 1024;
+pub const BLKS_PER_FRAME: usize = 16;
+pub const FRAME_SIZE: usize = BLKS_PER_FRAME * BLK_SIZE;

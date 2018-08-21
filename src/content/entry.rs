@@ -2,12 +2,12 @@ use std::io::{Result as IoResult, Seek, SeekFrom};
 use std::ops::Index;
 use std::slice::Iter;
 
-use error::Result;
-use trans::{Eid, Id};
-use super::Store;
-use super::span::{Cutable, Extent, Span};
 use super::chunk::ChunkMap;
 use super::segment::Segment;
+use super::span::{Cutable, Extent, Span};
+use super::Store;
+use error::Result;
+use trans::{Eid, Id};
 
 pub(super) trait CutableList: Clone + Extent {
     type Item: Extent + Cutable;
@@ -324,15 +324,11 @@ impl EntryList {
 
             if seg_cow.is_orphan() {
                 // if segment is not used anymore, remove it
-                seg_cow.make_del()?;
+                store.remove_segment(&mut seg_cow)?;
                 chk_map.remove_segment(seg_cow.id());
-                store.remove_segment(&seg_cow)?;
             } else if seg_cow.is_shrinkable() {
-                // shrink segment if it is too small
-                let retired = {
-                    let mut seg = seg_cow.make_mut()?;
-                    store.shrink_segment(&mut seg)?
-                };
+                // shrink segment if it is small enought
+                let retired = store.shrink_segment(&mut seg_cow)?;
                 chk_map.remove_chunks(seg_cow.id(), &retired);
             }
         }
@@ -448,9 +444,12 @@ impl Seek for EntryList {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base::init_env;
 
     #[test]
     fn entry_list_append() {
+        init_env();
+
         let mut elst = EntryList::new();
         let id = Eid::new();
         let id2 = Eid::new();

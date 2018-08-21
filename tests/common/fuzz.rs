@@ -3,14 +3,14 @@
 extern crate bytes;
 extern crate zbox;
 
-use std::ptr;
-use std::fmt::{self, Debug};
 use std::cmp::min;
+use std::fmt::{self, Debug};
 use std::fs;
-use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::io::{Cursor, Read, Write};
+use std::path::PathBuf;
+use std::ptr;
 use std::sync::{Arc, RwLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use self::bytes::{Buf, BufMut, LittleEndian};
 use zbox::{init_env, Repo, RepoOpener};
@@ -333,12 +333,7 @@ impl TestEnv {
 
     #[allow(dead_code)]
     pub fn reopen(&mut self) {
-        let dummy_repo = RepoOpener::new()
-            .create(true)
-            .open("mem://foo", "pwd")
-            .unwrap();
         let info = self.repo.info();
-        self.repo = dummy_repo;
         self.repo = RepoOpener::new().open(info.uri(), "pwd").unwrap();
     }
 }

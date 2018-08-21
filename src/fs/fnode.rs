@@ -1,20 +1,21 @@
-use std::sync::Arc;
-use std::collections::VecDeque;
-use std::io::{Read, Result as IoResult, Seek, SeekFrom, Write};
-use std::fmt::{self, Debug};
-use std::time::SystemTime;
-use std::path::{Path, PathBuf};
 use std::cmp::min;
+use std::collections::VecDeque;
+use std::fmt::{self, Debug};
+use std::io::{Read, Result as IoResult, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::SystemTime;
 
-use error::{Error, Result};
-use base::Time;
-use base::lru::{CountMeter, Lru, PinChecker};
-use trans::{CloneNew, Eid, Id, TxMgrRef, Txid};
-use trans::cow::{Cow, CowCache, CowRef, CowWeakRef, IntoCow};
-use volume::{Persistable, VolumeRef};
-use content::{ChunkMap, Content, ContentReader, ContentRef, StoreRef,
-              Writer as StoreWriter};
 use super::Handle;
+use base::lru::{CountMeter, Lru, PinChecker};
+use base::Time;
+use content::{
+    ChunkMap, Content, ContentReader, StoreRef, Writer as StoreWriter,
+};
+use error::{Error, Result};
+use trans::cow::{Cow, CowCache, CowRef, CowWeakRef, Cowable, IntoCow};
+use trans::{Eid, Finish, Id, TxMgrRef, Txid};
+use volume::VolumeRef;
 
 // maximum sub nodes for a fnode
 const SUB_NODES_CNT: usize = 8;
@@ -205,7 +206,6 @@ type SubNodes = Lru<
 /// File node
 #[derive(Default, Clone, Deserialize, Serialize)]
 pub struct Fnode {
-    id: Eid,
     ftype: FileType,
     version_limit: u8,
     ctime: Time,
@@ -218,11 +218,15 @@ pub struct Fnode {
     #[serde(skip_serializing, skip_deserializing, default)]
     parent: Option<FnodeRef>,
 
-    #[serde(skip_serializing, skip_deserializing,
-            default = "Fnode::default_sub_nodes")]
+    #[serde(
+        skip_serializing,
+        skip_deserializing,
+        default = "Fnode::default_sub_nodes"
+    )]
     sub_nodes: SubNodes,
 
-    #[serde(skip_serializing, skip_deserializing, default)] store: StoreRef,
+    #[serde(skip_serializing, skip_deserializing, default)]
+    store: StoreRef,
 }
 
 impl Fnode {
@@ -235,7 +239,6 @@ impl Fnode {
             FileType::Dir => 0,
         };
         Fnode {
-            id: Eid::new(),
             ftype,
             version_limit,
             ctime: Time::now(),
@@ -267,7 +270,7 @@ impl Fnode {
             // create child fnode and add initial version
             let mut kid = Fnode::new(ftype, version_limit, &pfnode.store);
             if ftype == FileType::File {
-                kid.add_ver(Content::new().into_cow(&txmgr)?)?;
+                kid.add_version(Content::new())?;
             }
 
             kid.into_cow(txmgr)?
@@ -332,7 +335,7 @@ impl Fnode {
         store: &StoreRef,
         vol: &VolumeRef,
     ) -> Result<FnodeRef> {
-        let root = Cow::<Fnode>::load_cow(root_id, txmgr, vol)?;
+        let root = Cow::<Fnode>::load(root_id, txmgr, vol)?;
         {
             let mut root_cow = root.write().unwrap();
             let root = root_cow.make_mut_naive();
@@ -350,7 +353,8 @@ impl Fnode {
         vol: &VolumeRef,
     ) -> Result<FnodeRef> {
         // get child fnode from sub node list first
-        if let Some(fnode) = self.sub_nodes
+        if let Some(fnode) = self
+            .sub_nodes
             .get_refresh(name)
             .and_then(|sub| sub.upgrade())
         {
@@ -482,7 +486,8 @@ impl Fnode {
             Some(ref parent) => {
                 let mut par = parent.write().unwrap();
                 let par = par.make_mut()?;
-                let child_idx = par.kids
+                let child_idx = par
+                    .kids
                     .iter()
                     .position(|ref c| c.id == *child.id())
                     .ok_or(Error::NotFound)?;
@@ -517,7 +522,8 @@ impl Fnode {
 
     // remove a specified version and its associated content
     fn remove_ver(&mut self, ver_num: usize) -> Result<()> {
-        let idx = self.vers
+        let idx = self
+            .vers
             .iter()
             .position(|v| v.num == ver_num)
             .ok_or(Error::NoVersion)?;
@@ -542,20 +548,20 @@ impl Fnode {
     }
 
     // add a new version
-    // return content if it is duplicated, none if not
-    fn add_ver(&mut self, content: ContentRef) -> Result<Option<ContentRef>> {
+    // return content if it is not duplicated, none if it is duplicated
+    fn add_version(&mut self, content: Content) -> Result<Option<Content>> {
         // dedup content and add the new version
-        let is_deduped = {
-            let ctn = content.read().unwrap();
+        let (is_deduped, deduped_id) = {
             let mut store_cow = self.store.write().unwrap();
             let store = store_cow.make_mut()?;
-            let deduped_id = store.dedup_content(ctn.id(), ctn.hash())?;
-            let ver =
-                Version::new(self.curr_ver_num() + 1, &deduped_id, ctn.len());
-            self.mtime = ver.ctime;
-            self.vers.push_back(ver);
-            deduped_id != *ctn.id()
+            store.dedup_content(content.clone())?
         };
+
+        // create a new version
+        let ver =
+            Version::new(self.curr_ver_num() + 1, &deduped_id, content.len());
+        self.mtime = ver.ctime;
+        self.vers.push_back(ver);
 
         // remove the oldest version, note that version limit is zero based
         if self.vers.len() > self.version_limit as usize {
@@ -564,9 +570,11 @@ impl Fnode {
         }
 
         if is_deduped {
-            Ok(Some(content.clone()))
-        } else {
+            // duplicate content found
             Ok(None)
+        } else {
+            // no content duplication
+            Ok(Some(content))
         }
     }
 
@@ -575,19 +583,19 @@ impl Fnode {
         let ver = self.ver(ver_num).ok_or(Error::NoVersion)?;
         let content = {
             let st = self.store.read().unwrap();
-            st.get_content(&ver.content_id)?
+            let ctn_ref = st.get_content(&ver.content_id)?;
+            let ctn = ctn_ref.read().unwrap();
+            ctn.clone()
         };
-        Ok(ContentReader::new(&content, &self.store))
+        Ok(ContentReader::new(content, &self.store))
     }
 
     // clone a new current content
-    fn clone_current_content(&self, txmgr: &TxMgrRef) -> Result<ContentRef> {
-        let curr_ctn = {
-            let store = self.store.read().unwrap();
-            store.get_content(&self.curr_ver().content_id)?
-        };
-        let new_ctn = curr_ctn.read().unwrap();
-        new_ctn.clone_new().into_cow(txmgr)
+    fn clone_current_content(&self) -> Result<Content> {
+        let store = self.store.read().unwrap();
+        let curr_ctn = store.get_content(&self.curr_ver().content_id)?;
+        let content = curr_ctn.read().unwrap();
+        Ok(content.clone())
     }
 
     /// Set file to specified length
@@ -616,19 +624,16 @@ impl Fnode {
             // truncate
             let mut fnode_cow = handle.fnode.write().unwrap();
             let ctn = {
-                let new_ctn = fnode_cow.clone_current_content(&handle.txmgr)?;
-                Content::truncate(&new_ctn, len, &handle.store)?;
+                let mut new_ctn = fnode_cow.clone_current_content()?;
+                new_ctn.truncate(len, &handle.store)?;
                 new_ctn
             };
 
-            // link the new content first
-            Content::link(ctn.clone(), &handle.store)?;
-
-            // then dedup content and add deduped content as a new version
-            // if content is duplicated, then unlink the content
+            // dedup content, if it is not duplicated then link the content
             let fnode = fnode_cow.make_mut()?;
-            if let Some(ctn) = fnode.add_ver(ctn)? {
-                Content::unlink(&ctn, &mut fnode.chk_map, &handle.store)?;
+            if let Some(content) = fnode.add_version(ctn)? {
+                // content is not duplicated
+                content.link(&handle.store)?;
             }
         }
 
@@ -639,7 +644,6 @@ impl Fnode {
 impl Debug for Fnode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Fnode")
-            .field("id", &self.id)
             .field("ftype", &self.ftype)
             .field("version_limit", &self.version_limit)
             .field("ctime", &self.ctime)
@@ -651,23 +655,9 @@ impl Debug for Fnode {
     }
 }
 
-impl Id for Fnode {
-    #[inline]
-    fn id(&self) -> &Eid {
-        &self.id
-    }
-
-    #[inline]
-    fn id_mut(&mut self) -> &mut Eid {
-        &mut self.id
-    }
-}
-
-impl CloneNew for Fnode {}
+impl Cowable for Fnode {}
 
 impl<'de> IntoCow<'de> for Fnode {}
-
-impl<'de> Persistable<'de> for Fnode {}
 
 /// Fnode reference type
 pub type FnodeRef = CowRef<Fnode>;
@@ -728,42 +718,47 @@ impl Writer {
             StoreWriter::new(chk_map, &handle.txmgr, &handle.store, txid)?;
         Ok(Writer { inner, handle })
     }
+}
 
-    pub fn finish(self) -> Result<usize> {
-        let stg_ctn = self.inner.finish()?;
+impl Write for Writer {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
+        self.inner.write(buf)
+    }
+
+    #[inline]
+    fn flush(&mut self) -> IoResult<()> {
+        self.inner.flush()
+    }
+}
+
+impl Finish for Writer {
+    fn finish(self) -> Result<usize> {
+        let stg_ctn = self.inner.finish_with_content()?;
         let handle = &self.handle;
 
         let mut fnode_cow = handle.fnode.write().unwrap();
 
         // merge stage content to current content
         let ctn = {
-            let new_ctn = fnode_cow.clone_current_content(&handle.txmgr)?;
-            Content::replace(&new_ctn, &stg_ctn, &handle.store)?;
+            let mut new_ctn = fnode_cow.clone_current_content()?;
+            new_ctn.replace(&stg_ctn, &handle.store)?;
             new_ctn
         };
 
         // dedup content and add deduped content as a new version
         let fnode = fnode_cow.make_mut()?;
-        if let Some(ctn) = fnode.add_ver(ctn)? {
-            // content is duplicated
-            Content::unlink(&ctn, &mut fnode.chk_map, &handle.store)?;
+        if let Some(content) = fnode.add_version(ctn)? {
+            // content is not duplicated
+            content.link(&handle.store)?;
         }
 
         Ok(stg_ctn.end_offset())
     }
 }
 
-impl Write for Writer {
-    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
-        self.inner.write(buf)
-    }
-
-    fn flush(&mut self) -> IoResult<()> {
-        self.inner.flush()
-    }
-}
-
 impl Seek for Writer {
+    #[inline]
     fn seek(&mut self, pos: SeekFrom) -> IoResult<u64> {
         self.inner.seek(pos)
     }

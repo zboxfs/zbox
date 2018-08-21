@@ -1,12 +1,15 @@
-use std::result::Result as StdResult;
-use std::fmt::{self, Debug, Display, Formatter};
 use std::cell::RefCell;
+use std::fmt::{self, Debug, Display, Formatter};
+use std::result::Result as StdResult;
 use std::u64;
 
-use serde::{Deserialize, Serialize};
-use serde::ser::Serializer;
+use bytes::{BufMut, LittleEndian};
 use serde::de::{self, Deserializer};
+use serde::ser::Serializer;
+use serde::{Deserialize, Serialize};
 
+use super::Eid;
+use base::crypto::{Crypto, HashKey};
 use error::{Error, Result};
 
 // per-thread txid
@@ -14,9 +17,6 @@ thread_local!{
     // per-thread tranaction ID, with initial value 0
     static TXID: RefCell<u64> = RefCell::new(0);
 }
-
-// a special txid only used for entity deletion
-const DEL_TXID: u64 = u64::MAX;
 
 /// Transaction ID, one per thread
 #[derive(Hash, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -29,23 +29,8 @@ impl Txid {
     }
 
     #[inline]
-    pub fn new_del_txid() -> Self {
-        Txid(DEL_TXID)
-    }
-
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.0 == 0
-    }
-
-    #[inline]
     pub fn val(&self) -> u64 {
         self.0
-    }
-
-    #[inline]
-    pub fn is_del_txid(&self) -> bool {
-        self.0 == DEL_TXID
     }
 
     /// Check if thread is already in transaction
@@ -75,22 +60,23 @@ impl Txid {
 
     /// Get next txid by increase one
     pub fn next(&mut self) -> Txid {
-        self.0 = self.0
-            .checked_add(1)
-            .and_then(|t| if t == DEL_TXID { None } else { Some(t) })
-            .unwrap();
+        self.0 = self.0.checked_add(1).unwrap();
         TXID.with(|t| *t.borrow_mut() = self.0);
         Txid(self.0)
+    }
+
+    /// Derive an eid from txid
+    pub fn derive_id(&self, hash_key: &HashKey) -> Eid {
+        let mut buf = Vec::new();
+        buf.put_u64::<LittleEndian>(self.0);
+        let hash = Crypto::hash_with_key(&buf, hash_key);
+        Eid::from_slice(&hash)
     }
 }
 
 impl Debug for Txid {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.is_del_txid() {
-            write!(f, "Txid(del)")
-        } else {
-            write!(f, "Txid({})", self.0)
-        }
+        write!(f, "Txid({})", self.0)
     }
 }
 

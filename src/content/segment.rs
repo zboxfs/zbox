@@ -1,25 +1,25 @@
-use std::fmt::{self, Debug};
-use std::sync::{Arc, RwLock};
-use std::ops::{Index, IndexMut, Range};
-use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write};
 use std::error::Error as StdError;
+use std::fmt::{self, Debug};
+use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write};
+use std::ops::{Index, IndexMut, Range};
+use std::sync::{Arc, RwLock};
 
-use error::Result;
-use base::IntoRef;
-use base::lru::{Lru, Meter, PinChecker};
-use trans::{CloneNew, Eid, Id, Loc, TxMgrRef, Txid};
-use trans::trans::{Action, Transable};
-use trans::cow::{CowCache, CowRef, IntoCow};
-use volume::{Persistable, Volume, VolumeRef, Writer as VolWriter};
 use super::chunk::Chunk;
-
-// maximum number of chunks in a segment
-const MAX_CHUNKS: usize = 256;
+use super::StoreRef;
+use base::lru::{Lru, Meter, PinChecker};
+use base::IntoRef;
+use error::Result;
+use trans::armor::Arm;
+use trans::cow::{CowCache, CowRef, Cowable, IntoCow};
+use trans::trans::{Action, Transable};
+use trans::{Eid, EntityType, Finish, Id, TxMgrRef, Txid};
+use volume::{Reader as VolReader, VolumeRef, Writer as VolWriter};
 
 /// Segment Data
-#[derive(Default, Clone, Deserialize, Serialize)]
+#[derive(Default)]
 pub struct SegData {
     id: Eid,
+    action: Option<Action>,
     data: Vec<u8>,
 }
 
@@ -27,6 +27,7 @@ impl SegData {
     fn new(id: &Eid) -> Self {
         SegData {
             id: id.clone(),
+            action: None,
             data: Vec::new(),
         }
     }
@@ -41,28 +42,41 @@ impl SegData {
     }
 
     pub fn add_to_trans(
-        seg_data_ref: &SegDataRef,
+        data_id: &Eid,
         action: Action,
         txid: Txid,
         txmgr: &TxMgrRef,
     ) -> Result<()> {
-        let id = {
-            let seg_data = seg_data_ref.read().unwrap();
-            seg_data.id().clone()
-        };
+        let mut seg_data = Self::new(data_id); // dummy segment data
+        seg_data.action = Some(action);
         let mut txmgr = txmgr.write().unwrap();
-        txmgr.add_to_trans(&id, txid, seg_data_ref.clone(), action)
+        txmgr.add_to_trans(
+            data_id,
+            txid,
+            seg_data.into_ref(),
+            action,
+            EntityType::Direct,
+            Arm::default(),
+        )
     }
 
-    pub fn add_dummy_to_trans(
-        id: &Eid,
-        action: Action,
-        txid: Txid,
-        txmgr: &TxMgrRef,
-    ) -> Result<()> {
-        let seg_data = SegData::new(id).into_ref();
-        let mut txmgr = txmgr.write().unwrap();
-        txmgr.add_to_trans(id, txid, seg_data, action)
+    fn load(id: &Eid, vol: &VolumeRef) -> Result<Self> {
+        let mut rdr = VolReader::new(id, vol)?;
+        let mut buf = Vec::new();
+        rdr.read_to_end(&mut buf)?;
+
+        Ok(SegData {
+            id: id.clone(),
+            action: None,
+            data: buf,
+        })
+    }
+
+    fn save(&self, vol: &VolumeRef) -> Result<()> {
+        let mut wtr = VolWriter::new(&self.id, vol)?;
+        wtr.write_all(&self.data[..])?;
+        wtr.finish()?;
+        Ok(())
     }
 }
 
@@ -80,54 +94,49 @@ impl Id for SegData {
 
 impl IntoRef for SegData {}
 
-impl<'de> Persistable<'de> for SegData {
-    fn load(id: &Eid, txid: Txid, vol: &VolumeRef) -> Result<Self> {
-        let mut data = Vec::new();
-        Volume::reader(id, txid, vol).read_to_end(&mut data)?;
-        Ok(SegData {
-            id: id.clone(),
-            data,
-        })
-    }
-
-    fn save(&self, txid: Txid, vol: &VolumeRef) -> Result<()> {
-        let mut writer = VolWriter::new(self.id(), txid, vol);
-        writer.write_all(&self.data)?;
-        Ok(())
-    }
-
-    fn remove(id: &Eid, txid: Txid, vol: &VolumeRef) -> Result<Option<Eid>> {
-        let mut vol = vol.write().unwrap();
-        vol.del(&Loc::new(id, txid))
-    }
-}
-
 impl Transable for SegData {
-    fn commit(&mut self, action: Action, vol: &VolumeRef) -> Result<()> {
-        let txid = Txid::current()?;
+    #[inline]
+    fn action(&self) -> Action {
+        self.action.clone().unwrap()
+    }
 
-        match action {
-            Action::New => {
-                // do nothing here, as segment data is already
-                // written to volume in direct write mode
-                Ok(())
-            }
-            Action::Update => unreachable!(),
-            Action::Delete => {
-                SegData::remove(&self.id, txid, vol)?;
-                Ok(())
-            }
+    fn commit(&mut self, _vol: &VolumeRef) -> Result<()> {
+        match self.action {
+            Some(action) => match action {
+                Action::New => {
+                    // do nothing here, as segment data is already
+                    // written to volume directly
+                    Ok(())
+                }
+                Action::Update => unreachable!(), // segment data never update
+                Action::Delete => {
+                    // do nothing here, actual deletion will be
+                    // delayed after 2 txs
+                    Ok(())
+                }
+            },
+            None => unreachable!(),
         }
     }
 
-    fn complete_commit(&mut self, _action: Action) {}
+    #[inline]
+    fn complete_commit(&mut self) {
+        self.action = None;
+    }
 
-    fn abort(&mut self, _action: Action) {}
+    #[inline]
+    fn abort(&mut self) {
+        self.action = None;
+    }
 }
 
 impl Debug for SegData {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("SegData").field("id", &self.id).finish()
+        f.debug_struct("SegData")
+            .field("id", &self.id)
+            .field("action", &self.action)
+            .field("data_len", &self.data.len())
+            .finish()
     }
 }
 
@@ -135,19 +144,13 @@ impl Debug for SegData {
 pub type SegDataRef = Arc<RwLock<SegData>>;
 
 // Segment data meter, measured by segment data bytes size
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct SegDataMeter;
 
 impl Meter<SegDataRef> for SegDataMeter {
     fn measure(&self, item: &SegDataRef) -> isize {
         let seg_data = item.read().unwrap();
         seg_data.data.len() as isize
-    }
-}
-
-impl Default for SegDataMeter {
-    fn default() -> Self {
-        SegDataMeter {}
     }
 }
 
@@ -177,8 +180,7 @@ impl DataCache {
 
         // if not in cache, load it from volume
         // then insert into cache
-        let txid = Txid::current_or_empty();
-        let ent = SegData::load(id, txid, vol)?.into_ref();
+        let ent = SegData::load(id, vol)?.into_ref();
         lru.insert(id.clone(), ent.clone());
 
         Ok(ent)
@@ -193,7 +195,6 @@ impl DataCache {
 /// Segment
 #[derive(Clone, Default, Deserialize, Serialize)]
 pub struct Segment {
-    id: Eid,
     len: usize,  // segment data length, in bytes,
     used: usize, // currently used segment data length, in bytes
     data_id: Eid,
@@ -201,9 +202,11 @@ pub struct Segment {
 }
 
 impl Segment {
+    // maximum number of chunks in a segment
+    const MAX_CHUNKS: usize = 256;
+
     fn new() -> Self {
         Segment {
-            id: Eid::new(),
             len: 0,
             used: 0,
             data_id: Eid::new(),
@@ -223,7 +226,7 @@ impl Segment {
 
     #[inline]
     pub fn is_full(&self) -> bool {
-        self.chunks.len() >= MAX_CHUNKS
+        self.chunks.len() >= Self::MAX_CHUNKS
     }
 
     #[inline]
@@ -238,8 +241,7 @@ impl Segment {
 
     // create a new chunk and append to segment
     fn append_chunk(&mut self, data_len: usize) {
-        let mut chunk = Chunk::new(self.len, data_len);
-        chunk.inc_ref().unwrap(); // initialise reference count to 1
+        let chunk = Chunk::new(self.len, data_len);
         self.chunks.push(chunk);
         self.len += data_len;
         self.used += data_len;
@@ -280,20 +282,17 @@ impl Segment {
     pub fn shrink(
         &mut self,
         seg_data_ref: &SegDataRef,
+        txid: Txid,
         txmgr: &TxMgrRef,
         vol: &VolumeRef,
     ) -> Result<Vec<usize>> {
-        let seg_data = seg_data_ref.write().unwrap();
-        let txid = Txid::current()?;
         let mut buf = Vec::new();
         let mut retired = Vec::new();
 
-        debug!(
-            "shrink segment {:#?} from {} to {}",
-            self.id, self.len, self.used
-        );
+        debug!("shrink segment from {} to {}", self.len, self.used);
 
         // re-position chunks
+        let seg_data = seg_data_ref.read().unwrap();
         for (idx, chunk) in self.chunks.iter_mut().enumerate() {
             if chunk.is_orphan() {
                 retired.push(idx);
@@ -307,12 +306,11 @@ impl Segment {
         assert_eq!(buf.len(), self.used);
 
         // write new segment data to volume
+        // and add a dummy segment data to transaction
         let new_data_id = Eid::new();
-        let mut data_wtr = VolWriter::new(&new_data_id, txid, vol);
-        data_wtr.write_all(&buf)?;
-
-        // add dummy segment data to transaction
-        SegData::add_dummy_to_trans(&new_data_id, Action::New, txid, txmgr)?;
+        let new_seg_data = SegData::new(&new_data_id);
+        new_seg_data.save(vol)?;
+        SegData::add_to_trans(&new_data_id, Action::New, txid, txmgr)?;
 
         // update segment
         self.len = self.used;
@@ -326,8 +324,8 @@ impl Debug for Segment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Segment(id: {:?}, len: {}, used: {}, data_id: {:?}, [\n",
-            self.id, self.len, self.used, self.data_id
+            "Segment(len: {}, used: {}, data_id: {:?}, [\n",
+            self.len, self.used, self.data_id
         ).unwrap();
         if self.chunks.len() > 10 {
             for val in self.chunks[..3].iter() {
@@ -374,23 +372,9 @@ impl Index<Range<usize>> for Segment {
     }
 }
 
-impl Id for Segment {
-    #[inline]
-    fn id(&self) -> &Eid {
-        &self.id
-    }
-
-    #[inline]
-    fn id_mut(&mut self) -> &mut Eid {
-        &mut self.id
-    }
-}
-
-impl CloneNew for Segment {}
+impl Cowable for Segment {}
 
 impl<'de> IntoCow<'de> for Segment {}
-
-impl<'de> Persistable<'de> for Segment {}
 
 /// Segment reference type
 pub type SegRef = CowRef<Segment>;
@@ -399,27 +383,28 @@ pub type SegRef = CowRef<Segment>;
 #[derive(Debug)]
 pub struct Writer {
     seg: SegRef,
-    data_wtr: VolWriter, // writer for segment data
+    data_wtr: Option<VolWriter>, // segment data writer
     txid: Txid,
     txmgr: TxMgrRef,
     vol: VolumeRef,
 }
 
 impl Writer {
-    pub fn new(txid: Txid, txmgr: &TxMgrRef, vol: &VolumeRef) -> Result<Self> {
-        let seg = Segment::new();
-        let data_wtr = VolWriter::new(&seg.data_id, txid, vol);
-
-        // add dummy segment data to transaction
-        SegData::add_dummy_to_trans(&seg.data_id, Action::New, txid, txmgr)?;
-
-        Ok(Writer {
-            seg: seg.into_cow(&txmgr)?,
-            data_wtr,
+    pub fn new(
+        txid: Txid,
+        store: &StoreRef,
+        txmgr: &TxMgrRef,
+        vol: &VolumeRef,
+    ) -> Result<Self> {
+        let mut wtr = Writer {
+            seg: Arc::default(),
+            data_wtr: None,
             txid,
             txmgr: txmgr.clone(),
             vol: vol.clone(),
-        })
+        };
+        wtr.renew(store)?;
+        Ok(wtr)
     }
 
     #[inline]
@@ -427,19 +412,36 @@ impl Writer {
         self.seg.clone()
     }
 
-    pub fn save_seg(&self) -> Result<()> {
-        let seg = self.seg.read().unwrap();
-        seg.save_cow(self.txid, &self.vol)
-    }
-
-    pub fn renew(&mut self) -> Result<()> {
-        // save current segment
-        self.save_seg()?;
-
-        // create new segment and segment data
+    pub fn renew(&mut self, store: &StoreRef) -> Result<()> {
+        // create a new segment
         let seg = Segment::new();
-        self.data_wtr = VolWriter::new(&seg.data_id, self.txid, &self.vol);
+
+        // add segment data to tx, this is a dummy as the actual data will
+        // directly write using volume writer instead of writing to the
+        // segment data itself
+        SegData::add_to_trans(
+            &seg.data_id,
+            Action::New,
+            self.txid,
+            &self.txmgr,
+        )?;
+
+        // if this is not the first-time renew, finish the last segment data
+        // writer first
+        match self.data_wtr.take() {
+            Some(data_wtr) => {
+                data_wtr.finish()?;
+            }
+            None => {}
+        }
+
+        // and then create a new segment data writer and add segment to tx
+        self.data_wtr = Some(VolWriter::new(&seg.data_id, &self.vol)?);
         self.seg = seg.into_cow(&self.txmgr)?;
+
+        // inject segment to segment cache in store
+        let store = store.read().unwrap();
+        store.inject_seg_to_cache(&self.seg);
 
         Ok(())
     }
@@ -451,14 +453,31 @@ impl Write for Writer {
         if seg.is_full() {
             return Ok(0);
         }
+
+        // write whole chunk directly to segment data
+        match self.data_wtr {
+            Some(ref mut data_wtr) => data_wtr.write_all(chunk)?,
+            None => unreachable!(),
+        }
+
+        // and then append chunk to segment
         map_io_err!(seg.make_mut())?.append_chunk(chunk.len());
-        self.data_wtr.write(chunk)
+
+        Ok(chunk.len())
     }
 
     fn flush(&mut self) -> IoResult<()> {
-        // As the auto-flush flag is set for underlying LZ4 data writer,
-        // nothing need to do here
+        // nothing need to do here, use finish() to finish writing
         Ok(())
+    }
+}
+
+impl Finish for Writer {
+    fn finish(self) -> Result<()> {
+        match self.data_wtr {
+            Some(data_wtr) => data_wtr.finish(),
+            None => unreachable!(),
+        }
     }
 }
 
@@ -467,9 +486,10 @@ pub type Cache = CowCache<Segment>;
 
 #[cfg(test)]
 mod tests {
-    use content::span::{Extent, Span};
-    use content::entry::{CutableList, EntryList};
     use super::*;
+    use base::init_env;
+    use content::entry::{CutableList, EntryList};
+    use content::span::{Extent, Span};
 
     fn test_split_off(
         elst: &EntryList,
@@ -517,10 +537,11 @@ mod tests {
     }
 
     fn single_span() {
+        let seg_id = Eid::new();
         let mut seg = Segment::new();
         seg.append_chunk(10);
         let mut elst = EntryList::new();
-        elst.append(seg.id(), &Span::new(0, 1, 0, 10, 0));
+        elst.append(&seg_id, &Span::new(0, 1, 0, 10, 0));
         test_split_off(&elst, &seg, &seg);
         test_split_to(&elst, &seg, &seg);
 
@@ -566,13 +587,14 @@ mod tests {
     }
 
     fn multiple_spans() {
+        let seg_id = Eid::new();
         let mut seg = Segment::new();
         seg.append_chunk(5);
         seg.append_chunk(5);
         seg.append_chunk(5);
         let mut elst = EntryList::new();
-        elst.append(seg.id(), &Span::new(0, 1, 0, 5, 0));
-        elst.append(seg.id(), &Span::new(2, 3, 0, 5, 5));
+        elst.append(&seg_id, &Span::new(0, 1, 0, 5, 0));
+        elst.append(&seg_id, &Span::new(2, 3, 0, 5, 5));
         test_split_off(&elst, &seg, &seg);
         test_split_to(&elst, &seg, &seg);
 
@@ -651,6 +673,8 @@ mod tests {
     }
 
     fn multiple_segs_spans() {
+        let seg_id = Eid::new();
+        let seg2_id = Eid::new();
         let mut seg = Segment::new();
         seg.append_chunk(5);
         seg.append_chunk(5);
@@ -661,10 +685,10 @@ mod tests {
         seg2.append_chunk(5);
         seg2.append_chunk(5);
         let mut elst = EntryList::new();
-        elst.append(seg.id(), &Span::new(0, 1, 0, 5, 0));
-        elst.append(seg.id(), &Span::new(2, 3, 0, 5, 5));
-        elst.append(seg2.id(), &Span::new(1, 2, 0, 5, 10));
-        elst.append(seg2.id(), &Span::new(3, 4, 0, 5, 15));
+        elst.append(&seg_id, &Span::new(0, 1, 0, 5, 0));
+        elst.append(&seg_id, &Span::new(2, 3, 0, 5, 5));
+        elst.append(&seg2_id, &Span::new(1, 2, 0, 5, 10));
+        elst.append(&seg2_id, &Span::new(3, 4, 0, 5, 15));
         test_split_off(&elst, &seg, &seg2);
         test_split_to(&elst, &seg, &seg2);
 
@@ -749,15 +773,16 @@ mod tests {
         assert_eq!(dst.len(), elst.len() - at);
         assert_eq!(dst.offset(), at);
         assert_eq!(dst.iter().nth(0).unwrap().iter().count(), 2);
-        assert_eq!(dst.iter().nth(0).unwrap().seg_id(), seg2.id());
+        assert_eq!(dst.iter().nth(0).unwrap().seg_id(), &seg2_id);
         assert_eq!(split.len(), 10);
         assert_eq!(split.offset(), 0);
         assert_eq!(split.iter().nth(0).unwrap().iter().count(), 2);
-        assert_eq!(split.iter().nth(0).unwrap().seg_id(), seg.id());
+        assert_eq!(split.iter().nth(0).unwrap().seg_id(), &seg_id);
     }
 
     #[test]
     fn split_entry_list() {
+        init_env();
         single_span();
         multiple_spans();
         multiple_segs_spans();

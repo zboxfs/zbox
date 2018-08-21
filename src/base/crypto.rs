@@ -1,15 +1,15 @@
-use std::result::Result as StdResult;
-use std::fmt::{self, Debug, Formatter};
 use std::cmp::min;
-use std::mem;
-use std::ptr;
-use std::slice;
+use std::fmt::{self, Debug, Formatter};
 use std::marker::PhantomData;
+use std::mem;
 use std::ops::Deref;
+use std::ptr;
+use std::result::Result as StdResult;
+use std::slice;
 
-use serde::{Deserialize, Serialize};
-use serde::ser::Serializer;
 use serde::de::{self, Deserializer};
+use serde::ser::Serializer;
+use serde::{Deserialize, Serialize};
 
 use error::{Error, Result};
 
@@ -204,10 +204,6 @@ impl<T: Sized> SafeBox<T> {
         }
     }
 
-    pub fn copy_from(&mut self, other: &Key) {
-        self.copy(other.as_slice())
-    }
-
     pub fn copy_raw_at(&mut self, buf: *const u8, buf_len: usize, pos: usize) {
         assert!(pos < self.len());
         let len = min(self.len() - pos, buf_len);
@@ -383,6 +379,13 @@ impl ToString for Hash {
 pub const HASHKEY_SIZE: usize = 32;
 pub type HashKey = SafeBox<[u8; HASHKEY_SIZE]>;
 
+impl HashKey {
+    #[inline]
+    pub fn derive(&self, subkey_id: u64) -> Self {
+        Crypto::derive_from_key(&self, subkey_id).unwrap()
+    }
+}
+
 /// Salt size
 pub const SALT_SIZE: usize = 16;
 
@@ -418,7 +421,7 @@ pub type HashState = [u8; HASH_STATE_SIZE];
 /// will require more CPU cycles to compute.
 ///
 /// See <https://download.libsodium.org/doc/password_hashing/> for more details.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Deserialize, Serialize)]
 pub enum OpsLimit {
     Interactive = 4,
     Moderate = 6,
@@ -458,7 +461,7 @@ impl From<i32> for OpsLimit {
 /// hashing.
 ///
 /// See <https://download.libsodium.org/doc/password_hashing/> for more details.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Deserialize, Serialize)]
 pub enum MemLimit {
     /// 64 MB
     Interactive = 67_108_864,
@@ -501,7 +504,7 @@ impl From<i32> for MemLimit {
 ///
 /// [`OpsLimit`]: enum.OpsLimit.html
 /// [`MemLimit`]: enum.MemLimit.html
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize)]
 pub struct Cost {
     pub ops_limit: OpsLimit,
     pub mem_limit: MemLimit,
@@ -569,22 +572,15 @@ impl PwdHash {
 pub const KEY_SIZE: usize = 32;
 pub type Key = SafeBox<[u8; KEY_SIZE]>;
 
-impl Key {
-    pub fn from_slice(slice: &[u8]) -> Self {
-        let mut ret = Self::default();
-        ret.copy(slice);
-        ret
-    }
-}
-
 impl Default for Key {
+    #[inline]
     fn default() -> Self {
         Self::new_empty()
     }
 }
 
 /// Crypto cipher primitivies.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 pub enum Cipher {
     /// XChaCha20-Poly1305
     Xchacha = 0,
@@ -1108,6 +1104,7 @@ impl Crypto {
     }
 
     /// Decrypt cipher text directly to dest buffer, zero copy
+    #[inline]
     pub fn decrypt_to(
         &self,
         dst: &mut [u8],
@@ -1126,22 +1123,6 @@ impl Default for Crypto {
             enc_fn: crypto_aead_xchacha20poly1305_ietf_encrypt,
             dec_fn: crypto_aead_xchacha20poly1305_ietf_decrypt,
         }
-    }
-}
-
-/// Crypto context
-#[derive(Debug, Default)]
-pub struct CryptoCtx {
-    pub crypto: Crypto,
-    pub key: Key,
-    pub hash_key: HashKey,
-}
-
-impl CryptoCtx {
-    pub fn set_with(&mut self, crypto: &Crypto, key: &Key) {
-        self.crypto = crypto.clone();
-        self.key = key.clone();
-        self.hash_key = Crypto::derive_from_key(key, 0).unwrap();
     }
 }
 

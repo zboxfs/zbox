@@ -1,8 +1,9 @@
 #[cfg(not(feature = "vio-test"))]
 pub mod imp {
-    pub use std::fs::{copy, create_dir, create_dir_all, read_dir, remove_dir,
-                      remove_dir_all, remove_file, rename, File, OpenOptions,
-                      ReadDir};
+    pub use std::fs::{
+        copy, create_dir, create_dir_all, metadata, read_dir, remove_dir,
+        remove_dir_all, remove_file, rename, File, OpenOptions, ReadDir,
+    };
 }
 
 #[cfg(feature = "vio-test")]
@@ -162,6 +163,11 @@ pub mod imp {
     pub fn create_dir_all<P: AsRef<Path>>(path: P) -> Result<()> {
         make_random_error()?;
         fs::create_dir_all(path)
+    }
+
+    pub fn metadata<P: AsRef<Path>>(path: P) -> Result<fs::Metadata> {
+        make_random_error()?;
+        fs::metadata(path)
     }
 
     pub fn remove_dir_all<P: AsRef<Path>>(path: P) -> Result<()> {

@@ -1,47 +1,124 @@
 use std::collections::HashMap;
-use std::cmp::min;
+use std::fmt::{self, Debug};
 
-use error::{Error, Result};
+use base::crypto::{Crypto, Key};
 use base::IntoRef;
+use error::{Error, Result};
 use trans::Eid;
-use volume::storage::Storage;
+use volume::storage::Storable;
+use volume::BLK_SIZE;
 
 /// Mem Storage
-#[derive(Debug)]
 pub struct MemStorage {
-    map: HashMap<Eid, Vec<u8>>,
+    super_blk_map: HashMap<u64, Vec<u8>>,
+    blk_map: HashMap<u64, Vec<u8>>,
+    addr_map: HashMap<Eid, Vec<u8>>,
 }
 
 impl MemStorage {
     pub fn new() -> Self {
         MemStorage {
-            map: HashMap::new(),
+            super_blk_map: HashMap::new(),
+            blk_map: HashMap::new(),
+            addr_map: HashMap::new(),
         }
     }
 }
 
-impl Storage for MemStorage {
-    fn get(&mut self, buf: &mut [u8], id: &Eid, offset: u64) -> Result<usize> {
-        let offset = offset as usize;
-        let data = self.map.get(id).ok_or(Error::NotFound)?;
-        let copy_len = min(buf.len(), data.len() - offset);
-        buf[..copy_len].copy_from_slice(&data[offset..offset + copy_len]);
-        Ok(copy_len)
+impl Storable for MemStorage {
+    #[inline]
+    fn exists(&self) -> Result<bool> {
+        Ok(false)
     }
 
-    fn put(&mut self, id: &Eid, buf: &[u8], offset: u64) -> Result<usize> {
-        let data = self.map.entry(id.clone()).or_insert(Vec::new());
-        if offset == 0 {
-            data.clear();
-        }
-        assert_eq!(offset, data.len() as u64);
-        data.extend_from_slice(buf);
-        Ok(buf.len())
-    }
-
-    fn del(&mut self, id: &Eid) -> Result<()> {
-        self.map.remove(id);
+    #[inline]
+    fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
         Ok(())
+    }
+
+    #[inline]
+    fn open(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
+        Ok(())
+    }
+
+    fn get_super_block(&self, suffix: u64) -> Result<Vec<u8>> {
+        self.super_blk_map
+            .get(&suffix)
+            .map(|b| b.clone())
+            .ok_or(Error::NotFound)
+    }
+
+    fn put_super_block(&mut self, super_blk: &[u8], suffix: u64) -> Result<()> {
+        self.super_blk_map.insert(suffix, super_blk.to_vec());
+        Ok(())
+    }
+
+    fn get_addr(&mut self, id: &Eid) -> Result<Vec<u8>> {
+        self.addr_map
+            .get(id)
+            .map(|addr| addr.clone())
+            .ok_or(Error::NotFound)
+    }
+
+    fn put_addr(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
+        self.addr_map.insert(id.clone(), addr.to_vec());
+        Ok(())
+    }
+
+    fn del_addr(&mut self, id: &Eid) -> Result<()> {
+        self.addr_map.remove(id);
+        Ok(())
+    }
+
+    fn get_blocks(
+        &mut self,
+        dst: &mut [u8],
+        start_idx: u64,
+        cnt: usize,
+    ) -> Result<()> {
+        assert_eq!(dst.len(), BLK_SIZE * cnt);
+        let mut read = 0;
+        for blk_idx in start_idx..start_idx + cnt as u64 {
+            match self.blk_map.get(&blk_idx) {
+                Some(blk) => {
+                    dst[read..read + BLK_SIZE].copy_from_slice(blk);
+                    read += BLK_SIZE;
+                }
+                None => return Err(Error::NotFound),
+            }
+        }
+        Ok(())
+    }
+
+    fn put_blocks(
+        &mut self,
+        start_idx: u64,
+        cnt: usize,
+        mut blks: &[u8],
+    ) -> Result<()> {
+        assert_eq!(blks.len(), BLK_SIZE * cnt);
+        for blk_idx in start_idx..start_idx + cnt as u64 {
+            self.blk_map.insert(blk_idx, blks[..BLK_SIZE].to_vec());
+            blks = &blks[BLK_SIZE..];
+        }
+        Ok(())
+    }
+
+    fn del_blocks(&mut self, start_idx: u64, cnt: usize) -> Result<()> {
+        for blk_idx in start_idx..start_idx + cnt as u64 {
+            self.blk_map.remove(&blk_idx);
+        }
+        Ok(())
+    }
+}
+
+impl Debug for MemStorage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("MemStorage")
+            .field("super_blk_map", &self.super_blk_map.len())
+            .field("blk_map", &self.blk_map.len())
+            .field("addr_map", &self.addr_map.len())
+            .finish()
     }
 }
 
@@ -49,40 +126,33 @@ impl IntoRef for MemStorage {}
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    use std::time::Instant;
 
-    use base::init_env;
-    use base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE};
-    use trans::Eid;
     use super::*;
-
-    fn speed_str(duration: &Duration, data_len: usize) -> String {
-        let secs = duration.as_secs() as f32
-            + duration.subsec_nanos() as f32 / 1_000_000_000.0;
-        let speed = data_len as f32 / (1024.0 * 1024.0) / secs;
-        format!("{} MB/s", speed)
-    }
+    use base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE};
+    use base::init_env;
+    use base::utils::speed_str;
 
     #[test]
-    fn mem_storage_perf() {
+    fn perf_test() {
         init_env();
 
-        let mut storage = MemStorage::new();
-
-        let id = Eid::new();
-        const DATA_LEN: usize = 10 * 1024 * 1024;
+        const DATA_LEN: usize = 16 * 1024 * 1024;
+        const BLK_CNT: usize = DATA_LEN / BLK_SIZE;
         let mut buf = vec![0u8; DATA_LEN];
         let seed = RandomSeed::from(&[0u8; RANDOM_SEED_SIZE]);
         Crypto::random_buf_deterministic(&mut buf, &seed);
 
+        let mut ms = MemStorage::new();
+
         // write
         let now = Instant::now();
-        storage.put_all(&id, &buf).unwrap();
+        ms.put_blocks(0, BLK_CNT, &buf).unwrap();
         let write_time = now.elapsed();
 
         // read
         let now = Instant::now();
-        storage.get_all(&mut buf, &id).unwrap();
+        ms.get_blocks(&mut buf, 0, BLK_CNT).unwrap();
         let read_time = now.elapsed();
 
         println!(

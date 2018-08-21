@@ -1,17 +1,17 @@
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_int};
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::mem::forget;
-use std::slice::{from_raw_parts, from_raw_parts_mut};
 use std::io::{Read, Seek, SeekFrom, Write};
+use std::mem::forget;
+use std::os::raw::{c_char, c_int};
+use std::slice::{from_raw_parts, from_raw_parts_mut};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use base::init_env;
 use base::crypto::{Cipher, MemLimit, OpsLimit};
-use trans::Eid;
-use repo::{Repo, RepoOpener};
-use fs::{Metadata, Version};
-use file::{File, VersionReader};
+use base::init_env;
 use error::Error;
+use file::{File, VersionReader};
+use fs::{Metadata, Version};
+use repo::{Repo, RepoOpener};
+use trans::Eid;
 
 #[allow(non_camel_case_types)]
 type boolean_t = u8;

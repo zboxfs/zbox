@@ -5,11 +5,11 @@ extern crate zbox;
 
 mod common;
 
-use std::path::{Path, PathBuf};
-use std::thread;
-use std::sync::{Arc, RwLock};
 use std::fs;
 use std::io::{Cursor, Read, Write};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
+use std::thread;
 
 use bytes::{Buf, BufMut};
 

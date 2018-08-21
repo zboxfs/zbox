@@ -4,10 +4,10 @@ extern crate zbox;
 
 mod common;
 
+use rand::{Rng, XorShiftRng};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::{Arc, RwLock};
 use std::thread;
-use rand::{Rng, XorShiftRng};
 use zbox::{Error, File, OpenOptions};
 
 #[test]
@@ -51,7 +51,6 @@ fn file_read_write() {
             .open(&mut repo, "/file")
             .unwrap();
         f.write_once(&buf[..]).unwrap();
-
         verify_content(&mut f, &buf);
 
         // use repo file creation shortcut

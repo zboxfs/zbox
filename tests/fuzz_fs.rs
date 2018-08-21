@@ -5,12 +5,12 @@ extern crate zbox;
 
 mod common;
 
+use std::fmt::{self, Debug};
+use std::fs;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::fmt::{self, Debug};
 use std::sync::{Arc, RwLock};
 use std::thread;
-use std::fs;
 
 use bytes::{Buf, BufMut, LittleEndian};
 
@@ -382,7 +382,7 @@ fn handle_rename(
 }
 
 fn test_round(env: &mut fuzz::TestEnv, step: &Step, nodes: &mut Vec<Node>) {
-    //println!("step: {:?}", step);
+    //println!("=== step: {:?}", step);
 
     let node = nodes[step.node_idx].clone();
 
@@ -758,6 +758,6 @@ fn fuzz_fs_mt(rounds: usize) {
 #[test]
 fn fuzz_fs() {
     fuzz_fs_st(30);
-    //fuzz_fs_reproduce("fs_1524202959");
+    //fuzz_fs_reproduce("fs_1534713939");
     fuzz_fs_mt(30);
 }

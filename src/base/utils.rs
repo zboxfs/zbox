@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 /// Calculate usize align offset, size must be 2^n integer
 #[inline]
 pub fn align_offset(x: usize, size: usize) -> usize {
@@ -35,6 +37,7 @@ pub fn align_ceil(x: usize, size: usize) -> usize {
 }
 
 /// Align u64 integer to ceil, size must be 2^n integer
+/// Note: when x is on size boundary, it will align to next ceil
 #[allow(dead_code)]
 #[inline]
 pub fn align_ceil_u64(x: u64, size: u64) -> u64 {
@@ -45,8 +48,15 @@ pub fn align_ceil_u64(x: u64, size: u64) -> u64 {
 }
 
 /// Align usize to ceil and convert to chunk index, size must be 2^n integer
-#[allow(dead_code)]
 #[inline]
 pub fn align_ceil_chunk(x: usize, size: usize) -> usize {
     align_ceil(x, size) / size
+}
+
+/// Output human friendly speed string
+#[allow(dead_code)]
+pub fn speed_str(duration: &Duration, data_len: usize) -> String {
+    let secs = duration.as_secs() as f32
+        + duration.subsec_nanos() as f32 / 1_000_000_000.0;
+    format!("{} MB/s", data_len as f32 / (1024.0 * 1024.0) / secs)
 }

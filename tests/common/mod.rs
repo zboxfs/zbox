@@ -3,6 +3,7 @@ extern crate tempdir;
 pub mod fuzz;
 
 use self::tempdir::TempDir;
+use std::fs;
 use zbox::{init_env, Repo, RepoOpener};
 
 #[allow(dead_code)]
@@ -17,6 +18,10 @@ impl TestEnv {
         init_env();
         let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
         let dir = tmpdir.path().join("repo");
+        //let dir = std::path::PathBuf::from("./tt");
+        if dir.exists() {
+            fs::remove_dir_all(&dir).unwrap();
+        }
         let path = "file://".to_string() + dir.to_str().unwrap();
         let repo = RepoOpener::new()
             .create_new(true)

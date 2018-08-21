@@ -1,108 +1,56 @@
-use std::fmt::{self, Debug};
-use std::sync::{Arc, RwLock, Weak};
 use std::clone::Clone;
 use std::default::Default;
+use std::fmt::{self, Debug};
 use std::ops::Deref;
+use std::sync::{Arc, RwLock, Weak};
 
-use error::{Error, Result};
-use base::IntoRef;
-use base::lru::{CountMeter, Lru, Pinnable};
-use volume::{Persistable, VolumeRef};
-use super::{CloneNew, Eid, Id, TxMgrRef, Txid};
+use serde::{Deserialize, Serialize};
+
+use super::armor::{Arm, ArmAccess, Armor, Seq, VolumeArmor};
 use super::trans::{Action, Transable};
+use super::{Eid, EntityType, Id, TxMgrRef, Txid};
+use base::lru::{CountMeter, Lru, Pinnable};
+use base::IntoRef;
+use error::{Error, Result};
+use volume::VolumeRef;
 
-/// Cow switch
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
-enum Switch {
-    Left,
-    Right,
-}
-
-impl Switch {
-    #[inline]
-    fn other(&self) -> Switch {
-        match *self {
-            Switch::Left => Switch::Right,
-            Switch::Right => Switch::Left,
-        }
-    }
-
-    #[inline]
-    fn toggle(&mut self) {
-        *self = self.other();
-    }
-}
-
-impl Default for Switch {
-    #[inline]
-    fn default() -> Self {
-        Switch::Left
-    }
-}
-
-/// Cow slot
-#[derive(Debug, Deserialize, Serialize)]
-struct Slot<T: Id> {
-    id: Eid,
-    txid: Option<Txid>,
-
-    #[serde(skip_serializing, skip_deserializing, default)] inner: Option<T>,
-}
-
-impl<T: Id> Slot<T> {
-    fn new(inner: T) -> Self {
-        Slot {
-            id: inner.id().clone(),
-            txid: None,
-            inner: Some(inner),
-        }
-    }
-
-    fn inner_ref(&self) -> &T {
-        match self.inner {
-            Some(ref inner) => inner,
-            None => panic!("Cow slot not loaded"),
-        }
-    }
-
-    fn inner_ref_mut(&mut self) -> &mut T {
-        match self.inner {
-            Some(ref mut inner) => inner,
-            None => panic!("Cow slot not loaded"),
-        }
-    }
-}
+/// Trait for entity can be wrapped in cow
+pub trait Cowable: Debug + Default + Clone + Send + Sync {}
 
 /// Copy-on-write wrapper
 #[derive(Default, Deserialize, Serialize)]
-pub struct Cow<T>
-where
-    T: Debug + Default + Send + Sync + CloneNew,
-{
+pub struct Cow<T: Cowable> {
     id: Eid,
-    switch: Switch,
-    left: Option<Slot<T>>,
-    right: Option<Slot<T>>,
+    seq: u64,
+    arm: Arm,
+    left: Option<T>,
+    right: Option<T>,
 
-    #[serde(skip_serializing, skip_deserializing, default)] txid: Option<Txid>,
+    #[serde(skip_serializing, skip_deserializing, default)]
+    txid: Option<Txid>,
+    #[serde(skip_serializing, skip_deserializing, default)]
+    action: Option<Action>,
 
     #[serde(skip_serializing, skip_deserializing, default)]
     self_ref: CowWeakRef<T>,
 
-    #[serde(skip_serializing, skip_deserializing, default)] txmgr: TxMgrRef,
+    #[serde(skip_serializing, skip_deserializing, default)]
+    txmgr: TxMgrRef,
 }
 
-impl<'d, T> Cow<T>
+impl<'de, T> Cow<T>
 where
-    T: Debug + Default + Send + Sync + CloneNew + Persistable<'d> + 'static,
+    T: Cowable + Deserialize<'de> + Serialize + 'static,
 {
-    fn new(inner: T, txmgr: &TxMgrRef) -> Self {
+    fn new(id: &Eid, inner: T, txmgr: &TxMgrRef) -> Self {
         Cow {
-            id: Eid::new(),
-            switch: Switch::default(),
-            left: Some(Slot::new(inner)),
+            id: id.clone(),
+            seq: 0,
+            arm: Arm::default(),
+            left: Some(inner),
             right: None,
             txid: None,
+            action: None,
             self_ref: Weak::default(),
             txmgr: txmgr.clone(),
         }
@@ -116,192 +64,201 @@ where
             if txid != curr_txid {
                 return Err(Error::InUse);
             }
+
+            // deal with action ordering
+            if let Some(curr_action) = self.action {
+                match curr_action {
+                    Action::New => match action {
+                        // if the action is new first and then update,
+                        // we still treat it as new
+                        Action::New | Action::Update => return Ok(()),
+                        _ => {}
+                    },
+                    Action::Update => match action {
+                        Action::New => unreachable!(), // wrong action order
+                        Action::Update => return Ok(()),
+                        _ => {}
+                    },
+                    Action::Delete => match action {
+                        Action::Delete => return Ok(()),
+                        _ => unreachable!(), // wrong action order
+                    },
+                }
+            }
         }
 
-        // add self to transaction
+        // add cow to transaction
         {
             let mut txmgr = self.txmgr.write().unwrap();
             let self_ref = self.self_ref.upgrade().unwrap();
-            txmgr.add_to_trans(&self.id, curr_txid, self_ref, action)?;
+            txmgr.add_to_trans(
+                &self.id,
+                curr_txid,
+                self_ref,
+                action,
+                EntityType::Cow,
+                self.arm.other(),
+            )?;
         }
 
-        Ok(match self.txid {
-            Some(txid) => assert_eq!(txid, curr_txid),
-            None => {
-                self.txid = Some(curr_txid);
-                if action == Action::New {
-                    self.slot_mut().txid = self.txid;
-                }
-            }
-        })
+        // set txid and action for this cow
+        self.txid = Some(curr_txid);
+        self.action = Some(action);
+
+        Ok(())
     }
 
     /// Get mutable reference for inner object by cloning it
     pub fn make_mut(&mut self) -> Result<&mut T> {
+        // copy inner if it is not copied yet
+        if !self.has_other() {
+            let new_inner = T::clone(self.inner());
+            *self.other_mut() = Some(new_inner);
+        }
+
         self.add_to_trans(Action::Update)?;
 
-        if self.slot().txid == self.txid {
-            let switch = self.switch;
-            return Ok(self.index_mut_by(switch));
-        }
-
-        if !self.has_other() {
-            let new_val = T::clone_new(self);
-            let mut slot = Slot::new(new_val);
-            slot.txid = self.txid;
-            *self.other_mut() = Some(slot);
-        }
-
-        assert_eq!(self.other_slot().txid, self.txid);
-        let other = self.switch.other();
-        Ok(self.index_mut_by(other))
+        Ok(self.other_inner_mut())
     }
 
-    /// Get mutable reference of inner object
-    /// without adding to transaction
+    /// Get mutable reference of inner object without adding the cow to
+    /// transaction
     pub fn make_mut_naive(&mut self) -> &mut T {
         let curr_switch = self.switch;
         self.index_mut_by(curr_switch)
     }
 
-    /// Mark cow as to be deleted
+    /// Mark cow as deleted
     pub fn make_del(&mut self) -> Result<()> {
         self.add_to_trans(Action::Delete)
     }
 
-    // mutable index by switch
-    fn index_mut_by(&mut self, switch: Switch) -> &mut T {
-        match switch {
-            Switch::Left => match self.left {
-                Some(ref mut slot) => return slot.inner_ref_mut(),
-                None => {}
-            },
-            Switch::Right => match self.right {
-                Some(ref mut slot) => return slot.inner_ref_mut(),
-                None => {}
-            },
-        }
-        panic!("Cow slot is empty");
-    }
-
+    #[inline]
     fn has_other(&self) -> bool {
-        match self.switch {
-            Switch::Left => self.right.is_some(),
-            Switch::Right => self.left.is_some(),
+        match self.arm {
+            Arm::Left => self.right.is_some(),
+            Arm::Right => self.left.is_some(),
         }
-    }
-
-    fn other_mut(&mut self) -> &mut Option<Slot<T>> {
-        match self.switch {
-            Switch::Left => &mut self.right,
-            Switch::Right => &mut self.left,
-        }
-    }
-
-    fn slot_by(&self, switch: Switch) -> &Slot<T> {
-        match switch {
-            Switch::Left => match self.left {
-                Some(ref slot) => return slot,
-                None => {}
-            },
-            Switch::Right => match self.right {
-                Some(ref slot) => return slot,
-                None => {}
-            },
-        }
-        panic!("Cow slot is empty");
     }
 
     #[inline]
-    fn slot(&self) -> &Slot<T> {
-        self.slot_by(self.switch)
+    fn curr_mut(&mut self) -> &mut Option<T> {
+        match self.arm {
+            Arm::Left => &mut self.left,
+            Arm::Right => &mut self.right,
+        }
     }
 
     #[inline]
-    fn other_slot(&self) -> &Slot<T> {
-        self.slot_by(self.switch.other())
+    fn other_mut(&mut self) -> &mut Option<T> {
+        match self.arm {
+            Arm::Left => &mut self.right,
+            Arm::Right => &mut self.left,
+        }
     }
 
-    fn slot_mut_by(&mut self, switch: Switch) -> &mut Slot<T> {
-        match switch {
-            Switch::Left => match self.left {
-                Some(ref mut slot) => return slot,
+    fn inner_by(&self, arm: Arm) -> &T {
+        match arm {
+            Arm::Left => match self.left {
+                Some(ref inner) => return inner,
                 None => {}
             },
-            Switch::Right => match self.right {
-                Some(ref mut slot) => return slot,
+            Arm::Right => match self.right {
+                Some(ref inner) => return inner,
                 None => {}
             },
         }
-        panic!("Cow slot is empty");
+        panic!("Cow is empty");
     }
 
-    fn slot_mut(&mut self) -> &mut Slot<T> {
-        let switch = self.switch;
-        self.slot_mut_by(switch)
+    fn inner_mut_by(&mut self, arm: Arm) -> &mut T {
+        match arm {
+            Arm::Left => match self.left {
+                Some(ref mut inner) => return inner,
+                None => {}
+            },
+            Arm::Right => match self.right {
+                Some(ref mut inner) => return inner,
+                None => {}
+            },
+        }
+        panic!("Cow is empty");
     }
 
-    pub fn load_cow(
+    #[inline]
+    fn inner(&self) -> &T {
+        self.inner_by(self.arm)
+    }
+
+    #[inline]
+    fn inner_mut(&mut self) -> &mut T {
+        let arm = self.arm;
+        self.inner_mut_by(arm)
+    }
+
+    #[inline]
+    fn other_inner(&self) -> &T {
+        self.inner_by(self.arm.other())
+    }
+
+    #[inline]
+    fn other_inner_mut(&mut self) -> &mut T {
+        let arm = self.arm.other();
+        self.inner_mut_by(arm)
+    }
+
+    // load cow from volume
+    pub fn load(
         id: &Eid,
         txmgr: &TxMgrRef,
         vol: &VolumeRef,
     ) -> Result<CowRef<T>> {
-        let txid = Txid::current_or_empty();
-
-        // load cow
-        let mut cow = <Cow<T> as Persistable>::load(id, txid, vol)?;
-        assert!(!cow.has_other());
-        {
-            // load inner value
-            let slot = cow.slot_mut();
-            let inner = T::load(&slot.id, txid, vol)?;
-            slot.inner = Some(inner);
-        }
-
+        let vol_armor = VolumeArmor::<Cow<T>>::new(vol);
+        let cow = vol_armor.load_item(id)?;
         let cow_ref = cow.into_ref();
         {
             let mut c = cow_ref.write().unwrap();
             c.self_ref = Arc::downgrade(&cow_ref);
             c.txmgr = txmgr.clone();
         }
-
         Ok(cow_ref)
     }
 
-    pub fn save_cow(&self, txid: Txid, vol: &VolumeRef) -> Result<()> {
-        // save inner value
-        T::save(self, txid, vol)?;
-
-        // save cow
-        <Cow<T> as Persistable>::save(self, txid, vol)
+    // save cow to volume
+    #[inline]
+    pub fn save(&mut self, vol: &VolumeRef) -> Result<()> {
+        let vol_armor = VolumeArmor::<Cow<T>>::new(vol);
+        vol_armor.save_item(self)
     }
 }
 
-impl<'d, T> Deref for Cow<T>
+impl<'de, T> Deref for Cow<T>
 where
-    T: Debug + Default + Send + Sync + CloneNew + Persistable<'d> + 'static,
+    T: Cowable + Deserialize<'de> + Serialize + 'static,
 {
     type Target = T;
 
     fn deref(&self) -> &T {
         let curr_txid = Txid::current_or_empty();
-        if self.slot().txid == Some(curr_txid) || !self.has_other() {
-            self.slot().inner_ref()
+        if self.txid.is_none() || self.txid != Some(curr_txid) {
+            self.inner()
         } else {
-            self.other_slot().inner_ref()
+            self.other_inner()
         }
     }
 }
 
 impl<T> Debug for Cow<T>
 where
-    T: Debug + Default + Send + Sync + CloneNew,
+    T: Cowable,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Cow")
             .field("id", &self.id)
+            .field("seq", &self.seq)
+            .field("arm", &self.arm)
             .field("txid", &self.txid)
-            .field("switch", &self.switch)
+            .field("action", &self.action)
             .field("left", &self.left)
             .field("right", &self.right)
             .finish()
@@ -310,7 +267,7 @@ where
 
 impl<T> Id for Cow<T>
 where
-    T: Debug + Default + Send + Sync + CloneNew,
+    T: Cowable,
 {
     #[inline]
     fn id(&self) -> &Eid {
@@ -323,79 +280,101 @@ where
     }
 }
 
-impl<T> IntoRef for Cow<T>
+impl<T> Seq for Cow<T>
 where
-    T: Debug + Default + Send + Sync + CloneNew,
+    T: Cowable,
 {
+    #[inline]
+    fn seq(&self) -> u64 {
+        self.seq
+    }
+
+    #[inline]
+    fn inc_seq(&mut self) {
+        self.seq += 1
+    }
 }
 
-impl<'d, T> Persistable<'d> for Cow<T>
+impl<'de, T> ArmAccess<'de> for Cow<T>
 where
-    T: Debug + Default + Send + Sync + CloneNew + Persistable<'d> + 'static,
+    T: Cowable + Deserialize<'de> + Serialize,
 {
+    #[inline]
+    fn arm(&self) -> Arm {
+        self.arm
+    }
+
+    #[inline]
+    fn arm_mut(&mut self) -> &mut Arm {
+        &mut self.arm
+    }
 }
 
-impl<'d, T> Transable for Cow<T>
+impl<T> IntoRef for Cow<T> where T: Cowable {}
+
+impl<'de, T> Transable for Cow<T>
 where
-    T: Debug + Default + Send + Sync + CloneNew + Persistable<'d> + 'static,
+    T: Cowable + Deserialize<'de> + Serialize + 'static,
 {
-    fn commit(&mut self, action: Action, vol: &VolumeRef) -> Result<()> {
-        let txid = self.txid.unwrap();
+    #[inline]
+    fn action(&self) -> Action {
+        self.action.clone().unwrap()
+    }
 
-        match action {
-            Action::New => self.save_cow(txid, vol),
-            Action::Update => {
-                // toggle switch and then save the new inner value
-                self.switch.toggle();
-                T::save(self, txid, vol)?;
+    fn commit(&mut self, vol: &VolumeRef) -> Result<()> {
+        match self.action {
+            Some(action) => match action {
+                Action::New | Action::Update => {
+                    // switch cow temporarily
+                    self.arm.toggle();
+                    let old = self.other_mut().take();
 
-                // remove old inner value
-                T::remove(&self.other_slot().id, txid, vol)?;
+                    // save cow
+                    let result = self.save(vol);
 
-                // save cow itself
-                let other_bk = self.other_mut().take();
-                let result = <Cow<T> as Persistable>::save(self, txid, vol);
-                *self.other_mut() = other_bk;
-                result
-            }
-            Action::Delete => {
-                if self.has_other() {
-                    T::remove(&self.other_slot().id, txid, vol)?;
+                    // revert cow back
+                    if result.is_err() {
+                        // if saving cow failed, arm will not be switched,
+                        // so we need to switch it here
+                        self.arm.toggle();
+                    }
+                    *self.curr_mut() = old;
+
+                    result
                 }
-                T::remove(&self.slot().id, txid, vol)?;
-                Cow::<T>::remove(&self.id, txid, vol)?;
-                Ok(())
-            }
+                Action::Delete => {
+                    // do nothing here, actual deletion will be delayed after 2 txs
+                    Ok(())
+                }
+            },
+            None => unreachable!(),
         }
     }
 
-    fn complete_commit(&mut self, action: Action) {
-        match action {
-            Action::New | Action::Delete => {}
-            Action::Update => {
+    fn complete_commit(&mut self) {
+        match self.action {
+            Some(_) => {
+                self.arm.toggle();
                 self.other_mut().take();
             }
+            None => unreachable!(),
         }
         self.txid = None;
+        self.action = None;
     }
 
-    fn abort(&mut self, action: Action) {
-        match action {
-            Action::New => {}
-            Action::Update => {
-                if self.slot().txid == self.txid {
-                    // toggle switch back to old inner value
-                    self.switch.toggle();
-                }
-                self.other_mut().take();
-            }
-            Action::Delete => {
-                if self.has_other() {
+    fn abort(&mut self) {
+        match self.action {
+            Some(action) => match action {
+                Action::Update => {
                     self.other_mut().take();
                 }
-            }
+                _ => {}
+            },
+            None => unreachable!(),
         }
         self.txid = None;
+        self.action = None;
     }
 }
 
@@ -408,16 +387,27 @@ pub type CowWeakRef<T> = Weak<RwLock<Cow<T>>>;
 /// Wrap value into Cow reference
 pub trait IntoCow<'de>
 where
-    Self: Debug + Default + Send + Sync + CloneNew + Persistable<'de> + 'static,
+    Self: Cowable + Deserialize<'de> + Serialize + 'static,
 {
-    fn into_cow(self, txmgr: &TxMgrRef) -> Result<CowRef<Self>> {
-        let cow_ref = Cow::new(self, txmgr).into_ref();
+    fn into_cow_with_id(
+        self,
+        id: &Eid,
+        txmgr: &TxMgrRef,
+    ) -> Result<CowRef<Self>> {
+        let cow_ref = Cow::new(id, self, txmgr).into_ref();
         {
             let mut cow = cow_ref.write().unwrap();
             cow.self_ref = Arc::downgrade(&cow_ref);
+            cow.arm.toggle();
             cow.add_to_trans(Action::New)?;
         }
         Ok(cow_ref)
+    }
+
+    #[inline]
+    fn into_cow(self, txmgr: &TxMgrRef) -> Result<CowRef<Self>> {
+        let id = Eid::new();
+        Self::into_cow_with_id(self, &id, txmgr)
     }
 }
 
@@ -427,9 +417,10 @@ pub struct CowPinChecker {}
 
 impl<T> Pinnable<CowRef<T>> for CowPinChecker
 where
-    T: Debug + Default + Send + Sync + CloneNew,
+    T: Cowable,
 {
     fn is_pinned(&self, item: &CowRef<T>) -> bool {
+        // cow in transaction must be kept in cache,
         // if cannot read the inner cow entity, we assume it is pinned
         match item.try_read() {
             Ok(cow) => cow.txid.is_some(),
@@ -440,14 +431,14 @@ where
 
 /// Cow LRU cache
 #[derive(Debug, Clone, Default)]
-pub struct CowCache<T: Debug + Default + Send + Sync + CloneNew> {
+pub struct CowCache<T: Cowable> {
     lru: Arc<RwLock<Lru<Eid, CowRef<T>, CountMeter<CowRef<T>>, CowPinChecker>>>,
     txmgr: TxMgrRef,
 }
 
-impl<'d, T> CowCache<T>
+impl<'de, T> CowCache<T>
 where
-    T: Debug + Default + Send + Sync + CloneNew + Persistable<'d> + 'static,
+    T: Cowable + Deserialize<'de> + Serialize + 'static,
 {
     pub fn new(capacity: usize, txmgr: &TxMgrRef) -> Self {
         CowCache {
@@ -466,9 +457,18 @@ where
 
         // if not in cache, load it from volume
         // then insert into cache
-        let cow_ref = Cow::<T>::load_cow(id, &self.txmgr, vol)?;
+        let cow_ref = Cow::<T>::load(id, &self.txmgr, vol)?;
         lru.insert(id.clone(), cow_ref.clone());
         Ok(cow_ref)
+    }
+
+    pub fn insert(&self, cow: &CowRef<T>) {
+        let mut lru = self.lru.write().unwrap();
+        let id = {
+            let cow = cow.read().unwrap();
+            cow.id.clone()
+        };
+        lru.insert(id, cow.clone());
     }
 
     pub fn remove(&self, id: &Eid) -> Option<CowRef<T>> {
@@ -482,16 +482,17 @@ mod tests {
     use super::*;
 
     use std::{thread, time};
+
     use base::init_env;
-    use base::crypto::{Cipher, Cost};
-    use trans::{CloneNew, Eid, TxMgr, Txid};
+    use fs::Config;
+    use trans::{Eid, TxMgr};
     use volume::Volume;
 
     fn setup_vol() -> VolumeRef {
         init_env();
-        let uri = "mem://test".to_string();
+        let uri = "mem://foo".to_string();
         let mut vol = Volume::new(&uri).unwrap();
-        vol.init(Cost::default(), Cipher::Xchacha).unwrap();
+        vol.init("pwd", &Config::default(), &Vec::new()).unwrap();
         vol.into_ref()
     }
 
@@ -508,75 +509,59 @@ mod tests {
                 val,
             }
         }
-
-        fn val(&self) -> u8 {
-            self.val
-        }
     }
 
-    impl Id for Obj {
-        fn id(&self) -> &Eid {
-            &self.id
-        }
-
-        fn id_mut(&mut self) -> &mut Eid {
-            &mut self.id
-        }
-    }
-
-    impl CloneNew for Obj {}
-    impl<'de> Persistable<'de> for Obj {}
+    impl Cowable for Obj {}
 
     #[test]
     fn inner_obj_ref() {
         let vol = setup_vol();
-        let txid = Txid::from(0);
-        let txmgr = TxMgr::new(txid, &vol).into_ref();
+        let txmgr = TxMgr::new(&Eid::new(), &vol).into_ref();
         let val = 42;
         let obj = Obj::new(val);
         let obj2 = Obj::new(val);
-        let children_cnt = 4;
-        let cow_ref = Cow::new(obj, &txmgr).into_ref();
+        let threads_cnt = 4;
+        let cow_ref = Cow::new(&Eid::new(), obj, &txmgr).into_ref();
         {
             let mut c = cow_ref.write().unwrap();
             c.self_ref = Arc::downgrade(&cow_ref);
-            c.slot_mut().txid = Some(txid);
         }
-        let cow_ref2 = Cow::new(obj2, &txmgr).into_ref();
+        let cow_ref2 = Cow::new(&Eid::new(), obj2, &txmgr).into_ref();
 
-        let mut children = vec![];
-        for i in 0..children_cnt {
+        let mut threads = vec![];
+        for i in 0..threads_cnt {
             let txmgr = txmgr.clone();
             let cow_ref = cow_ref.clone();
             let cow_ref2 = cow_ref2.clone();
-            children.push(thread::spawn(move || {
+            threads.push(thread::spawn(move || {
                 if i == 0 {
                     // writer thread to update value
-                    TxMgr::begin_trans(&txmgr).unwrap();
+                    let _txhandle = TxMgr::begin_trans(&txmgr).unwrap();
                     let mut cow = cow_ref.write().unwrap();
-                    assert_eq!(cow.val(), val);
+                    assert_eq!(cow.val, val);
                     assert!(!cow.has_other());
                     {
                         let c = cow.make_mut().unwrap();
                         c.val += 1;
                     }
                     assert!(cow.has_other());
-                    assert_eq!(cow.val(), val + 1);
+                    assert_eq!(cow.val, val + 1);
                 } else {
                     thread::sleep(time::Duration::from_millis(100));
 
                     // reader thread should still read old value
                     let cow = cow_ref.read().unwrap();
-                    assert_eq!(cow.val(), val);
+                    assert_eq!(cow.val, val);
 
                     // read unchanged value
                     let cow2 = cow_ref2.read().unwrap();
-                    assert_eq!(cow2.val(), val);
+                    assert_eq!(cow2.val, val);
                 }
             }));
         }
-        for child in children {
-            let _ = child.join();
+
+        for t in threads {
+            let _ = t.join();
         }
     }
 }

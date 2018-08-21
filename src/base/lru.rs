@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
+use std::fmt::{self, Debug};
 use std::hash::Hash;
 use std::marker::PhantomData;
-use std::fmt::{self, Debug};
 
 use linked_hash_map::LinkedHashMap;
 
@@ -76,15 +76,6 @@ where
     }
 
     #[inline]
-    pub fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut V>
-    where
-        K: Borrow<Q>,
-        Q: Eq + Hash,
-    {
-        self.map.get_mut(k)
-    }
-
-    #[inline]
     pub fn get_refresh<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut V>
     where
         K: Borrow<Q>,
@@ -107,7 +98,8 @@ where
     fn remove_lru(&mut self) -> Option<V> {
         let capacity = self.capacity;
         let pin_ckr = self.pin_ckr.clone();
-        let ret = self.map
+        let ret = self
+            .map
             .entries()
             .enumerate()
             .find(|&(_, ref ent)| !pin_ckr.is_pinned(ent.get()))
