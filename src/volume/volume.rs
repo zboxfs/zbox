@@ -256,7 +256,7 @@ impl Write for Writer {
 }
 
 impl Finish for Writer {
-    fn finish(self) -> Result<()> {
+    fn finish(self) -> Result<usize> {
         match self.inner {
             InnerWriter::Compress(inner) => {
                 let (wtr, result) = inner.finish();

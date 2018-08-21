@@ -163,7 +163,8 @@ fn test_round(
             let path = tgt_parent.join(name);
             if node == path {
                 repo.rename(&node, &path).unwrap();
-            } else if node == root || path.starts_with(&node)
+            } else if node == root
+                || path.starts_with(&node)
                 || ctl_grp.iter().filter(|p| p.starts_with(&path)).count() > 1
             {
                 assert!(repo.rename(&node, &path).is_err());

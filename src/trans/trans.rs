@@ -2,12 +2,11 @@ use std::collections::HashMap;
 use std::fmt::{self, Debug};
 use std::sync::{Arc, RwLock};
 
-use super::armor::{Arm, Armor, VolumeArmor};
 use super::wal::Wal;
 use super::{Eid, EntityType, Id, Txid};
 use base::IntoRef;
 use error::{Error, Result};
-use volume::VolumeRef;
+use volume::{Arm, Armor, VolumeArmor, VolumeRef};
 
 /// Cohort action in transaction
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize, Serialize)]

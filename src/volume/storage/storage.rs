@@ -434,7 +434,7 @@ impl Writer {
             &self.frame[..aligned_len],
         )?;
 
-        // append to address and reset src buffer
+        // append to address and reset stage buffer
         self.addr.append(begin_blk_idx, blk_cnt, enc_len);
         self.stg_len = 0;
 
@@ -462,7 +462,7 @@ impl Write for Writer {
 }
 
 impl Finish for Writer {
-    fn finish(mut self) -> Result<()> {
+    fn finish(mut self) -> Result<usize> {
         // flush frame to depot
         self.write_frame()?;
 
@@ -478,7 +478,9 @@ impl Finish for Writer {
         }
 
         // write new address
-        storage.put_addr(&self.id, &self.addr)
+        storage.put_addr(&self.id, &self.addr)?;
+
+        Ok(self.addr.len)
     }
 }
 

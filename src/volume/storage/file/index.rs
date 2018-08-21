@@ -8,8 +8,8 @@ use super::file_armor::FileArmor;
 use base::crypto::{Crypto, HashKey, Key};
 use base::lru::{CountMeter, Lru, PinChecker};
 use error::{Error, Result};
-use trans::armor::{Arm, ArmAccess, Armor, Seq};
 use trans::{Eid, Id};
+use volume::{Arm, ArmAccess, Armor, Seq};
 
 // entity index stub
 #[derive(Clone, Deserialize, Serialize)]

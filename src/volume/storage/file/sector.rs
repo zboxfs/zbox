@@ -13,9 +13,8 @@ use base::crypto::{Crypto, HashKey, Key};
 use base::lru::{CountMeter, Lru, PinChecker};
 use base::utils::{align_floor_u64, align_offset};
 use error::{Error, Result};
-use trans::armor::{Arm, ArmAccess, Armor, Seq};
 use trans::{Eid, Id};
-use volume::BLK_SIZE;
+use volume::{Arm, ArmAccess, Armor, Seq, BLK_SIZE};
 
 // how many blocks in a sector, must be 2^n and less than u16::MAX
 pub const SECTOR_BLK_CNT: usize = 4 * 1024;

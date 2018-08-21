@@ -3,11 +3,13 @@
 
 mod address;
 mod allocator;
+mod armor;
 mod storage;
 mod super_block;
 mod volume;
 
 pub use self::allocator::{Allocator, AllocatorRef};
+pub use self::armor::{Arm, ArmAccess, Armor, Seq, VolumeArmor};
 pub use self::storage::StorageRef;
 pub use self::volume::{Info, Reader, Volume, VolumeRef, Writer};
 

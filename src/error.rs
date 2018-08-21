@@ -263,7 +263,6 @@ impl Into<i32> for Error {
             Error::Decode(_) => -2010,
             Error::Var(_) => -2020,
             Error::Io(_) => -2030,
-
         }
     }
 }

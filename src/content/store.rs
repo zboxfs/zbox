@@ -98,7 +98,7 @@ impl Store {
         let store = Cow::<Store>::load(store_id, txmgr, vol)?;
         {
             let mut store_cow = store.write().unwrap();
-            let store = store_cow.make_mut_naive()?;
+            let store = store_cow.make_mut_naive();
             store.content_cache =
                 ContentCache::new(Self::CONTENT_CACHE_SIZE, txmgr);
             store.seg_cache = SegCache::new(Self::SEG_CACHE_SIZE, txmgr);

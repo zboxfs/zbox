@@ -9,11 +9,10 @@ use super::StoreRef;
 use base::lru::{Lru, Meter, PinChecker};
 use base::IntoRef;
 use error::Result;
-use trans::armor::Arm;
 use trans::cow::{CowCache, CowRef, Cowable, IntoCow};
 use trans::trans::{Action, Transable};
 use trans::{Eid, EntityType, Finish, Id, TxMgrRef, Txid};
-use volume::{Reader as VolReader, VolumeRef, Writer as VolWriter};
+use volume::{Arm, Reader as VolReader, VolumeRef, Writer as VolWriter};
 
 /// Segment Data
 #[derive(Default)]
@@ -473,7 +472,7 @@ impl Write for Writer {
 }
 
 impl Finish for Writer {
-    fn finish(self) -> Result<()> {
+    fn finish(self) -> Result<usize> {
         match self.data_wtr {
             Some(data_wtr) => data_wtr.finish(),
             None => unreachable!(),

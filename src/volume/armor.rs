@@ -6,9 +6,9 @@ use bytes::BufMut;
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
-use super::{Eid, Finish, Id};
 use base::crypto::Crypto;
 use error::{Error, Result};
+use trans::{Eid, Finish, Id};
 use volume::{Reader as VolReader, VolumeRef, Writer as VolWriter};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize, Serialize)]

@@ -6,13 +6,12 @@ use std::sync::{Arc, RwLock, Weak};
 
 use serde::{Deserialize, Serialize};
 
-use super::armor::{Arm, ArmAccess, Armor, Seq, VolumeArmor};
 use super::trans::{Action, Transable};
 use super::{Eid, EntityType, Id, TxMgrRef, Txid};
 use base::lru::{CountMeter, Lru, Pinnable};
 use base::IntoRef;
 use error::{Error, Result};
-use volume::VolumeRef;
+use volume::{Arm, ArmAccess, Armor, Seq, VolumeArmor, VolumeRef};
 
 /// Trait for entity can be wrapped in cow
 pub trait Cowable: Debug + Default + Clone + Send + Sync {}
@@ -123,12 +122,13 @@ where
 
     /// Get mutable reference of inner object without adding the cow to
     /// transaction
+    #[inline]
     pub fn make_mut_naive(&mut self) -> &mut T {
-        let curr_switch = self.switch;
-        self.index_mut_by(curr_switch)
+        self.inner_mut()
     }
 
     /// Mark cow as deleted
+    #[inline]
     pub fn make_del(&mut self) -> Result<()> {
         self.add_to_trans(Action::Delete)
     }

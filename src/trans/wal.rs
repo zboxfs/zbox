@@ -2,12 +2,11 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::{self, Debug};
 use std::hash::{Hash, Hasher};
 
-use super::armor::{Arm, ArmAccess, Armor, Seq, VolumeArmor};
 use super::trans::Action;
 use super::{Eid, Id, Txid};
 use base::crypto::{HashKey, HASHKEY_SIZE};
 use error::Result;
-use volume::VolumeRef;
+use volume::{Arm, ArmAccess, Armor, Seq, VolumeArmor, VolumeRef};
 
 /// Wal entry entity type
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -9,9 +9,9 @@ use super::vio::imp as vio_imp;
 use super::{ensure_parents_dir, remove_empty_parent_dir};
 use base::crypto::{Crypto, Key};
 use error::{Error, Result};
-use trans::armor::{ArmAccess, Armor};
 use trans::Eid;
 use trans::Finish;
+use volume::{ArmAccess, Armor};
 
 // read/write frame size
 const FRAME_SIZE: usize = 16 * 1024;
@@ -99,6 +99,9 @@ pub struct CryptoWriter {
     frame: Vec<u8>,
     frame_len: usize,
 
+    // total bytes written to file
+    written: usize,
+
     crypto: Crypto,
     key: Key,
 }
@@ -111,6 +114,7 @@ impl CryptoWriter {
             stg_len: 0,
             frame: vec![0u8; FRAME_SIZE],
             frame_len: 0,
+            written: 0,
             crypto: crypto.clone(),
             key: key.clone(),
         }
@@ -131,6 +135,7 @@ impl CryptoWriter {
 
         // write encrypted frame to file
         self.file.write_all(&self.frame[..self.frame_len])?;
+        self.written += self.frame_len;
         self.stg_len = 0;
         Ok(())
     }
@@ -158,10 +163,10 @@ impl Write for CryptoWriter {
 }
 
 impl Finish for CryptoWriter {
-    fn finish(mut self) -> Result<()> {
+    fn finish(mut self) -> Result<usize> {
         // flush frame
         self.write_frame()?;
-        Ok(())
+        Ok(self.written)
     }
 }
 

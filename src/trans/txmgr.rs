@@ -4,13 +4,12 @@ use std::sync::{Arc, RwLock};
 
 use linked_hash_map::LinkedHashMap;
 
-use super::armor::{Arm, Armor, VolumeArmor};
 use super::trans::{Action, Trans, TransRef, TransableRef};
 use super::wal::{EntityType, Wal, WalQueue};
 use super::{Eid, Txid};
 use base::IntoRef;
 use error::{Error, Result};
-use volume::{AllocatorRef, VolumeRef};
+use volume::{AllocatorRef, Arm, Armor, VolumeArmor, VolumeRef};
 
 /// Tranaction manager
 #[derive(Default)]
@@ -289,10 +288,9 @@ mod tests {
 
     use base::init_env;
     use fs::Config;
-    use trans::armor::ArmAccess;
     use trans::cow::{CowRef, Cowable, IntoCow};
     use trans::TxMgr;
-    use volume::Volume;
+    use volume::{ArmAccess, Volume};
 
     #[allow(dead_code)]
     fn setup_mem_vol() -> VolumeRef {
