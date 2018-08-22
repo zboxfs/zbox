@@ -74,6 +74,8 @@ impl Fs {
 
     /// Create new fs
     pub fn create(uri: &str, pwd: &str, cfg: &Config) -> Result<Fs> {
+        debug!("create repo: {}", uri);
+
         let root_id = Eid::new();
         let walq_id = Eid::new();
         let store_id = Eid::new();
@@ -109,6 +111,8 @@ impl Fs {
             Ok(())
         })?;
 
+        debug!("repo created");
+
         Ok(Fs {
             root: root_ref.unwrap(),
             fcache,
@@ -124,6 +128,8 @@ impl Fs {
     /// Open fs
     pub fn open(uri: &str, pwd: &str, read_only: bool) -> Result<Fs> {
         let mut vol = Volume::new(uri)?;
+
+        debug!("open repo: {}, read_only: {}", uri, read_only);
 
         // open volume
         let payload = vol.open(pwd)?;
@@ -144,6 +150,8 @@ impl Fs {
         let store = Store::open(&store_id, &txmgr, &vol)?;
         let root = Fnode::load_root(&root_id, &txmgr, &store, &vol)?;
         let fcache = FnodeCache::new(FNODE_CACHE_SIZE, &txmgr);
+
+        debug!("repo opened");
 
         Ok(Fs {
             root,

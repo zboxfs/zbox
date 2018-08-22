@@ -52,7 +52,7 @@ impl TxMgr {
     pub fn open(walq_id: &Eid, vol: &VolumeRef) -> Result<Self> {
         let mut txmgr = TxMgr::new(walq_id, vol);
 
-        // load wal queue
+        // load and open wal queue
         txmgr.walq = txmgr.walq_armor.load_item(walq_id)?;
         txmgr.walq.open(vol);
 
@@ -70,6 +70,8 @@ impl TxMgr {
             // save the wal queue
             txmgr.save_walq()?;
         }
+
+        debug!("txmgr opened, watermark: txid: {}, block: {}", txid_wmark, blk_wmark);
 
         Ok(txmgr)
     }

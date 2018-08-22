@@ -82,7 +82,11 @@ impl Volume {
         // save super block twice to save its both arms
         super_blk
             .save(pwd, storage.depot_mut())
-            .and(super_blk.save(pwd, storage.depot_mut()))
+            .and(super_blk.save(pwd, storage.depot_mut()))?;
+
+        debug!("volume initialised");
+
+        Ok(())
     }
 
     /// Open volume, return super block payload and meta payload
@@ -111,6 +115,8 @@ impl Volume {
         self.info.cost = super_blk.head.cost;
         self.info.cipher = super_blk.head.cipher;
         self.info.ctime = super_blk.body.ctime;
+
+        debug!("volume opened");
 
         Ok(super_blk.body.payload.clone())
     }
