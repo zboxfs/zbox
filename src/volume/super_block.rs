@@ -1,4 +1,4 @@
-use bytes::{Buf, BufMut, IntoBuf, LittleEndian};
+use bytes::{Buf, BufMut, IntoBuf};
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
@@ -99,7 +99,7 @@ impl SuperBlk {
 
         // compose buffer: body buffer length + body buffer + padding
         let mut comp_buf = Vec::new();
-        comp_buf.put_u64::<LittleEndian>(body_buf.len() as u64);
+        comp_buf.put_u64_le(body_buf.len() as u64);
         comp_buf.put(&body_buf);
 
         // resize the compose buffer to make it can exactly fit in a block
@@ -140,7 +140,7 @@ impl SuperBlk {
         let mut comp_buf = crypto
             .decrypt_with_ad(&buf[Head::BYTES_LEN..], vkey, &Self::MAGIC)?
             .into_buf();
-        let body_buf_len = comp_buf.get_u64::<LittleEndian>() as usize;
+        let body_buf_len = comp_buf.get_u64_le() as usize;
         let body = Body::deseri(&comp_buf.bytes()[..body_buf_len])?;
 
         Ok(SuperBlk { head, body })

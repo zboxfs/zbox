@@ -4,7 +4,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::u16;
 
-use bytes::{BufMut, LittleEndian};
+use bytes::{BufMut};
 
 use super::file_armor::FileArmor;
 use super::vio::imp as vio_imp;
@@ -194,7 +194,7 @@ impl SectorMgr {
     // convert sector index to Eid
     fn sector_id_from(&self, sec_idx: u64) -> Eid {
         let mut buf = Vec::with_capacity(8);
-        buf.put_u64::<LittleEndian>(sec_idx);
+        buf.put_u64_le(sec_idx);
         let hash = Crypto::hash_with_key(&buf, &self.hash_key);
         Eid::from_slice(&hash)
     }

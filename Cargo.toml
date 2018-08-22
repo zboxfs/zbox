@@ -22,9 +22,6 @@ crate-type = ["rlib", "dylib", "staticlib"]
 [features]
 default = []
 
-# Zbox cloud storage
-zbox-cloud = ["reqwest"]
-
 # fuzz test compilation flag
 fuzz-test = []
 
@@ -35,16 +32,13 @@ perf-test = []
 vio-test = []
 
 [dependencies]
-bytes = "0.4.6"
+bytes = "0.4.9"
 env_logger = "0.5.9"
-log = "0.4.1"
+log = "0.4.4"
 lz4 = "1.22.0"
 rmp-serde = "0.13.7"
 serde = "1.0.43"
 serde_derive = "1.0.43"
-
-# optional dependencies
-reqwest = { version = "0.8.5", optional = true }
 
 [dependencies.linked-hash-map]
 version = "0.5.1"
