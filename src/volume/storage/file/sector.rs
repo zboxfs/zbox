@@ -4,7 +4,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::u16;
 
-use bytes::{BufMut};
+use bytes::BufMut;
 
 use super::file_armor::FileArmor;
 use super::vio::imp as vio_imp;

@@ -71,7 +71,10 @@ impl TxMgr {
             txmgr.save_walq()?;
         }
 
-        debug!("txmgr opened, watermark: txid: {}, block: {}", txid_wmark, blk_wmark);
+        debug!(
+            "txmgr opened, watermarks: txid: {}, block: {}",
+            txid_wmark, blk_wmark
+        );
 
         Ok(txmgr)
     }

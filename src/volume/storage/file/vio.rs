@@ -170,6 +170,11 @@ pub mod imp {
         fs::metadata(path)
     }
 
+    pub fn remove_dir<P: AsRef<Path>>(path: P) -> Result<()> {
+        make_random_error()?;
+        fs::remove_dir(path)
+    }
+
     pub fn remove_dir_all<P: AsRef<Path>>(path: P) -> Result<()> {
         make_random_error()?;
         fs::remove_dir_all(path)
