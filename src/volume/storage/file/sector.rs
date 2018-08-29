@@ -7,7 +7,7 @@ use std::u16;
 use bytes::BufMut;
 
 use super::file_armor::FileArmor;
-use super::vio::imp as vio_imp;
+use super::vio;
 use super::{ensure_parents_dir, remove_empty_parent_dir};
 use base::crypto::{Crypto, HashKey, Key};
 use base::lru::{CountMeter, Lru, PinChecker};
@@ -252,13 +252,13 @@ impl SectorMgr {
         &self,
         sec_idx: u64,
         create: bool,
-    ) -> Result<vio_imp::File> {
+    ) -> Result<vio::File> {
         let path = self.sector_data_path(sec_idx);
         if !create && !path.exists() {
             return Err(Error::NotFound);
         }
         ensure_parents_dir(&path)?;
-        let data_file = vio_imp::OpenOptions::new()
+        let data_file = vio::OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
@@ -383,7 +383,7 @@ impl SectorMgr {
         let data_file_path = self.sector_data_path(sec.idx);
         let mut dst_path = data_file_path.clone();
         dst_path.set_extension(Self::SECTOR_SHRINK_EXT);
-        let mut dst_file = vio_imp::OpenOptions::new()
+        let mut dst_file = vio::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
@@ -418,7 +418,7 @@ impl SectorMgr {
         self.cache.insert(sec.idx, sec);
 
         // switch sector data file
-        vio_imp::rename(&dst_path, &data_file_path)?;
+        vio::rename(&dst_path, &data_file_path)?;
 
         Ok(())
     }
@@ -458,7 +458,7 @@ impl SectorMgr {
             if actual_size == 0 {
                 self.sec_armor.remove_all_arms(&sec_id)?;
                 let sec_data_path = self.sector_data_path(sec_idx);
-                vio_imp::remove_file(&sec_data_path)?;
+                vio::remove_file(&sec_data_path)?;
                 remove_empty_parent_dir(&sec_data_path)?;
                 self.cache.remove(&sec_idx);
             } else if is_shrinkable {

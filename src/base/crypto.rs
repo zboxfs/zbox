@@ -324,8 +324,11 @@ impl RandomSeed {
     }
 
     #[allow(dead_code)]
-    pub fn from(seed: &[u8; RANDOM_SEED_SIZE]) -> Self {
-        RandomSeed(seed.clone())
+    pub fn from(seed: &[u8]) -> Self {
+        assert_eq!(seed.len(), RANDOM_SEED_SIZE);
+        let mut ret = RandomSeed::default();
+        ret.0.copy_from_slice(seed);
+        ret
     }
 
     pub fn as_ptr(&self) -> *const u8 {

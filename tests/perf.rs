@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-#![cfg(feature = "perf-test")]
+#![cfg(feature = "test-perf")]
 
 extern crate rand;
 extern crate zbox;

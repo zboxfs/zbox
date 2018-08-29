@@ -133,3 +133,10 @@ pub use self::file::{File, VersionReader};
 pub use self::fs::fnode::{DirEntry, FileType, Metadata, Version};
 pub use self::repo::{OpenOptions, Repo, RepoInfo, RepoOpener};
 pub use self::trans::Eid;
+
+#[cfg(feature = "storage-faulty")]
+#[macro_use]
+extern crate lazy_static;
+
+#[cfg(feature = "storage-faulty")]
+pub use self::volume::FaultyController;

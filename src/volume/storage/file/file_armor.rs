@@ -5,7 +5,7 @@ use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use super::vio::imp as vio_imp;
+use super::vio;
 use super::{ensure_parents_dir, remove_empty_parent_dir};
 use base::crypto::{Crypto, Key};
 use error::{Error, Result};
@@ -18,7 +18,7 @@ const FRAME_SIZE: usize = 16 * 1024;
 
 // File crypto reader
 pub struct CryptoReader {
-    file: vio_imp::File,
+    file: vio::File,
 
     // encrypted frame, read from file
     enc_frame: Vec<u8>,
@@ -34,7 +34,7 @@ pub struct CryptoReader {
 }
 
 impl CryptoReader {
-    fn new(file: vio_imp::File, crypto: &Crypto, key: &Key) -> Self {
+    fn new(file: vio::File, crypto: &Crypto, key: &Key) -> Self {
         CryptoReader {
             file,
             enc_frame: vec![0u8; FRAME_SIZE],
@@ -89,7 +89,7 @@ impl Read for CryptoReader {
 
 // File crypto writer
 pub struct CryptoWriter {
-    file: vio_imp::File,
+    file: vio::File,
 
     // stage frame, read from input
     stg: Vec<u8>,
@@ -107,7 +107,7 @@ pub struct CryptoWriter {
 }
 
 impl CryptoWriter {
-    fn new(file: vio_imp::File, crypto: &Crypto, key: &Key) -> Self {
+    fn new(file: vio::File, crypto: &Crypto, key: &Key) -> Self {
         CryptoWriter {
             file,
             stg: vec![0u8; crypto.decrypted_len(FRAME_SIZE)],
@@ -211,7 +211,7 @@ impl<'de, T: ArmAccess<'de> + Debug> Armor<'de> for FileArmor<T> {
 
     fn get_item_reader(&self, arm_id: &Eid) -> Result<Self::ItemReader> {
         let path = self.id_to_path(arm_id);
-        match vio_imp::OpenOptions::new().read(true).open(&path) {
+        match vio::OpenOptions::new().read(true).open(&path) {
             Ok(file) => Ok(CryptoReader::new(file, &self.crypto, &self.key)),
             Err(ref err) if err.kind() == ErrorKind::NotFound => {
                 Err(Error::NotFound)
@@ -223,7 +223,7 @@ impl<'de, T: ArmAccess<'de> + Debug> Armor<'de> for FileArmor<T> {
     fn get_item_writer(&self, arm_id: &Eid) -> Result<Self::ItemWriter> {
         let path = self.id_to_path(arm_id);
         ensure_parents_dir(&path)?;
-        let file = vio_imp::OpenOptions::new()
+        let file = vio::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
@@ -233,7 +233,7 @@ impl<'de, T: ArmAccess<'de> + Debug> Armor<'de> for FileArmor<T> {
 
     fn del_arm(&self, arm_id: &Eid) -> Result<()> {
         let path = self.id_to_path(arm_id);
-        vio_imp::remove_file(&path)?;
+        vio::remove_file(&path)?;
         remove_empty_parent_dir(&path)?;
         Ok(())
     }

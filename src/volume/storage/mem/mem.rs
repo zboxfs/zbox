@@ -9,6 +9,7 @@ use volume::storage::Storable;
 use volume::BLK_SIZE;
 
 /// Mem Storage
+#[derive(Clone)]
 pub struct MemStorage {
     super_blk_map: HashMap<u64, Vec<u8>>,
     blk_map: HashMap<u64, Vec<u8>>,
@@ -41,7 +42,7 @@ impl Storable for MemStorage {
         Ok(())
     }
 
-    fn get_super_block(&self, suffix: u64) -> Result<Vec<u8>> {
+    fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
         self.super_blk_map
             .get(&suffix)
             .map(|b| b.clone())

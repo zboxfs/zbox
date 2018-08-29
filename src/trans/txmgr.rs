@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 use linked_hash_map::LinkedHashMap;
 
 use super::trans::{Action, Trans, TransRef, TransableRef};
-use super::wal::{EntityType, Wal, WalQueue};
+use super::wal::{EntityType, WalQueue};
 use super::{Eid, Txid};
 use base::IntoRef;
 use error::{Error, Result};
@@ -48,6 +48,28 @@ impl TxMgr {
         }
     }
 
+    // save wal queue to volume
+    fn save_walq(&mut self) -> Result<()> {
+        // reserve one block ahead for the wal queue, because wal queue itself
+        // will consume a block
+        let blk_wmark = {
+            let mut allocator = self.allocator.write().unwrap();
+            allocator.reserve(1)
+        };
+
+        // save watermarks to wal queue and save it
+        self.walq.set_watermarks(self.txid_wmark.val(), blk_wmark);
+        self.walq_armor.save_item(&mut self.walq)?;
+
+        // make sure the block watermark is correct
+        {
+            let allocator = self.allocator.read().unwrap();
+            assert_eq!(allocator.block_wmark(), blk_wmark);
+        }
+
+        Ok(())
+    }
+
     /// Open transaction manager
     pub fn open(walq_id: &Eid, vol: &VolumeRef) -> Result<Self> {
         let mut txmgr = TxMgr::new(walq_id, vol);
@@ -79,11 +101,6 @@ impl TxMgr {
         Ok(txmgr)
     }
 
-    #[inline]
-    fn save_walq(&mut self) -> Result<()> {
-        self.walq_armor.save_item(&mut self.walq)
-    }
-
     /// Begin a transaction
     pub fn begin_trans(txmgr: &TxMgrRef) -> Result<TxHandle> {
         // check if current thread is already in transaction
@@ -101,19 +118,33 @@ impl TxMgr {
             tm.save_walq()?;
         }
 
-        // get next txid
+        // get next txid, here we marked this thread as in tx
         let txid = tm.txid_wmark.next();
+        debug!("begin tx#{}", txid);
 
         // begin a transaction in wal queue
         tm.walq.begin_trans(txid);
-        tm.save_walq()?;
+        if let Err(err) = tm.save_walq() {
+            // if save wal queue failed, clean up it and remove thread tx mark
+            tm.walq.end_abort(txid);
+            Txid::reset_current();
+            debug!("tx#{} aborted before start", txid);
+            return Err(err);
+        }
 
         // create a new transaction and add it to transaction manager
-        let mut tx = Trans::new(txid, &vol);
-        tx.begin_trans()?;
-        tm.txs.insert(txid, tx.into_ref());
+        let tx = Trans::new(txid, &vol).into_ref();
+        tm.txs.insert(txid, tx.clone());
 
-        debug!("begin tx#{}", txid);
+        // start the transaction
+        let result = {
+            let mut tx = tx.write().unwrap();
+            tx.begin_trans()
+        };
+        if let Err(err) = result {
+            tm.abort_trans(txid);
+            return Err(err);
+        }
 
         Ok(TxHandle {
             txid,
@@ -143,42 +174,69 @@ impl TxMgr {
         tx.add_entity(id, entity, action, ent_type, arm)
     }
 
-    fn end_trans(&mut self, wal: Wal) -> Result<()> {
-        // reserve one block for the wal queue and get the current
-        // block watermark
-        let blk_wmark = {
-            let mut allocator = self.allocator.write().unwrap();
-            allocator.reserve(1)
-        };
-
-        // end and save wal queue
-        self.walq
-            .end_trans(wal, self.txid_wmark.val(), blk_wmark)
-            .and(self.save_walq())?;
-
-        // make sure the block watermark is correct
-        {
-            let allocator = self.allocator.read().unwrap();
-            assert_eq!(allocator.block_wmark(), blk_wmark);
-        }
-
-        Ok(())
-    }
-
-    #[inline]
-    fn begin_abort(&mut self, wal: &Wal) {
-        self.walq.begin_abort(wal);
-    }
-
-    #[inline]
-    fn end_abort(&mut self, wal: &Wal) {
-        self.walq.end_abort(wal);
-    }
-
     #[inline]
     fn remove_trans(&mut self, txid: Txid) {
         self.txs.remove(&txid);
         self.ents.retain(|_, &mut v| v != txid);
+    }
+
+    // commit transaction
+    fn commit_trans(&mut self, txid: Txid) -> Result<()> {
+        let result = {
+            let tx_ref = self.txs.get(&txid).unwrap().clone();
+            let mut tx = tx_ref.write().unwrap();
+
+            // commit tx, if any errors then abort the tx
+            match tx
+                .commit(&self.vol)
+                .and_then(|wal| self.walq.end_trans(wal))
+                .and(self.save_walq())
+            {
+                Ok(_) => {
+                    tx.complete_commit();
+                    debug!("tx#{} committed", txid);
+                    Ok(())
+                }
+                Err(err) => Err(err),
+            }
+        };
+
+        if result.is_err() {
+            // error happened during commit, abort the tx
+            self.abort_trans(txid);
+        } else {
+            // remove tx from tx manager and remove txid from current thread
+            self.remove_trans(txid);
+            Txid::reset_current();
+        }
+
+        // return the original result during commit
+        result
+    }
+
+    // abort transaction
+    fn abort_trans(&mut self, txid: Txid) {
+        debug!("abort tx#{}", txid);
+
+        {
+            let tx_ref = self.txs.get(&txid).unwrap().clone();
+            let mut tx = tx_ref.write().unwrap();
+            let wal = tx.get_wal();
+
+            self.walq.begin_abort(&wal);
+            match tx
+                .abort(&self.vol)
+                .and(Ok(self.walq.end_abort(txid)))
+                .and(self.save_walq())
+            {
+                Ok(_) => debug!("tx#{} aborted", txid),
+                Err(err) => warn!("abort tx#{} failed: {}", txid, err),
+            }
+        }
+
+        // remove tx from tx manager and remove txid from current thread
+        self.remove_trans(txid);
+        Txid::reset_current();
     }
 }
 
@@ -230,54 +288,14 @@ impl TxHandle {
 
     /// Commit a transaction
     pub fn commit(&self) -> Result<()> {
-        debug!("commit tx#{}", self.txid);
-
         let mut tm = self.txmgr.write().unwrap();
-        let tx_ref = tm.txs.get(&self.txid).ok_or(Error::NoTrans)?.clone();
-        let mut tx = tx_ref.write().unwrap();
-
-        // commit tx and enqueue wal, if any errors then abort the tx
-        let ret = match tx.commit(&tm.vol).and_then(|wal| tm.end_trans(wal)) {
-            Ok(_) => {
-                tx.complete_commit();
-                debug!("tx#{} committed", self.txid);
-                Ok(())
-            }
-            Err(err) => {
-                self.do_abort(&mut tx, &mut tm);
-                Err(err)
-            }
-        };
-
-        // remove tx from tx manager
-        tm.remove_trans(self.txid);
-
-        ret
+        tm.commit_trans(self.txid)
     }
 
-    fn do_abort(&self, tx: &mut Trans, tm: &mut TxMgr) {
-        debug!("abort tx#{}", self.txid);
-
-        let wal = tx.get_wal();
-        tm.begin_abort(&wal);
-        match tx.abort(&tm.vol) {
-            Ok(_) => {
-                tm.end_abort(&wal);
-                debug!("tx#{} aborted", self.txid);
-            }
-            Err(err) => error!("abort tx#{} failed: {}", self.txid, err),
-        }
-    }
-
+    /// Abort a transaction
     fn abort(&self, err: Error) -> Result<()> {
         let mut tm = self.txmgr.write().unwrap();
-        let tx_ref = tm.txs.get(&self.txid).ok_or(Error::NoTrans)?.clone();
-        let mut tx = tx_ref.write().unwrap();
-
-        self.do_abort(&mut tx, &mut tm);
-
-        // remove tx from tx manager
-        tm.remove_trans(self.txid);
+        tm.abort_trans(self.txid);
 
         // return the original error
         Err(err)
@@ -352,7 +370,7 @@ mod tests {
             Obj::ensure(&a, val, Arm::Right);
             Ok(())
         }).unwrap();
-        Obj::ensure(&a, val, Arm::Left);
+        Obj::ensure(&a, val, Arm::Right);
 
         // tx #2, new and update
         let tx = TxMgr::begin_trans(&tm).unwrap();
@@ -363,8 +381,8 @@ mod tests {
             b = Obj::new(val).into_cow(&tm)?;
             Ok(())
         }).unwrap();
-        Obj::ensure(&a, val2, Arm::Right);
-        Obj::ensure(&b, val, Arm::Left);
+        Obj::ensure(&a, val2, Arm::Left);
+        Obj::ensure(&b, val, Arm::Right);
 
         // tx #3, update and delete
         let tx = TxMgr::begin_trans(&tm).unwrap();
@@ -379,7 +397,7 @@ mod tests {
             b.val = val2;
             Ok(())
         }).unwrap();
-        Obj::ensure(&b, val2, Arm::Right);
+        Obj::ensure(&b, val2, Arm::Left);
 
         // tx #4, recycle tx#2
         let tx = TxMgr::begin_trans(&tm).unwrap();
@@ -389,7 +407,7 @@ mod tests {
             b.val = val;
             Ok(())
         }).unwrap();
-        Obj::ensure(&b, val, Arm::Left);
+        Obj::ensure(&b, val, Arm::Right);
 
         // tx #5, recyle tx#3
         let tx = TxMgr::begin_trans(&tm).unwrap();
@@ -399,7 +417,7 @@ mod tests {
             b.val = val2;
             Ok(())
         }).unwrap();
-        Obj::ensure(&b, val2, Arm::Right);
+        Obj::ensure(&b, val2, Arm::Left);
 
         // more txs
         for i in 0..5 {
@@ -410,7 +428,7 @@ mod tests {
                 b.val = val2 + i;
                 Ok(())
             }).unwrap();
-            let arm = if i % 2 == 0 { Arm::Left } else { Arm::Right };
+            let arm = if i % 2 == 0 { Arm::Right } else { Arm::Left };
             Obj::ensure(&b, val2 + i, arm);
         }
     }

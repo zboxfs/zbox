@@ -6,6 +6,12 @@ pub use self::file::FileStorage;
 pub use self::mem::MemStorage;
 pub use self::storage::{Reader, Storage, StorageRef, Writer};
 
+#[cfg(feature = "storage-faulty")]
+mod faulty;
+
+#[cfg(feature = "storage-faulty")]
+pub use self::faulty::Controller as FaultyController;
+
 use std::fmt::Debug;
 
 use base::crypto::{Crypto, Key};
@@ -24,7 +30,7 @@ pub trait Storable: Debug + Send + Sync {
     fn open(&mut self, crypto: Crypto, key: Key) -> Result<()>;
 
     // super block operations
-    fn get_super_block(&self, suffix: u64) -> Result<Vec<u8>>;
+    fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>>;
     fn put_super_block(&mut self, super_blk: &[u8], suffix: u64) -> Result<()>;
 
     // address operations

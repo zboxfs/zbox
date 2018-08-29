@@ -1,5 +1,5 @@
 use std::fmt::Debug;
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::marker::PhantomData;
 
 use bytes::BufMut;
@@ -95,7 +95,13 @@ pub trait Armor<'de> {
         let arm_id = arm.to_eid(id);
         let mut rdr = self.get_item_reader(&arm_id)?;
         let mut buf = Vec::new();
-        rdr.read_to_end(&mut buf)?;
+        match rdr.read_to_end(&mut buf) {
+            Ok(_) => {}
+            Err(ref err) if err.kind() == ErrorKind::NotFound => {
+                return Err(Error::NotFound)
+            }
+            Err(err) => return Err(Error::from(err)),
+        }
         let mut de = Deserializer::new(&buf[..]);
         let item: Self::Item = Deserialize::deserialize(&mut de)?;
         Ok(item)
@@ -152,21 +158,25 @@ pub trait Armor<'de> {
 
     // save item
     fn save_item(&self, item: &mut Self::Item) -> Result<()> {
-        // increase sequence and serialize item
+        // increase sequence and toggle arm
         item.inc_seq();
-        let mut buf = Vec::new();
-        item.serialize(&mut Serializer::new(&mut buf))?;
-
-        // save to writer
-        let arm_id = item.arm().other().to_eid(item.id());
-        let mut wtr = self.get_item_writer(&arm_id)?;
-        wtr.write_all(&buf[..])?;
-        wtr.finish()?;
-
-        // and then switch arm
         item.arm_mut().toggle();
 
-        Ok(())
+        let arm_id = item.arm().to_eid(item.id());
+
+        // save to writer
+        (|| {
+            let mut buf = Vec::new();
+            item.serialize(&mut Serializer::new(&mut buf))?;
+            let mut wtr = self.get_item_writer(&arm_id)?;
+            wtr.write_all(&buf[..])?;
+            wtr.finish()?;
+            Ok(())
+        })().or_else(|err| {
+            // if save item failed, revert its arm back
+            item.arm_mut().toggle();
+            Err(err)
+        })
     }
 
     // remove the other arm
@@ -300,7 +310,7 @@ mod tests {
             assert_eq!(item.arm, item_bk.arm.other());
             let item_loaded = varm.load_item(item.id()).unwrap();
             assert_eq!(item_loaded.seq, item_bk.seq + 1);
-            assert_eq!(item_loaded.arm, item_bk.arm);
+            assert_eq!(item_loaded.arm, item_bk.arm.other());
 
             varm.save_item(&mut item2).unwrap();
         }

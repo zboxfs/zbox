@@ -22,14 +22,11 @@ crate-type = ["rlib", "dylib", "staticlib"]
 [features]
 default = []
 
-# fuzz test compilation flag
-fuzz-test = []
-
 # performance test compilation flag
-perf-test = []
+test-perf = []
 
-# virtual I/O test compilation flag, used for random IO error test
-vio-test = []
+# faulty storage for random io error test
+storage-faulty = ["lazy_static"]
 
 [dependencies]
 bytes = "0.4.9"
@@ -39,6 +36,7 @@ lz4 = "1.22.0"
 rmp-serde = "0.13.7"
 serde = "1.0.43"
 serde_derive = "1.0.43"
+lazy_static = { version = "1.1.0", optional = true }
 
 [dependencies.linked-hash-map]
 version = "0.5.1"

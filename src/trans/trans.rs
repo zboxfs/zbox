@@ -63,9 +63,12 @@ impl Trans {
         ent_type: EntityType,
         arm: Arm,
     ) -> Result<()> {
-        // add a wal entry and save wal
+        // add a wal entry and save wal, if this failed remove entry from wal
         self.wal.add_entry(id, action, ent_type, arm);
-        self.wal_armor.save_item(&mut self.wal)?;
+        self.wal_armor.save_item(&mut self.wal).or_else(|err| {
+            self.wal.remove_entry(id);
+            Err(err)
+        })?;
 
         // add entity to cohorts
         self.cohorts.entry(id.clone()).or_insert(entity);
@@ -75,6 +78,8 @@ impl Trans {
 
     /// Commit transaction
     pub fn commit(&mut self, vol: &VolumeRef) -> Result<Wal> {
+        debug!("commit tx#{}, cohorts: {}", self.txid, self.cohorts.len());
+
         //debug!("trans.commit: cohorts: {:#?}", self.cohorts);
 
         // commit each entity
@@ -107,7 +112,6 @@ impl Trans {
             ent.complete_commit();
         }
         self.cohorts.clear();
-        Txid::reset_current();
     }
 
     // abort transaction
@@ -119,10 +123,12 @@ impl Trans {
         }
 
         self.cohorts.clear();
-        Txid::reset_current();
 
         // clean aborted entities
-        self.wal.clean_aborted(vol)
+        self.wal.clean_aborted(vol)?;
+
+        // remove wal
+        self.wal_armor.remove_all_arms(self.wal.id())
     }
 }
 
@@ -133,6 +139,7 @@ impl Debug for Trans {
         f.debug_struct("Trans")
             .field("txid", &self.txid)
             .field("cohorts", &self.cohorts)
+            .field("wal", &self.wal)
             .finish()
     }
 }

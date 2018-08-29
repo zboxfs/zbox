@@ -70,6 +70,16 @@ impl Storage {
         } else if uri.starts_with("mem://") {
             let depot = MemStorage::new();
             Box::new(depot)
+        } else if uri.starts_with("faulty://") {
+            #[cfg(feature = "storage-faulty")]
+            {
+                let depot = super::faulty::FaultyStorage::new(&uri[9..]);
+                Box::new(depot)
+            }
+            #[cfg(not(feature = "storage-faulty"))]
+            {
+                return Err(Error::InvalidUri);
+            }
         } else {
             return Err(Error::InvalidUri);
         };
@@ -342,7 +352,18 @@ impl Read for Reader {
         }
 
         // read frame into frame cache
-        map_io_err!(self.read_frame())?;
+        match self.read_frame() {
+            Ok(_) => {}
+            Err(ref err) if *err == Error::NotFound => {
+                return Err(IoError::new(
+                    ErrorKind::NotFound,
+                    "Blocks not found",
+                ))
+            }
+            Err(err) => {
+                return Err(IoError::new(ErrorKind::Other, err.description()))
+            }
+        }
 
         // copy decryped frame out to destination
         let (copy_len, frm_is_exhausted) =

@@ -1,6 +1,8 @@
 extern crate tempdir;
 
-pub mod fuzz;
+pub mod controller;
+pub mod crypto;
+pub mod fuzzer;
 
 use self::tempdir::TempDir;
 use std::fs;

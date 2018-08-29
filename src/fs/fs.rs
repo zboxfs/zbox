@@ -350,17 +350,18 @@ impl Fs {
             }
         };
 
-        // tx #1: truncate target file
-        let tx_handle = TxMgr::begin_trans(&self.txmgr)?;
-        tx_handle.run_all(|| Fnode::set_len(tgt.clone(), 0, tx_handle.txid))?;
-
-        // tx #2: copy data from source to target
+        // begin and run transaction
         let tx_handle = TxMgr::begin_trans(&self.txmgr)?;
         tx_handle.run_all(|| {
+            // truncate target file
+            Fnode::set_len(tgt.clone(), 0, tx_handle.txid)?;
+
+            // copy data from source to target
             let mut rdr = FnodeReader::new_current(src.fnode.clone())?;
             let mut wtr = FnodeWriter::new(tgt.clone(), tx_handle.txid)?;
             io::copy(&mut rdr, &mut wtr)?;
             wtr.finish()?;
+
             Ok(())
         })?;
 
@@ -512,6 +513,8 @@ impl Fs {
 impl Drop for Fs {
     fn drop(&mut self) {
         let mut shutter = self.shutter.write().unwrap();
-        shutter.close()
+        shutter.close();
+
+        debug!("repo closed");
     }
 }

@@ -106,10 +106,10 @@ impl Content {
         store: &StoreRef,
     ) -> Result<()> {
         let mut ctn = content.write().unwrap();
-        let mut st = store.write().unwrap();
+        let mut store = store.write().unwrap();
 
         // unlink entries
-        ctn.ents.unlink(chk_map, st.make_mut()?)?;
+        ctn.ents.unlink(chk_map, store.make_mut()?)?;
 
         // content is not used anymore, remove content
         ctn.make_del()

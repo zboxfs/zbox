@@ -42,12 +42,20 @@ where
     T: Cowable + Deserialize<'de> + Serialize + 'static,
 {
     fn new(id: &Eid, inner: T, txmgr: &TxMgrRef) -> Self {
+        let arm = Arm::default().other();
+        let mut left = None;
+        let mut right = None;
+        match arm {
+            Arm::Left => left = Some(inner),
+            Arm::Right => right = Some(inner),
+        }
+
         Cow {
             id: id.clone(),
             seq: 0,
-            arm: Arm::default(),
-            left: Some(inner),
-            right: None,
+            arm,
+            left,
+            right,
             txid: None,
             action: None,
             self_ref: Weak::default(),
@@ -90,13 +98,18 @@ where
         {
             let mut txmgr = self.txmgr.write().unwrap();
             let self_ref = self.self_ref.upgrade().unwrap();
+            let arm = if action == Action::New {
+                self.arm
+            } else {
+                self.arm.other()
+            };
             txmgr.add_to_trans(
                 &self.id,
                 curr_txid,
                 self_ref,
                 action,
                 EntityType::Cow,
-                self.arm.other(),
+                arm,
             )?;
         }
 
@@ -109,6 +122,11 @@ where
 
     /// Get mutable reference for inner object by cloning it
     pub fn make_mut(&mut self) -> Result<&mut T> {
+        // if cow is a newly created, use it directly
+        if self.action == Some(Action::New) {
+            return Ok(self.inner_mut());
+        }
+
         // copy inner if it is not copied yet
         if !self.has_other() {
             let new_inner = T::clone(self.inner());
@@ -240,7 +258,10 @@ where
 
     fn deref(&self) -> &T {
         let curr_txid = Txid::current_or_empty();
-        if self.txid.is_none() || self.txid != Some(curr_txid) {
+        if self.txid.is_none()
+            || self.txid != Some(curr_txid)
+            || self.action == Some(Action::New)
+        {
             self.inner()
         } else {
             self.other_inner()
@@ -324,26 +345,37 @@ where
     fn commit(&mut self, vol: &VolumeRef) -> Result<()> {
         match self.action {
             Some(action) => match action {
-                Action::New | Action::Update => {
-                    // switch cow temporarily
+                Action::New => {
+                    // toggle arm temporarily because save() will toggle it
                     self.arm.toggle();
-                    let old = self.other_mut().take();
 
-                    // save cow
-                    let result = self.save(vol);
-
-                    // revert cow back
-                    if result.is_err() {
+                    self.save(vol).or_else(|err| {
                         // if saving cow failed, arm will not be switched,
                         // so we need to switch it here
                         self.arm.toggle();
-                    }
+                        Err(err)
+                    })
+                }
+                Action::Update => {
+                    // save old inner object first
+                    let old = self.curr_mut().take();
+
+                    // save cow and restore the old inner object
+                    let result = self.save(vol).and_then(|_| {
+                        // toggle the arm back because save() has
+                        // already toggled it
+                        self.arm.toggle();
+                        Ok(())
+                    });
+
+                    // restore the old inner object
                     *self.curr_mut() = old;
 
                     result
                 }
                 Action::Delete => {
-                    // do nothing here, actual deletion will be delayed after 2 txs
+                    // do nothing here, actual deletion will be delayed
+                    // after 2 txs
                     Ok(())
                 }
             },
@@ -353,10 +385,14 @@ where
 
     fn complete_commit(&mut self) {
         match self.action {
-            Some(_) => {
-                self.arm.toggle();
-                self.other_mut().take();
-            }
+            Some(action) => match action {
+                Action::Update => {
+                    // toggle arm and discard the old inner object
+                    self.arm.toggle();
+                    self.other_mut().take();
+                }
+                _ => {}
+            },
             None => unreachable!(),
         }
         self.txid = None;
@@ -367,6 +403,7 @@ where
         match self.action {
             Some(action) => match action {
                 Action::Update => {
+                    // discard the new inner object
                     self.other_mut().take();
                 }
                 _ => {}
@@ -398,7 +435,6 @@ where
         {
             let mut cow = cow_ref.write().unwrap();
             cow.self_ref = Arc::downgrade(&cow_ref);
-            cow.arm.toggle();
             cow.add_to_trans(Action::New)?;
         }
         Ok(cow_ref)

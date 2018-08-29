@@ -552,8 +552,8 @@ impl Fnode {
     fn add_version(&mut self, content: Content) -> Result<Option<Content>> {
         // dedup content and add the new version
         let (is_deduped, deduped_id) = {
-            let mut store_cow = self.store.write().unwrap();
-            let store = store_cow.make_mut()?;
+            let mut store = self.store.write().unwrap();
+            let store = store.make_mut()?;
             store.dedup_content(content.clone())?
         };
 

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use super::index::IndexMgr;
 use super::sector::SectorMgr;
-use super::vio::imp as vio_imp;
+use super::vio;
 use base::crypto::{Crypto, Key};
 use error::{Error, Result};
 use trans::Eid;
@@ -67,7 +67,7 @@ impl FileStorage {
 impl Storable for FileStorage {
     #[inline]
     fn exists(&self) -> Result<bool> {
-        match vio_imp::metadata(&self.base) {
+        match vio::metadata(&self.base) {
             Ok(_) => Ok(true),
             Err(ref err) if err.kind() == ErrorKind::NotFound => Ok(false),
             Err(err) => Err(Error::from(err)),
@@ -76,8 +76,8 @@ impl Storable for FileStorage {
 
     fn init(&mut self, crypto: Crypto, key: Key) -> Result<()> {
         // create dir structure
-        vio_imp::create_dir_all(self.index_dir())?;
-        vio_imp::create_dir_all(self.data_dir())?;
+        vio::create_dir_all(self.index_dir())?;
+        vio::create_dir_all(self.data_dir())?;
 
         // set crypto context
         self.set_crypto_ctx(crypto, key);
@@ -91,17 +91,17 @@ impl Storable for FileStorage {
         Ok(())
     }
 
-    fn get_super_block(&self, suffix: u64) -> Result<Vec<u8>> {
+    fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
         let path = self.super_block_path(suffix);
         let mut buf = Vec::new();
-        let mut file = vio_imp::OpenOptions::new().read(true).open(&path)?;
+        let mut file = vio::OpenOptions::new().read(true).open(&path)?;
         file.read_to_end(&mut buf)?;
         Ok(buf)
     }
 
     fn put_super_block(&mut self, super_blk: &[u8], suffix: u64) -> Result<()> {
         let path = self.super_block_path(suffix);
-        let mut file = vio_imp::OpenOptions::new()
+        let mut file = vio::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)

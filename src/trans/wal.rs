@@ -82,6 +82,11 @@ impl Wal {
         );
     }
 
+    #[inline]
+    pub fn remove_entry(&mut self, id: &Eid) {
+        self.entries.remove(id);
+    }
+
     // recylce a wal
     fn recyle(&self, wal_armor: &VolumeArmor<Self>) -> Result<()> {
         debug!("recycle tx#{}", self.txid);
@@ -190,7 +195,7 @@ pub struct WalQueue {
     doing: HashSet<Txid>,
 
     #[serde(skip_serializing, skip_deserializing, default)]
-    aborting: HashSet<Wal>,
+    aborting: HashMap<Txid, Wal>,
 
     #[serde(skip_serializing, skip_deserializing, default)]
     wal_armor: VolumeArmor<Wal>,
@@ -208,7 +213,7 @@ impl WalQueue {
             blk_wmark: 0,
             done: VecDeque::new(),
             doing: HashSet::new(),
-            aborting: HashSet::new(),
+            aborting: HashMap::new(),
             wal_armor: VolumeArmor::new(vol),
         }
     }
@@ -216,6 +221,12 @@ impl WalQueue {
     #[inline]
     pub fn watermarks(&self) -> (u64, u64) {
         (self.txid_wmark, self.blk_wmark)
+    }
+
+    #[inline]
+    pub fn set_watermarks(&mut self, txid_wmark: u64, blk_wmark: u64) {
+        self.txid_wmark = txid_wmark;
+        self.blk_wmark = blk_wmark;
     }
 
     #[inline]
@@ -229,12 +240,7 @@ impl WalQueue {
         self.doing.insert(txid);
     }
 
-    pub fn end_trans(
-        &mut self,
-        wal: Wal,
-        txid_wmark: u64,
-        blk_wmark: u64,
-    ) -> Result<()> {
+    pub fn end_trans(&mut self, wal: Wal) -> Result<()> {
         // recycle the retired trans
         while self.done.len() >= Self::COMMITTED_QUEUE_SIZE {
             {
@@ -256,60 +262,57 @@ impl WalQueue {
         self.doing.remove(&wal.txid);
         self.done.push_back(wal.txid);
 
-        // save watermarks
-        self.txid_wmark = txid_wmark;
-        self.blk_wmark = blk_wmark;
-
         Ok(())
     }
 
     #[inline]
     pub fn begin_abort(&mut self, wal: &Wal) {
-        self.aborting.insert(wal.clone());
+        self.aborting.insert(wal.txid, wal.clone());
     }
 
     #[inline]
-    pub fn end_abort(&mut self, wal: &Wal) {
-        self.aborting.remove(&wal);
-        self.doing.remove(&wal.txid);
+    pub fn end_abort(&mut self, txid: Txid) {
+        self.aborting.remove(&txid);
+        self.doing.remove(&txid);
     }
 
     // hot redo failed abortion, return succeed tx count
     pub fn hot_redo_abort(&mut self, vol: &VolumeRef) -> Result<usize> {
-        let mut succeed = Vec::new();
+        let mut completed = Vec::new();
 
-        for wal in self.aborting.iter() {
+        for wal in self.aborting.values() {
             debug!("hot redo abort tx#{}", wal.txid);
             wal.clean_aborted(vol)?;
-            succeed.push(wal.clone());
+            completed.push(wal.clone());
         }
 
-        // remove all txs which are succeed to retry abort
-        for wal in succeed.iter() {
-            self.end_abort(&wal);
+        // remove all txs which are completed to retry abort
+        for wal in completed.iter() {
+            self.end_abort(wal.txid);
         }
 
-        Ok(succeed.len())
+        Ok(completed.len())
     }
 
     // cold redo failed abortion, return succeed tx count
     pub fn cold_redo_abort(&mut self, vol: &VolumeRef) -> Result<usize> {
-        let mut succeed = Vec::new();
+        let mut completed = Vec::new();
 
         for txid in &self.doing {
             debug!("cold redo abort tx#{}", txid);
             let wal_id = Wal::derive_id(*txid);
-            let wal = self.wal_armor.load_item(&wal_id)?;
-            wal.clean_aborted(vol)?;
-            succeed.push(*txid);
+            if let Ok(wal) = self.wal_armor.load_item(&wal_id) {
+                wal.clean_aborted(vol)?;
+            }
+            completed.push(*txid);
         }
 
         // remove all txs which are succeed to retry abort
-        for txid in succeed.iter() {
+        for txid in completed.iter() {
             self.doing.remove(&txid);
         }
 
-        Ok(succeed.len())
+        Ok(completed.len())
     }
 }
 
