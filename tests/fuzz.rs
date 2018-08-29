@@ -4,10 +4,10 @@ mod common;
 
 use std::error::Error as StdError;
 use std::path::Path;
+use std::sync::{Arc, RwLock};
 
-use common::controller::imp::Controller;
 use common::fuzzer::{
-    Action, ControlGroup, FileType, Fuzzer, Node, RepoHandle, Step, Testable,
+    Action, ControlGroup, FileType, Fuzzer, Node, Step, Testable,
 };
 use zbox::{Error, OpenOptions, Repo, RepoOpener, Result};
 
@@ -107,14 +107,18 @@ fn handle_rename(
 #[derive(Debug)]
 struct Tester {}
 
+impl Tester {
+    fn into_ref(self) -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(self))
+    }
+}
+
 impl Testable for Tester {
     fn test_round(
         &self,
-        repo_handle: &mut RepoHandle,
+        fuzzer: &mut Fuzzer,
         step: &Step,
         ctlgrp: &mut ControlGroup,
-        data: &[u8],
-        ctlr: &Controller,
     ) {
         let node = ctlgrp.0[step.node_idx].clone();
         //println!("=== node: {:?}, step: {:?}", node, step);
@@ -123,24 +127,25 @@ impl Testable for Tester {
             Action::New => {
                 // path for the new object
                 let path = node.path.join(&step.name);
+                //println!("new path: {:?}", path);
 
                 match step.ftype {
                     FileType::File => {
                         let result = OpenOptions::new()
                             .create_new(true)
-                            .open(&mut repo_handle.repo, &path);
+                            .open(&mut fuzzer.repo_handle.repo, &path);
 
                         if is_faulty_err!(result) {
                             // because the open() is not atomic, we have to
                             // check the file if is created in repo by
                             // turnining off random error temporarily
-                            ctlr.turn_off();
-                            if repo_handle.repo.path_exists(&path) {
+                            fuzzer.ctlr.turn_off();
+                            if fuzzer.repo_handle.repo.path_exists(&path) {
                                 // if the file is created, do the same to
-                                // control group
-                                ctlgrp.add_file(&path, &data[..0]);
+                                // control group by adding an empty file
+                                ctlgrp.add_file(&path, &fuzzer.data[..0]);
                             }
-                            ctlr.turn_on();
+                            fuzzer.ctlr.turn_on();
                             return;
                         }
 
@@ -163,14 +168,17 @@ impl Testable for Tester {
                         // otherwise, file is created then write data to file
                         // and do the same to control group
                         let mut file = result.unwrap();
+                        let data = &fuzzer.data
+                            [step.data_pos..step.data_pos + step.data_len];
                         let result = step.write_to_file(&mut file, data);
                         if !is_faulty_err!(result) {
                             ctlgrp.add_file(&path, &data[..]);
                         }
                     }
                     FileType::Dir => {
-                        let result =
-                            skip_faulty!(repo_handle.repo.create_dir(&path));
+                        let result = skip_faulty!(
+                            fuzzer.repo_handle.repo.create_dir(&path)
+                        );
 
                         // if the dir already exists, the action should fail
                         if ctlgrp.has_node(&path) {
@@ -200,12 +208,13 @@ impl Testable for Tester {
                 if node.is_file() {
                     // compare file content
                     let _ = skip_faulty!(
-                        node.compare_file_content(&mut repo_handle.repo)
+                        node.compare_file_content(&mut fuzzer.repo_handle.repo)
                     );
                 } else {
                     // compre directory
-                    let result =
-                        skip_faulty!(repo_handle.repo.read_dir(&node.path));
+                    let result = skip_faulty!(
+                        fuzzer.repo_handle.repo.read_dir(&node.path)
+                    );
                     let children = result.unwrap();
                     let mut cmp_grp: Vec<&Path> =
                         children.iter().map(|c| c.path()).collect();
@@ -219,7 +228,7 @@ impl Testable for Tester {
                 let result = skip_faulty!(
                     OpenOptions::new()
                         .write(true)
-                        .open(&mut repo_handle.repo, &node.path)
+                        .open(&mut fuzzer.repo_handle.repo, &node.path)
                 );
                 if node.is_dir() {
                     assert_eq!(result.unwrap_err(), Error::IsDir);
@@ -227,12 +236,10 @@ impl Testable for Tester {
                 }
 
                 // update file
-                let data = &data[step.data_pos..step.data_pos + step.data_len];
+                let data =
+                    &fuzzer.data[step.data_pos..step.data_pos + step.data_len];
                 let mut file = result.unwrap();
-                let result = step.write_to_file(&mut file, data);
-                if is_faulty_err!(result) {
-                    return;
-                }
+                let _result = skip_faulty!(step.write_to_file(&mut file, data));
 
                 // and do the same to to control group
                 let mut nd = ctlgrp.find_node_mut(&node.path).unwrap();
@@ -252,7 +259,7 @@ impl Testable for Tester {
                 let result = skip_faulty!(
                     OpenOptions::new()
                         .write(true)
-                        .open(&mut repo_handle.repo, &node.path)
+                        .open(&mut fuzzer.repo_handle.repo, &node.path)
                 );
                 if node.is_dir() {
                     assert_eq!(result.unwrap_err(), Error::IsDir);
@@ -280,8 +287,9 @@ impl Testable for Tester {
 
             Action::Delete => {
                 if node.is_dir() {
-                    let result =
-                        skip_faulty!(repo_handle.repo.remove_dir(&node.path));
+                    let result = skip_faulty!(
+                        fuzzer.repo_handle.repo.remove_dir(&node.path)
+                    );
                     if node.is_root() {
                         assert_eq!(result.unwrap_err(), Error::IsRoot);
                     } else {
@@ -296,8 +304,9 @@ impl Testable for Tester {
                     }
                 } else {
                     // remove file and do the same to control group
-                    let _ =
-                        skip_faulty!(repo_handle.repo.remove_file(&node.path));
+                    let _ = skip_faulty!(
+                        fuzzer.repo_handle.repo.remove_file(&node.path)
+                    );
                     ctlgrp.del(&node.path);
                 }
             }
@@ -310,8 +319,9 @@ impl Testable for Tester {
                     return;
                 }
 
-                let result =
-                    skip_faulty!(repo_handle.repo.remove_dir_all(&node.path));
+                let result = skip_faulty!(
+                    fuzzer.repo_handle.repo.remove_dir_all(&node.path)
+                );
                 if node.is_root() {
                     result.unwrap();
                     ctlgrp.0.retain(|n| n.is_root());
@@ -326,7 +336,7 @@ impl Testable for Tester {
             Action::Rename => {
                 if node.is_root() {
                     let result = skip_faulty!(
-                        repo_handle.repo.rename(&node.path, "/xxx")
+                        fuzzer.repo_handle.repo.rename(&node.path, "/xxx")
                     );
                     assert_eq!(result.unwrap_err(), Error::InvalidArgument);
                 } else {
@@ -335,7 +345,7 @@ impl Testable for Tester {
                         &new_path,
                         &node,
                         ctlgrp,
-                        &mut repo_handle.repo
+                        &mut fuzzer.repo_handle.repo
                     ));
                 }
             }
@@ -348,7 +358,7 @@ impl Testable for Tester {
                 let tgt = &ctlgrp[step.tgt_idx].clone();
                 if tgt.is_root() {
                     let result = skip_faulty!(
-                        repo_handle.repo.rename(&node.path, &tgt.path)
+                        fuzzer.repo_handle.repo.rename(&node.path, &tgt.path)
                     );
                     assert_eq!(result.unwrap_err(), Error::IsRoot);
                     return;
@@ -363,7 +373,7 @@ impl Testable for Tester {
                     &new_path,
                     &node,
                     ctlgrp,
-                    &mut repo_handle.repo
+                    &mut fuzzer.repo_handle.repo
                 ));
             }
 
@@ -377,8 +387,9 @@ impl Testable for Tester {
 
                 let tgt = &ctlgrp[step.tgt_idx].clone();
 
-                let result =
-                    skip_faulty!(repo_handle.repo.copy(&node.path, &tgt.path));
+                let result = skip_faulty!(
+                    fuzzer.repo_handle.repo.copy(&node.path, &tgt.path)
+                );
 
                 if node.is_dir() || tgt.is_dir() {
                     assert_eq!(result.unwrap_err(), Error::NotFile);
@@ -398,11 +409,11 @@ impl Testable for Tester {
             }
 
             Action::Reopen => {
-                let info = repo_handle.repo.info();
+                let info = fuzzer.repo_handle.repo.info();
                 let result = skip_faulty!(
                     RepoOpener::new().open(info.uri(), Fuzzer::PWD)
                 );
-                repo_handle.repo = result.unwrap();
+                fuzzer.repo_handle.repo = result.unwrap();
             }
         }
     }
@@ -411,8 +422,10 @@ impl Testable for Tester {
 #[test]
 //#[ignore]
 fn fuzz_test() {
-    let batches = 1;
-    let rounds = 30;
+    // increase below numbers to perform intensive fuzz test
+    let batches = 1; // number of fuzz test batches
+    let rounds = 30; // number of rounds in one batch
+    let worker_cnt = 2; // worker thread count
 
     let storage = if cfg!(feature = "storage-faulty") {
         "faulty"
@@ -422,16 +435,16 @@ fn fuzz_test() {
 
     for _ in 0..batches {
         let tester = Tester {};
-        let mut fuzzer = Fuzzer::new(storage, Box::new(tester));
-        fuzzer.run(rounds);
+        let fuzzer = Fuzzer::new(storage).into_ref();
+        Fuzzer::run(fuzzer, tester.into_ref(), rounds, worker_cnt);
     }
 }
 
-// enable this to reproduce the failed fuzz test
+// enable this to reproduce the failed fuzz test case
 #[test]
 #[ignore]
 fn fuzz_test_rerun() {
     let tester = Tester {};
-    // replace below batch number to the failed one
-    Fuzzer::rerun("1535506168", Box::new(tester));
+    // copy batch number from std output and replace it below
+    Fuzzer::rerun("1535548510", Box::new(tester));
 }

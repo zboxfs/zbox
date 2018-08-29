@@ -8,6 +8,7 @@ use std::fs;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::ops::Index;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -429,25 +430,23 @@ impl RepoHandle {
 }
 
 // fuzz tester trait
-pub trait Testable: Debug {
+pub trait Testable: Debug + Send + Sync {
     fn test_round(
         &self,
-        repo_handle: &mut RepoHandle,
+        fuzzer: &mut Fuzzer,
         step: &Step,
         ctlgrp: &mut ControlGroup,
-        data: &[u8],
-        ctlr: &Controller,
     );
 }
 
 // fuzzer
 #[derive(Debug)]
 pub struct Fuzzer {
+    pub batch: String,
     pub path: PathBuf,
     pub uri: String,
     pub repo_handle: RepoHandle,
     pub seed: crypto::RandomSeed,
-    pub tester: Box<Testable>,
     pub ctlr: Controller,
     pub data: Vec<u8>,
 }
@@ -470,19 +469,19 @@ impl Fuzzer {
     const RND_DATA_LEN: usize = 2 * 1024 * 1024;
     const DATA_LEN: usize = 2 * Self::RND_DATA_LEN;
 
-    pub fn new(storage_type: &str, tester: Box<Testable>) -> Self {
+    pub fn new(storage_type: &str) -> Self {
         init_env();
 
         // create fuzz test dir
         let base = PathBuf::from(Self::BASE);
-        let tm = format!(
+        let batch = format!(
             "{}",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs()
         );
-        let path = base.join(&tm);
+        let path = base.join(&batch);
         fs::create_dir_all(&path).unwrap();
 
         // open repo
@@ -497,11 +496,11 @@ impl Fuzzer {
 
         // create test environment
         let mut ret = Fuzzer {
+            batch,
             path,
             uri,
             repo_handle: RepoHandle::new(repo),
             seed: crypto::RandomSeed::new(),
-            tester,
             ctlr: Controller::new(),
             data: vec![0; Self::DATA_LEN],
         };
@@ -510,6 +509,10 @@ impl Fuzzer {
         ret.init();
 
         ret
+    }
+
+    pub fn into_ref(self) -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(self))
     }
 
     // get storage type from URI
@@ -575,11 +578,11 @@ impl Fuzzer {
     }
 
     // load fuzz test
-    fn load(batch_id: &str, tester: Box<Testable>) -> Self {
+    fn load(batch: &str) -> Self {
         init_env();
 
         let base = PathBuf::from(Self::BASE);
-        let base = base.join(batch_id);
+        let base = base.join(batch);
 
         // load storage file
         let mut buf = Vec::new();
@@ -637,56 +640,93 @@ impl Fuzzer {
         println!("Fuzz test loaded {:?}.", base);
 
         Fuzzer {
+            batch: batch.to_string(),
             path: base,
             uri: uri.clone(),
             repo_handle: RepoHandle::new(repo),
             seed,
-            tester,
             ctlr: Controller::new(),
             data,
         }
     }
 
     // run the fuzz test
-    pub fn run(&mut self, rounds: usize) {
+    pub fn run(
+        fuzzer: Arc<RwLock<Fuzzer>>,
+        tester: Arc<RwLock<Testable>>,
+        rounds: usize,
+        worker_cnt: usize,
+    ) {
         // create control group
-        let mut ctlgrp = ControlGroup::new();
+        let ctlgrp = Arc::new(RwLock::new(ControlGroup::new()));
 
-        let curr = thread::current();
-        let worker = curr.name().unwrap();
-        println!("[{}]: Start fuzz test, rounds {}...", worker, rounds);
+        {
+            let fuzzer = fuzzer.read().unwrap();
 
-        // reset random error controller and turn it on
-        self.ctlr.reset(&self.seed);
-        self.ctlr.turn_on();
+            println!(
+                "Start fuzz test, batch {}, {} rounds, {} worker.",
+                fuzzer.batch, rounds, worker_cnt
+            );
+
+            // reset random error controller and turn it on
+            fuzzer.ctlr.reset(&fuzzer.seed);
+            fuzzer.ctlr.turn_on();
+        }
 
         // start fuzz rounds
         // ------------------
-        for round in 0..rounds {
-            let step = Step::new_random(round, &ctlgrp, &self.data);
-            step.save(&self.path);
-            self.tester.test_round(
-                &mut self.repo_handle,
-                &step,
-                &mut ctlgrp,
-                &self.data,
-                &self.ctlr,
+        let mut workers = Vec::new();
+        for i in 0..worker_cnt {
+            let fuzzer = fuzzer.clone();
+            let tester = tester.clone();
+            let ctlgrp = ctlgrp.clone();
+            let name = format!("worker-{}", i);
+            let builder = thread::Builder::new().name(name);
+
+            workers.push(
+                builder
+                    .spawn(move || {
+                        let curr = thread::current();
+                        let worker = curr.name().unwrap();
+
+                        println!("[{}]: Started.", worker);
+                        for round in 0..rounds {
+                            let mut fuzzer = fuzzer.write().unwrap();
+                            let tester = tester.read().unwrap();
+                            let mut ctlgrp = ctlgrp.write().unwrap();
+                            let step =
+                                Step::new_random(round, &ctlgrp, &fuzzer.data);
+                            step.save(&fuzzer.path);
+                            tester.test_round(&mut fuzzer, &step, &mut ctlgrp);
+                            if round % 10 == 0 {
+                                println!(
+                                    "[{}]: {}/{}...",
+                                    worker, round, rounds
+                                );
+                            }
+                        }
+                        println!("[{}]: Finished.", worker);
+                    })
+                    .unwrap(),
             );
-            if round % 10 == 0 {
-                println!("[{}]: {}/{}...", worker, round, rounds);
-            }
         }
-        println!("[{}]: Finished.", worker);
+        for w in workers {
+            w.join().unwrap();
+        }
 
         // verify
         // ------------------
-        self.verify(&mut ctlgrp);
+        {
+            let mut fuzzer = fuzzer.write().unwrap();
+            let mut ctlgrp = ctlgrp.write().unwrap();
+            fuzzer.verify(&mut ctlgrp);
+        }
     }
 
     // load fuzz test and re-run it
-    pub fn rerun(batch_id: &str, tester: Box<Testable>) {
+    pub fn rerun(batch: &str, tester: Box<Testable>) {
         // load fuzzer
-        let mut fuzzer = Fuzzer::load(batch_id, tester);
+        let mut fuzzer = Fuzzer::load(batch);
 
         // load test steps
         let steps = Step::load_all(&fuzzer.path);
@@ -697,7 +737,10 @@ impl Fuzzer {
 
         let curr = thread::current();
         let worker = curr.name().unwrap();
-        println!("[{}]: Start fuzz test, rounds {}...", worker, rounds);
+        println!(
+            "[{}]: Rerun fuzz test, batch {}, {} rounds.",
+            worker, fuzzer.batch, rounds
+        );
 
         // reset random error controller and turn it on
         fuzzer.ctlr.reset(&fuzzer.seed);
@@ -707,13 +750,7 @@ impl Fuzzer {
         // ------------------
         for round in 0..rounds {
             let step = &steps[round];
-            fuzzer.tester.test_round(
-                &mut fuzzer.repo_handle,
-                &step,
-                &mut ctlgrp,
-                &fuzzer.data,
-                &fuzzer.ctlr,
-            );
+            tester.test_round(&mut fuzzer, &step, &mut ctlgrp);
             if round % 10 == 0 {
                 println!("[{}]: {}/{}...", worker, round, rounds);
             }
