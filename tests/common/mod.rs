@@ -16,6 +16,7 @@ pub struct TestEnv {
 }
 
 impl TestEnv {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         init_env();
         let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");

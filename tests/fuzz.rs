@@ -427,9 +427,11 @@ fn fuzz_test() {
     }
 }
 
+// enable this to reproduce the failed fuzz test
 #[test]
 #[ignore]
 fn fuzz_test_rerun() {
     let tester = Tester {};
+    // replace below batch number to the failed one
     Fuzzer::rerun("1535506168", Box::new(tester));
 }

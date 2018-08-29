@@ -95,44 +95,36 @@ cargo test --doc
 
 ### Run fuzz test
 
-Zbox contains three fuzz test cases, which can be enabled by turning on the
-feature `fuzz-test`. To run those tests, you can run below commands from `zbox`
-directory.
+Zbox contains fuzz test, which is included in the integration test suite.
+To save test time, the default number of fuzz test iteration is very low.
+You can increase the number of batch and round by modifing the
+[fuzz.rs](src/tests/fuzz.rs) file to perform intensive fuzz test.
 
-1. Run fuzz test for file system.
+The fuzz test will save test cases in `fuzz_test` folder under current
+directory. Each fuzz test batch will be assigned a unique number which will be
+shown on screen during the test. In case of failure, you can use that number to
+reproduce the failed test case. Please check more details in the
+[fuzz.rs](src/tests/fuzz.rs) file.
 
-   ```bash
-   cargo test --tests fuzz_fs --features fuzz-test
-   ```
+Run the fuzz test separately:
 
-2. Run fuzz test for file read and write
+ ```bash
+ cargo test --tests fuzz_test -- --nocapture
+ ```
 
-   ```bash
-   cargo test --tests fuzz_file --features fuzz-test
-   ```
+### Run random IO error test
 
-3. Run fuzz test for directory.
-
-   ```bash
-   cargo test --tests fuzz_dir --features fuzz-test
-   ```
-
-### Run random IO failure test
-
-For file storage test, we need to simulate many IO failure scenerios which is
+For file system test, we need to simulate many IO error scenerios which is
 hard because OS file system IO errors are very rare. To solve this problem,
-like what sqlite did, Zbox uses a virtual IO (vio) layer to access underling
-file system. Vio is a zero-cost wrapper of the underling file system API. That
-makes simulating random IO errors easy.
+Zbox uses a special storage `faulty` to simulate random IO errors. This storage
+is based on memory storage, but can generate random IO error deterministically.
+The generator can be switched on and off on the fly, and the error probability
+is also adjustable.
 
-By default, vio is turned off and it is just a synonym of the underling file
-system. To test the random IO errors, we need to enable vio first by turning on
-the feature `vio-test`.
-
-Run file storage random IO failure test:
+Run random IO error test, we need to turn on `storage-faulty` feature:
 
 ```bash
-cargo test --lib random_io_failure --features vio-test
+cargo test --tests fuzz_test --features storage-faulty -- --nocapture
 ```
 
 ### Run performance test

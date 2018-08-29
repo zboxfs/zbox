@@ -35,13 +35,12 @@ Features
 - Support multiple storages, including memory, OS file system, RDBMS (coming
   soon), Key-value object store (coming soon) and more
 - Content-based data chunk deduplication and file-based deduplication
-- Data compression using [LZ4] in fast mode
+- Data compression using [LZ4] in fast mode, optional
 - Data integrity is guaranteed by authenticated encryption primitives (AEAD
   crypto)
 - File contents versioning
 - Copy-on-write (COW :cow:) semantics
 - ACID transactional operations
-- Snapshot :camera:
 - Built with [Rust] :hearts:
 
 ## Comparison
@@ -152,11 +151,13 @@ docker build --force-rm -t zbox ./
 
 After the Docker image is built, we can use it to build Zbox.
 ```bash
+cargo clean
 docker run --rm -v $PWD:/zbox zbox cargo build
 ```
 
 Or run the test suite.
 ```bash
+cargo clean
 docker run --rm -v $PWD:/zbox zbox cargo test
 ```
 
