@@ -52,7 +52,7 @@ pub(super) struct Body {
     pub ver: Version,
     pub key: Key,
     pub uri: String,
-    pub compression: bool,
+    pub compress: bool,
     pub ctime: Time,
     pub mtime: Time,
     pub payload: Vec<u8>,

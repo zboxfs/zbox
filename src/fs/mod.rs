@@ -18,7 +18,7 @@ pub struct Config {
     pub cost: Cost,
     pub cipher: Cipher,
     pub version_limit: u8,
-    pub compression: bool,
+    pub compress: bool,
 }
 
 impl Default for Config {
@@ -31,7 +31,7 @@ impl Default for Config {
                 Cipher::Xchacha
             },
             version_limit: Fnode::DEFAULT_VERSION_LIMIT,
-            compression: false,
+            compress: false,
         }
     }
 }

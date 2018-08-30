@@ -24,7 +24,7 @@ pub struct Info {
     pub id: Eid,
     pub ver: Version,
     pub uri: String,
-    pub compression: bool,
+    pub compress: bool,
     pub cost: Cost,
     pub cipher: Cipher,
     pub ctime: Time,
@@ -61,7 +61,7 @@ impl Volume {
         // initialise info
         self.info.id = Eid::new();
         self.info.ver = Version::current();
-        self.info.compression = cfg.compression;
+        self.info.compress = cfg.compress;
         self.info.cost = cfg.cost;
         self.info.cipher = cfg.cipher;
         self.info.ctime = Time::now();
@@ -75,7 +75,7 @@ impl Volume {
         super_blk.body.ver = self.info.ver.clone();
         super_blk.body.key = storage.crypto_ctx().1.clone();
         super_blk.body.uri = self.info.uri.clone();
-        super_blk.body.compression = cfg.compression;
+        super_blk.body.compress = cfg.compress;
         super_blk.body.ctime = self.info.ctime;
         super_blk.body.payload = payload.to_vec();
 
@@ -111,7 +111,7 @@ impl Volume {
         // set up info
         self.info.id = super_blk.body.volume_id.clone();
         self.info.ver = super_blk.body.ver;
-        self.info.compression = super_blk.body.compression;
+        self.info.compress = super_blk.body.compress;
         self.info.cost = super_blk.head.cost;
         self.info.cipher = super_blk.head.cipher;
         self.info.ctime = super_blk.body.ctime;
@@ -192,7 +192,7 @@ impl Reader {
     pub fn new(id: &Eid, vol: &VolumeRef) -> Result<Self> {
         let vol = vol.read().unwrap();
         let rdr = StorageReader::new(id, &vol.storage)?;
-        if vol.info.compression {
+        if vol.info.compress {
             Ok(Reader {
                 inner: Box::new(Lz4Decoder::new(rdr).unwrap()),
             })
@@ -232,7 +232,7 @@ impl Writer {
     pub fn new(id: &Eid, vol: &VolumeRef) -> Result<Self> {
         let vol = vol.read().unwrap();
         let wtr = StorageWriter::new(id, &vol.storage);
-        let inner = if vol.info.compression {
+        let inner = if vol.info.compress {
             let comp = Lz4EncoderBuilder::new()
                 .level(0)
                 .auto_flush(true)

@@ -142,8 +142,8 @@ impl RepoOpener {
     ///
     /// This options indicates whether the LZ4 compression should be used in
     /// the repository. Default is false.
-    pub fn compression(&mut self, compression: bool) -> &mut Self {
-        self.cfg.compression = compression;
+    pub fn compress(&mut self, compress: bool) -> &mut Self {
+        self.cfg.compress = compress;
         self
     }
 

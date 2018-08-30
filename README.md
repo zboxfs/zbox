@@ -201,16 +201,18 @@ The performance test is run on a Macbook Pro 2017 laptop with spec as below.
 | L2 Cache (per Core):    | 256 KB                      |
 | L3 Cache:               | 4 MB                        |
 | Memory:                 | 16 GB                       |
-| OS Version:             | macOS High Sierra 10.13.3   |
+| OS Version:             | macOS High Sierra 10.13.6   |
 
 Test result:
 
-|                     | Read            | Write          |
-| ------------------- | --------------- | -------------- |
-| Baseline (memcpy):  | 3798.30 MB/s    | 3798.30 MB/s   |
-| Baseline (file):    | 923.04 MB/s     | 2373.33 MB/s   |
-| Memory storage:     | 343.65 MB/s     | 163.11 MB/s    |
-| File storage:       | 167.21 MB/s     | 130.37 MB/s    |
+|                               | Read            | Write          | TPS          |
+| ----------------------------- | --------------- | -------------- | ------------ |
+| Baseline (memcpy):            | 3658.23 MB/s    | 3658.23 MB/s   | N/A          |
+| Baseline (file):              | 1307.97 MB/s    | 2206.30 MB/s   | N/A          |
+| Memory storage (no compress): | 605.01 MB/s     | 186.20 MB/s    | 267 tx/s     |
+| Memory storage (compress):    | 505.04 MB/s     | 161.11 MB/s    | 263 tx/s     |
+| File storage (no compress):   | 435.66 MB/s     | 147.44 MB/s    | 117 tx/s     |
+| File storage (compress):      | 372.60 MB/s     | 124.92 MB/s    | 106 tx/s     |
 
 To run the performance test on your own computer, please follow the
 instructions in [CONTRIBUTING.md](CONTRIBUTING.md#run-performance-test).
