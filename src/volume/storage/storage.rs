@@ -287,49 +287,6 @@ impl Reader {
         Ok(rdr)
     }
 
-    // read a frame, decrypt and save it to storage frame cache
-    // if it is not too big
-    fn read_frame(&mut self) -> Result<()> {
-        let mut storage = self.storage.write().unwrap();
-
-        // if decrypted frame hasn't been exhausted yet or
-        // frame is already in the frame cache
-        if self.dec_frame_len > 0
-            || storage.frame_cache.contains_key(&self.frm_key)
-        {
-            return Ok(());
-        }
-
-        // read a frame from depot
-        let mut read = 0;
-        for span in self.addrs[self.frm_idx].iter() {
-            let read_len = span.block_len();
-            storage.depot.get_blocks(
-                &mut self.frame[read..read + read_len],
-                span.begin,
-                span.block_count(),
-            )?;
-            read += read_len;
-        }
-
-        // decrypt frame
-        self.dec_frame_len = storage.crypto.decrypt_to(
-            &mut self.dec_frame,
-            &self.frame[..self.addrs[self.frm_idx].len],
-            &storage.key,
-        )?;
-
-        // and then add the decrypted frame to cache if it is not too big
-        if self.ent_len < Storage::FRAME_CACHE_THRESHOLD {
-            storage.frame_cache.insert(
-                self.frm_key,
-                self.dec_frame[..self.dec_frame_len].to_vec(),
-            );
-        }
-
-        Ok(())
-    }
-
     // copy data out from decrypte frame to destination
     // return copied bytes length and flag if frame is exhausted
     fn copy_frame_out(
@@ -351,19 +308,57 @@ impl Read for Reader {
             return Ok(0);
         }
 
-        // read frame into frame cache
-        self.read_frame().map_err(|err| {
-            if err == Error::NotFound {
-                IoError::new(ErrorKind::NotFound, "Blocks not found")
-            } else {
-                IoError::new(ErrorKind::Other, err.description())
+        let mut storage = self.storage.write().unwrap();
+
+        // if decrypted frame has been exhausted and the
+        // frame is not in the frame cache, read it from underlying depot
+        // and save to cache if it is necessary
+        if self.dec_frame_len == 0
+            && !storage.frame_cache.contains_key(&self.frm_key)
+        {
+            // read a frame from depot
+            let mut read = 0;
+            for span in self.addrs[self.frm_idx].iter() {
+                let read_len = span.block_len();
+                storage
+                    .depot
+                    .get_blocks(
+                        &mut self.frame[read..read + read_len],
+                        span.begin,
+                        span.block_count(),
+                    )
+                    .map_err(|err| {
+                        if err == Error::NotFound {
+                            IoError::new(
+                                ErrorKind::NotFound,
+                                "Blocks not found",
+                            )
+                        } else {
+                            IoError::new(ErrorKind::Other, err.description())
+                        }
+                    })?;
+                read += read_len;
             }
-        })?;
+
+            // decrypt frame
+            self.dec_frame_len = map_io_err!(storage.crypto.decrypt_to(
+                &mut self.dec_frame,
+                &self.frame[..self.addrs[self.frm_idx].len],
+                &storage.key,
+            ))?;
+
+            // and then add the decrypted frame to cache if it is not too big
+            if self.ent_len < Storage::FRAME_CACHE_THRESHOLD {
+                storage.frame_cache.insert(
+                    self.frm_key,
+                    self.dec_frame[..self.dec_frame_len].to_vec(),
+                );
+            }
+        }
 
         // copy decryped frame out to destination
         let (copy_len, frm_is_exhausted) =
             if self.ent_len < Storage::FRAME_CACHE_THRESHOLD {
-                let mut storage = self.storage.write().unwrap();
                 let dec_frame =
                     storage.frame_cache.get_refresh(&self.frm_key).unwrap();
                 self.copy_frame_out(buf, dec_frame)
@@ -504,9 +499,9 @@ impl Finish for Writer {
 mod tests {
     extern crate tempdir;
 
-    use std::time::Instant;
-    use std::fs;
     use std::env;
+    use std::fs;
+    use std::time::Instant;
 
     use self::tempdir::TempDir;
     use super::*;
