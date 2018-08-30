@@ -4,7 +4,8 @@ extern crate zbox;
 
 mod common;
 
-use rand::{Rng, XorShiftRng};
+use rand::prng::XorShiftRng;
+use rand::{RngCore, SeedableRng};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -549,7 +550,7 @@ fn file_shrink() {
     let mut env = common::TestEnv::new();
     let mut repo = &mut env.repo;
 
-    let mut rng = XorShiftRng::new_unseeded();
+    let mut rng = XorShiftRng::from_seed([42u8; 16]);
     let mut buf = vec![0; 16 * 1024 * 1024];
     rng.fill_bytes(&mut buf);
 

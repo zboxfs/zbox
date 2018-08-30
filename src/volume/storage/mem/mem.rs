@@ -135,7 +135,7 @@ mod tests {
     use base::utils::speed_str;
 
     #[test]
-    fn perf_test() {
+    fn test_perf() {
         init_env();
 
         const DATA_LEN: usize = 16 * 1024 * 1024;
@@ -157,7 +157,7 @@ mod tests {
         let read_time = now.elapsed();
 
         println!(
-            "Memory storage perf: read: {}, write: {}",
+            "Memory storage (depot) perf: read: {}, write: {}",
             speed_str(&read_time, DATA_LEN),
             speed_str(&write_time, DATA_LEN)
         );

@@ -352,18 +352,13 @@ impl Read for Reader {
         }
 
         // read frame into frame cache
-        match self.read_frame() {
-            Ok(_) => {}
-            Err(ref err) if *err == Error::NotFound => {
-                return Err(IoError::new(
-                    ErrorKind::NotFound,
-                    "Blocks not found",
-                ))
+        self.read_frame().map_err(|err| {
+            if err == Error::NotFound {
+                IoError::new(ErrorKind::NotFound, "Blocks not found")
+            } else {
+                IoError::new(ErrorKind::Other, err.description())
             }
-            Err(err) => {
-                return Err(IoError::new(ErrorKind::Other, err.description()))
-            }
-        }
+        })?;
 
         // copy decryped frame out to destination
         let (copy_len, frm_is_exhausted) =
@@ -510,6 +505,8 @@ mod tests {
     extern crate tempdir;
 
     use std::time::Instant;
+    use std::fs;
+    use std::env;
 
     use self::tempdir::TempDir;
     use super::*;
@@ -730,7 +727,8 @@ mod tests {
         let now = Instant::now();
         let mut rdr = Reader::new(&id, storage).unwrap();
         let mut dst = Vec::new();
-        rdr.read_to_end(&mut dst).unwrap();
+        let read = rdr.read_to_end(&mut dst).unwrap();
+        assert_eq!(read, buf.len());
         let read_time = now.elapsed();
 
         println!(
@@ -742,7 +740,7 @@ mod tests {
     }
 
     #[test]
-    fn mem_perf_test() {
+    fn mem_perf() {
         init_env();
         let mut storage = Storage::new("mem://foo").unwrap();
         storage.init(Cost::default(), Cipher::default()).unwrap();
@@ -751,7 +749,7 @@ mod tests {
     }
 
     #[test]
-    fn file_perf_test() {
+    fn file_perf() {
         init_env();
         let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
         let uri = format!("file://{}", tmpdir.path().display());
@@ -759,5 +757,64 @@ mod tests {
         storage.init(Cost::default(), Cipher::default()).unwrap();
         let storage = storage.into_ref();
         perf_test(&storage, "File storage");
+    }
+
+    #[test]
+    #[ignore]
+    fn crypto_perf_test() {
+        init_env();
+
+        let mut dir = env::temp_dir();
+        dir.push("zbox_crypto_perf_test");
+        if dir.exists() {
+            fs::remove_dir_all(&dir).unwrap();
+        }
+        fs::create_dir(&dir).unwrap();
+
+        let crypto = Crypto::new(Cost::default(), Cipher::Aes).unwrap();
+        let key = Key::new();
+        let mut depot = FileStorage::new(&dir);
+        depot.init(crypto.clone(), key.derive(0)).unwrap();
+
+        const DATA_LEN: usize = 32 * 1024 * 1024;
+        let chunk_size = crypto.decrypted_len(FRAME_SIZE);
+        let data_size = DATA_LEN / FRAME_SIZE * chunk_size;
+        let mut data = vec![0u8; data_size];
+        let seed = RandomSeed::from(&[0u8; RANDOM_SEED_SIZE]);
+        Crypto::random_buf_deterministic(&mut data, &seed);
+
+        // write
+        let mut buf = vec![0u8; FRAME_SIZE];
+        let mut blk_cnt = 0;
+        let now = Instant::now();
+        for frame in data.chunks(chunk_size) {
+            let _enc_len = crypto.encrypt_to(&mut buf, frame, &key).unwrap();
+            depot.put_blocks(blk_cnt, BLKS_PER_FRAME, &buf).unwrap();
+            blk_cnt += BLKS_PER_FRAME as u64;
+        }
+        let write_time = now.elapsed();
+
+        // read
+        let mut dst = vec![0u8; chunk_size];
+        let now = Instant::now();
+        for frm_idx in 0..blk_cnt / BLKS_PER_FRAME as u64 {
+            depot
+                .get_blocks(
+                    &mut buf,
+                    frm_idx * BLKS_PER_FRAME as u64,
+                    BLKS_PER_FRAME,
+                )
+                .unwrap();
+            crypto.decrypt_to(&mut dst, &buf, &key).unwrap();
+        }
+        let read_time = now.elapsed();
+
+        println!(
+            "Raw crypto + file storage perf: read: {}, write: {}",
+            speed_str(&read_time, DATA_LEN),
+            speed_str(&write_time, DATA_LEN)
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -136,7 +136,7 @@ will not be accurate.
 Run performance test:
 
 ```bash
-cargo test --tests perf --release --features perf-test -- --nocapture
+cargo test --tests perf_test --release --features perf-test -- --nocapture
 ```
 
 ## Code of Conduct

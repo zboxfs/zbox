@@ -6,17 +6,18 @@ extern crate zbox;
 
 use std::env;
 use std::fs;
-use std::io::{self, Read, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::ptr;
 use std::time::{Duration, Instant};
 
-use rand::{Rng, SeedableRng, XorShiftRng};
+use rand::prng::XorShiftRng;
+use rand::{RngCore, SeedableRng};
 use zbox::{init_env, File, OpenOptions, Repo, RepoOpener};
 
 const DATA_LEN: usize = 60 * 1024 * 1024;
-const ROUND: usize = 3;
 const FILE_LEN: usize = DATA_LEN / ROUND;
+const ROUND: usize = 3;
 
 #[inline]
 fn time_str(duration: &Duration) -> String {
@@ -39,52 +40,16 @@ fn print_result(read_time: &Duration, write_time: &Duration) {
 }
 
 fn make_test_data() -> Vec<u8> {
-    print!("\nMaking {}MB test data...", DATA_LEN / 1024 / 1024);
+    print!(
+        "\nMaking {} MB pseudo random test data...",
+        DATA_LEN / 1024 / 1024
+    );
     io::stdout().flush().unwrap();
     let mut buf = vec![0u8; DATA_LEN];
-    let mut rng = XorShiftRng::from_seed([42u32; 4]);
+    let mut rng = XorShiftRng::from_seed([42u8; 16]);
     rng.fill_bytes(&mut buf);
     println!("done\n");
     buf
-}
-
-fn make_files(repo: &mut Repo) -> Vec<File> {
-    let mut files: Vec<File> = Vec::new();
-    for i in 0..ROUND {
-        let filename = format!("/file_{}", i);
-        let file = OpenOptions::new()
-            .create(true)
-            .open(repo, filename)
-            .unwrap();
-        files.push(file);
-    }
-    files
-}
-
-fn test_perf(files: &mut Vec<File>, data: &[u8]) {
-    print!("Writing data to file...");
-    io::stdout().flush().unwrap();
-    let now = Instant::now();
-    for i in 0..ROUND {
-        files[i]
-            .write_once(&data[i * FILE_LEN..(i + 1) * FILE_LEN])
-            .unwrap();
-    }
-    let write_time = now.elapsed();
-    println!("done");
-
-    print!("Reading data from file...");
-    io::stdout().flush().unwrap();
-    let mut buf = vec![0u8; FILE_LEN];
-    let now = Instant::now();
-    for i in 0..ROUND {
-        files[i].read_to_end(&mut buf).unwrap();
-    }
-    let read_time = now.elapsed();
-    println!("done");
-
-    print_result(&read_time, &write_time);
-    println!();
 }
 
 fn test_baseline(data: &Vec<u8>, dir: &Path) {
@@ -133,6 +98,47 @@ fn test_baseline(data: &Vec<u8>, dir: &Path) {
     println!();
 }
 
+fn make_files(repo: &mut Repo) -> Vec<File> {
+    let mut files: Vec<File> = Vec::new();
+    for i in 0..ROUND {
+        let filename = format!("/file_{}", i);
+        let file = OpenOptions::new()
+            .create(true)
+            .open(repo, filename)
+            .unwrap();
+        files.push(file);
+    }
+    files
+}
+
+fn test_perf(files: &mut Vec<File>, data: &[u8]) {
+    print!("Writing data to files...");
+    io::stdout().flush().unwrap();
+
+    let now = Instant::now();
+    for i in 0..ROUND {
+        let data = &data[i * FILE_LEN..(i + 1) * FILE_LEN];
+        files[i].write_once(&data[..]).unwrap();
+    }
+    let write_time = now.elapsed();
+    println!("done");
+
+    print!("Reading data from files...");
+    io::stdout().flush().unwrap();
+    let mut buf = Vec::new();
+    let now = Instant::now();
+    for i in 0..ROUND {
+        files[i].seek(SeekFrom::Start(0)).unwrap();
+        let read = files[i].read_to_end(&mut buf).unwrap();
+        assert_eq!(read, FILE_LEN);
+    }
+    let read_time = now.elapsed();
+    println!("done");
+
+    print_result(&read_time, &write_time);
+    println!();
+}
+
 fn test_mem_perf(data: &[u8]) {
     println!("----------------------------------");
     println!("Memory storage performance test");
@@ -167,6 +173,9 @@ fn perf_test() {
 
     let mut dir = env::temp_dir();
     dir.push("zbox_perf_test");
+    if dir.exists() {
+        fs::remove_dir_all(&dir).unwrap();
+    }
     fs::create_dir(&dir).unwrap();
 
     let data = make_test_data();

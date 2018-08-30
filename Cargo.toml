@@ -44,7 +44,7 @@ features = ["serde_impl"]
 
 [dev-dependencies]
 tempdir = "0.3.7"
-rand = "0.4.1"
+rand = "0.5"
 
 [build-dependencies]
 pkg-config = "0.3.11"

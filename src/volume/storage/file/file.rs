@@ -304,7 +304,7 @@ mod tests {
     }
 
     #[test]
-    fn perf_test() {
+    fn test_perf() {
         let (dir, _tmpdir) = setup();
         let mut fs = FileStorage::new(&dir);
         fs.init(Crypto::default(), Key::new_empty()).unwrap();
@@ -326,7 +326,7 @@ mod tests {
         let read_time = now.elapsed();
 
         println!(
-            "File storage perf: read: {}, write: {}",
+            "File storage (depot) perf: read: {}, write: {}",
             speed_str(&read_time, DATA_LEN),
             speed_str(&write_time, DATA_LEN)
         );

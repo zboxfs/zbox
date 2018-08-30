@@ -425,13 +425,13 @@ mod tests {
     }
 
     #[test]
-    fn mem_perf_test() {
+    fn mem_perf() {
         let vol = setup_mem_vol();
         perf_test(vol, "Memory volume");
     }
 
     #[test]
-    fn file_perf_test() {
+    fn file_perf() {
         let (vol, _tmpdir) = setup_file_vol("pwd", &Vec::new());
         perf_test(vol, "File volume");
     }
