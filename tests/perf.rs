@@ -42,7 +42,11 @@ fn tps_str(duration: &Duration) -> String {
     format!("{:.0} tx/s", speed)
 }
 
-fn print_result(read_time: &Duration, write_time: &Duration, tx_time: &Duration) {
+fn print_result(
+    read_time: &Duration,
+    write_time: &Duration,
+    tx_time: &Duration,
+) {
     println!(
         "read: {}, write: {}, tps: {}",
         speed_str(&read_time),

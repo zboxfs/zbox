@@ -60,7 +60,11 @@ impl Content {
     }
 
     /// Write into content with another content
-    pub fn merge_from(&mut self, other: &Content, store: &StoreRef) -> Result<()> {
+    pub fn merge_from(
+        &mut self,
+        other: &Content,
+        store: &StoreRef,
+    ) -> Result<()> {
         // write other content into self
         {
             let store = store.read().unwrap();
@@ -92,23 +96,32 @@ impl Content {
         Ok(())
     }
 
+    // build reference between content and segment
     #[inline]
     pub fn link(&self, store: &StoreRef) -> Result<()> {
         let mut store = store.write().unwrap();
         self.ents.link(&mut store)
     }
 
-    pub fn unlink(&self, chk_map: &mut ChunkMap, store: &StoreRef) -> Result<()> {
+    // remove reference between content and segment
+    #[inline]
+    pub fn unlink(
+        &self,
+        chk_map: &mut ChunkMap,
+        store: &StoreRef,
+    ) -> Result<()> {
         let mut store = store.write().unwrap();
-
-        // unlink entries
         self.ents.unlink(chk_map, store.make_mut()?)
     }
 
-    pub fn unlink_weak(&self, chk_map: &mut ChunkMap, store: &StoreRef) -> Result<()> {
+    // remove weak reference between content and segment
+    #[inline]
+    pub fn unlink_weak(
+        &self,
+        chk_map: &mut ChunkMap,
+        store: &StoreRef,
+    ) -> Result<()> {
         let mut store = store.write().unwrap();
-
-        // unlink entries
         self.ents.unlink_weak(chk_map, store.make_mut()?)
     }
 }
@@ -314,7 +327,7 @@ impl Write for Writer {
             // create weak reference to chunk and append it to content,
             // strong reference will be built later when the stage content
             // is finished and deduped
-            let mut ref_seg = rseg.write().unwrap();
+            let ref_seg = rseg.write().unwrap();
             let chunk = &ref_seg[loc.idx];
             let span = Span::new(
                 loc.idx,
@@ -325,7 +338,6 @@ impl Write for Writer {
             );
             self.ctn.append(&loc.seg_id, &span);
             assert_eq!(chunk_len, chunk.len);
-
         } else {
             // no duplication found, then append chunk to content
             self.append_chunk(chunk, &hash)?;

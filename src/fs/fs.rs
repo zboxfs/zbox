@@ -2,13 +2,14 @@ use std::io;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
-use bytes::BufMut;
+use rmp_serde::{Deserializer, Serializer};
+use serde::{Deserialize, Serialize};
 
 use super::fnode::{
     Cache as FnodeCache, DirEntry, FileType, Fnode, FnodeRef, Metadata,
     Reader as FnodeReader, Version, Writer as FnodeWriter,
 };
-use super::{Config, Handle};
+use super::{Config, Handle, Options};
 use base::crypto::Cost;
 use base::IntoRef;
 use content::{Store, StoreRef};
@@ -17,15 +18,12 @@ use trans::cow::IntoCow;
 use trans::{Eid, Finish, Id, TxMgr, TxMgrRef};
 use volume::{Info as VolumeInfo, Volume, VolumeRef};
 
-// default cache size
-const FNODE_CACHE_SIZE: usize = 16;
-
-/// File system metadata
+/// File system information
 #[derive(Debug)]
-pub struct Meta {
-    pub version_limit: u8,
-    pub read_only: bool,
+pub struct Info {
+    pub opts: Options,
     pub vol_info: VolumeInfo,
+    pub read_only: bool,
 }
 
 /// Shutter
@@ -52,6 +50,43 @@ impl IntoRef for Shutter {}
 
 pub type ShutterRef = Arc<RwLock<Shutter>>;
 
+/// Super block payload
+#[derive(Debug, Deserialize, Serialize)]
+struct Payload {
+    root_id: Eid,
+    walq_id: Eid,
+    store_id: Eid,
+    opts: Options,
+}
+
+impl Payload {
+    fn new(
+        root_id: &Eid,
+        walq_id: &Eid,
+        store_id: &Eid,
+        opts: Options,
+    ) -> Self {
+        Payload {
+            root_id: root_id.clone(),
+            walq_id: walq_id.clone(),
+            store_id: store_id.clone(),
+            opts,
+        }
+    }
+
+    fn seri(&self) -> Result<Vec<u8>> {
+        let mut buf = Vec::new();
+        self.serialize(&mut Serializer::new(&mut buf))?;
+        Ok(buf)
+    }
+
+    fn deseri(buf: &[u8]) -> Result<Self> {
+        let mut de = Deserializer::new(&buf[..]);
+        let ret: Self = Deserialize::deserialize(&mut de)?;
+        Ok(ret)
+    }
+}
+
 /// File system
 #[derive(Debug)]
 pub struct Fs {
@@ -61,11 +96,14 @@ pub struct Fs {
     txmgr: TxMgrRef,
     vol: VolumeRef,
     shutter: ShutterRef,
-    version_limit: u8,
+    opts: Options,
     read_only: bool,
 }
 
 impl Fs {
+    // default cache size
+    const FNODE_CACHE_SIZE: usize = 16;
+
     /// Check if fs exists
     pub fn exists(uri: &str) -> Result<bool> {
         let vol = Volume::new(uri)?;
@@ -79,23 +117,17 @@ impl Fs {
         let root_id = Eid::new();
         let walq_id = Eid::new();
         let store_id = Eid::new();
-
-        // super block payload: root_id + wqlq_id + store_id + version_limit
-        let mut payload = Vec::new();
-        payload.put(root_id.as_ref());
-        payload.put(walq_id.as_ref());
-        payload.put(store_id.as_ref());
-        payload.put(cfg.version_limit);
+        let payload = Payload::new(&root_id, &walq_id, &store_id, cfg.opts);
 
         // create and initialise volume
         let mut vol = Volume::new(uri)?;
-        vol.init(pwd, cfg, &payload)?;
+        vol.init(pwd, cfg, &payload.seri()?)?;
 
         let vol = vol.into_ref();
 
         // create tx manager and fnode cache
         let txmgr = TxMgr::new(&walq_id, &vol).into_ref();
-        let fcache = FnodeCache::new(FNODE_CACHE_SIZE, &txmgr);
+        let fcache = FnodeCache::new(Self::FNODE_CACHE_SIZE, &txmgr);
 
         // the initial transaction to create root fnode and save store,
         // it must be successful
@@ -104,7 +136,7 @@ impl Fs {
         TxMgr::begin_trans(&txmgr)?.run_all(|| {
             let store_cow =
                 Store::new(&txmgr, &vol).into_cow_with_id(&store_id, &txmgr)?;
-            let root_cow = Fnode::new(FileType::Dir, 0, &store_cow)
+            let root_cow = Fnode::new(FileType::Dir, cfg.opts, &store_cow)
                 .into_cow_with_id(&root_id, &txmgr)?;
             root_ref = Some(root_cow);
             store_ref = Some(store_cow);
@@ -120,7 +152,7 @@ impl Fs {
             txmgr,
             vol,
             shutter: Shutter::new(),
-            version_limit: cfg.version_limit,
+            opts: cfg.opts,
             read_only: false,
         })
     }
@@ -133,23 +165,18 @@ impl Fs {
 
         // open volume
         let payload = vol.open(pwd)?;
-
-        // decompose super block payload
-        let mut iter = payload.chunks(Eid::EID_SIZE);
-        let root_id = Eid::from_slice(iter.next().unwrap());
-        let walq_id = Eid::from_slice(iter.next().unwrap());
-        let store_id = Eid::from_slice(iter.next().unwrap());
-        let version_limit = iter.next().unwrap()[0];
-
         let vol = vol.into_ref();
 
-        // open transaction manager
-        let txmgr = TxMgr::open(&walq_id, &vol)?.into_ref();
+        // deserialize payload
+        let payload = Payload::deseri(&payload)?;
 
-        // create file sytem components
-        let store = Store::open(&store_id, &txmgr, &vol)?;
-        let root = Fnode::load_root(&root_id, &txmgr, &store, &vol)?;
-        let fcache = FnodeCache::new(FNODE_CACHE_SIZE, &txmgr);
+        // open transaction manager
+        let txmgr = TxMgr::open(&payload.walq_id, &vol)?.into_ref();
+
+        // create other file sytem components
+        let store = Store::open(&payload.store_id, &txmgr, &vol)?;
+        let root = Fnode::load_root(&payload.root_id, &txmgr, &store, &vol)?;
+        let fcache = FnodeCache::new(Self::FNODE_CACHE_SIZE, &txmgr);
 
         debug!("repo opened");
 
@@ -160,7 +187,7 @@ impl Fs {
             txmgr,
             vol,
             shutter: Shutter::new(),
-            version_limit,
+            opts: payload.opts,
             read_only,
         })
     }
@@ -170,13 +197,18 @@ impl Fs {
         self.read_only
     }
 
-    /// Get file system metadata
-    pub fn meta(&self) -> Meta {
+    #[inline]
+    pub fn get_opts(&self) -> Options {
+        self.opts
+    }
+
+    /// Get file system information
+    pub fn info(&self) -> Info {
         let vol = self.vol.read().unwrap();
-        Meta {
-            version_limit: self.version_limit,
-            read_only: self.read_only,
+        Info {
+            opts: self.opts,
             vol_info: vol.info(),
+            read_only: self.read_only,
         }
     }
 
@@ -240,7 +272,7 @@ impl Fs {
         &mut self,
         path: &Path,
         ftype: FileType,
-        version_limit: Option<u8>,
+        opts: Options,
     ) -> Result<FnodeRef> {
         if self.read_only {
             return Err(Error::ReadOnly);
@@ -261,13 +293,7 @@ impl Fs {
         let mut fnode = FnodeRef::default();
         let tx_handle = TxMgr::begin_trans(&self.txmgr)?;
         tx_handle.run_all(|| {
-            fnode = Fnode::new_under(
-                &parent,
-                &name,
-                ftype,
-                version_limit.unwrap_or(self.version_limit),
-                &self.txmgr,
-            )?;
+            fnode = Fnode::new_under(&parent, &name, ftype, opts, &self.txmgr)?;
             Ok(())
         })?;
 
@@ -276,7 +302,7 @@ impl Fs {
 
     /// Recursively create directories along the path
     pub fn create_dir_all(&mut self, path: &Path) -> Result<()> {
-        match self.create_fnode(path, FileType::Dir, None) {
+        match self.create_fnode(path, FileType::Dir, Options::default()) {
             Ok(_) => return Ok(()),
             Err(ref e) if *e == Error::NotFound => {}
             Err(err) => return Err(err),
@@ -285,7 +311,7 @@ impl Fs {
             Some(p) => self.create_dir_all(p)?,
             None => return Err(Error::IsRoot),
         }
-        self.create_fnode(path, FileType::Dir, None)?;
+        self.create_fnode(path, FileType::Dir, Options::default())?;
         Ok(())
     }
 
@@ -318,12 +344,14 @@ impl Fs {
             return Err(Error::ReadOnly);
         }
 
+        let opts;
         let src = self.open_fnode(from)?;
         {
             let fnode = src.fnode.read().unwrap();
             if !fnode.is_file() {
                 return Err(Error::NotFile);
             }
+            opts = fnode.get_opts();
         }
 
         let tgt = {
@@ -343,7 +371,8 @@ impl Fs {
                     tgt
                 }
                 Err(ref err) if *err == Error::NotFound => {
-                    self.create_fnode(to, FileType::File, None)?;
+                    // target file doesn't exist
+                    self.create_fnode(to, FileType::File, opts)?;
                     self.open_fnode(to)?
                 }
                 Err(err) => return Err(err),
@@ -385,7 +414,7 @@ impl Fs {
         // begin and run transaction
         let tx_handle = TxMgr::begin_trans(&self.txmgr)?;
         tx_handle.run_all(move || {
-            Fnode::unlink(&fnode_ref)?;
+            Fnode::remove_from_parent(&fnode_ref)?;
             let mut fnode = fnode_ref.write().unwrap();
             fnode.make_mut()?.clear_vers()?;
             fnode.make_del()?;
@@ -419,7 +448,7 @@ impl Fs {
         // begin and run transaction
         let tx_handle = TxMgr::begin_trans(&self.txmgr)?;
         tx_handle.run_all(move || {
-            Fnode::unlink(&fnode_ref)?;
+            Fnode::remove_from_parent(&fnode_ref)?;
             let mut fnode = fnode_ref.write().unwrap();
             fnode.make_del()?;
             self.fcache.remove(fnode.id());
@@ -491,11 +520,11 @@ impl Fs {
         // begin and run transaction
         TxMgr::begin_trans(&self.txmgr)?.run_all(|| {
             // remove from source
-            Fnode::unlink(&src.fnode)?;
+            Fnode::remove_from_parent(&src.fnode)?;
 
             // remove target if it exists
             if let Ok(tgt_handle) = self.open_fnode(to) {
-                Fnode::unlink(&tgt_handle.fnode)?;
+                Fnode::remove_from_parent(&tgt_handle.fnode)?;
                 let mut tgt_fnode = tgt_handle.fnode.write().unwrap();
                 if tgt_fnode.is_file() {
                     tgt_fnode.make_mut()?.clear_vers()?;

@@ -485,6 +485,7 @@ fn file_content_dedup() {
         let mut f2 = OpenOptions::new()
             .create(true)
             .version_limit(1)
+            .dedup_chunk(false)
             .open(&mut repo, "/file2")
             .unwrap();
         let mut f3 = OpenOptions::new()
@@ -493,10 +494,11 @@ fn file_content_dedup() {
             .open(&mut repo, "/file3")
             .unwrap();
 
-        // Those should all point to same content, but how do we verify it?
+        // Those should all point to the same content, but how do we verify it?
         // Probably need to inject some debug println() in fnode.rs.
         f.write_once(&buf).unwrap();
         f2.write_once(&buf).unwrap();
+        f3.write_once(&buf).unwrap();
         f.write_once(&buf).unwrap();
         f2.write_once(&buf).unwrap();
         f.write_once(&buf).unwrap();

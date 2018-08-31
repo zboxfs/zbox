@@ -242,7 +242,7 @@ impl Testable for Tester {
                 let _result = skip_faulty!(step.write_to_file(&mut file, data));
 
                 // and do the same to to control group
-                let mut nd = ctlgrp.find_node_mut(&node.path).unwrap();
+                let nd = ctlgrp.find_node_mut(&node.path).unwrap();
                 let old_len = nd.data.len();
                 let pos = step.file_pos;
                 let new_len = pos + step.data_len;
@@ -274,7 +274,7 @@ impl Testable for Tester {
                 }
 
                 // and do the same to to control group
-                let mut nd = ctlgrp.find_node_mut(&node.path).unwrap();
+                let nd = ctlgrp.find_node_mut(&node.path).unwrap();
                 let old_len = nd.data.len();
                 let new_len = step.data_len;
                 if new_len > old_len {
@@ -400,7 +400,7 @@ impl Testable for Tester {
 
                 if ctlgrp.has_node(&tgt.path) {
                     // copy to existing node
-                    let mut nd = ctlgrp.find_node_mut(&tgt.path).unwrap();
+                    let nd = ctlgrp.find_node_mut(&tgt.path).unwrap();
                     nd.data = node.data.clone();
                 } else {
                     // copy to new node

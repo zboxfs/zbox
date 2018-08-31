@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::fmt::{self, Debug};
+use std::ops::Deref;
 use std::result::Result as StdResult;
 use std::sync::{Arc, RwLock};
 
-use serde::de::Deserializer;
-use serde::ser::Serializer;
+use serde::de::{self, Deserializer, SeqAccess};
+use serde::ser::{SerializeSeq, Serializer};
 use serde::{Deserialize, Serialize};
 
 use base::crypto::Hash;
@@ -79,13 +80,6 @@ struct ChunkMapInner {
 }
 
 impl ChunkMapInner {
-    fn new() -> Self {
-        ChunkMapInner {
-            seg_ids: Vec::new(),
-            map: HashMap::new(),
-        }
-    }
-
     fn get(&self, hash: &Hash) -> Option<ChunkLoc> {
         self.map.get(hash).map(|&(seg_idx, chk_idx)| ChunkLoc {
             seg_id: self.seg_ids[seg_idx as usize].clone(),
@@ -128,30 +122,49 @@ impl ChunkMapInner {
 
 /// Chunk map, used for chunk dedup
 #[derive(Debug, Default, Clone)]
-pub struct ChunkMap(Arc<RwLock<ChunkMapInner>>);
+pub struct ChunkMap {
+    inner: Arc<RwLock<ChunkMapInner>>,
+    is_enabled: bool,
+}
 
 impl ChunkMap {
-    pub fn new() -> Self {
-        ChunkMap(Arc::new(RwLock::new(ChunkMapInner::new())))
+    #[inline]
+    pub fn new(is_enabled: bool) -> Self {
+        ChunkMap {
+            inner: Arc::default(),
+            is_enabled,
+        }
     }
 
     pub fn get(&self, hash: &Hash) -> Option<ChunkLoc> {
-        let inner = self.0.read().unwrap();
+        if !self.is_enabled {
+            return None;
+        }
+        let inner = self.inner.read().unwrap();
         inner.get(hash)
     }
 
     pub fn insert(&mut self, chk_hash: &Hash, seg_id: &Eid, chk_idx: usize) {
-        let mut inner = self.0.write().unwrap();
+        if !self.is_enabled {
+            return;
+        }
+        let mut inner = self.inner.write().unwrap();
         inner.insert(chk_hash, seg_id, chk_idx);
     }
 
     pub fn remove_chunks(&mut self, seg_id: &Eid, chk_indices: &[usize]) {
-        let mut inner = self.0.write().unwrap();
+        if !self.is_enabled {
+            return;
+        }
+        let mut inner = self.inner.write().unwrap();
         inner.remove_chunks(seg_id, chk_indices);
     }
 
     pub fn remove_segment(&mut self, seg_id: &Eid) {
-        let mut inner = self.0.write().unwrap();
+        if !self.is_enabled {
+            return;
+        }
+        let mut inner = self.inner.write().unwrap();
         inner.remove_segment(seg_id);
     }
 }
@@ -161,8 +174,39 @@ impl Serialize for ChunkMap {
     where
         S: Serializer,
     {
-        let inner = self.0.read().unwrap();
-        inner.serialize(serializer)
+        let inner = self.inner.read().unwrap();
+
+        // 2 is the numnber of fields
+        let mut seq = serializer.serialize_seq(Some(2))?;
+        seq.serialize_element(inner.deref())?;
+        seq.serialize_element(&self.is_enabled)?;
+        seq.end()
+    }
+}
+
+struct ChunkMapVisitor;
+
+impl<'de> de::Visitor<'de> for ChunkMapVisitor {
+    type Value = ChunkMap;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "struct ChunkMap")
+    }
+
+    fn visit_seq<V>(self, mut seq: V) -> StdResult<Self::Value, V::Error>
+    where
+        V: SeqAccess<'de>,
+    {
+        let inner = seq
+            .next_element()?
+            .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+        let is_enabled = seq
+            .next_element()?
+            .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+        Ok(ChunkMap {
+            inner: Arc::new(RwLock::new(inner)),
+            is_enabled,
+        })
     }
 }
 
@@ -171,7 +215,6 @@ impl<'de> Deserialize<'de> for ChunkMap {
     where
         D: Deserializer<'de>,
     {
-        ChunkMapInner::deserialize(deserializer)
-            .map(|inner| ChunkMap(Arc::new(RwLock::new(inner))))
+        deserializer.deserialize_seq(ChunkMapVisitor)
     }
 }

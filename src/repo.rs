@@ -7,7 +7,7 @@ use super::{File, Result};
 use base::crypto::{Cipher, Cost, MemLimit, OpsLimit};
 use base::{self, Time};
 use error::Error;
-use fs::{Config, DirEntry, FileType, Fs, Metadata, Version};
+use fs::{Config, DirEntry, FileType, Fs, Metadata, Options, Version};
 use trans::Eid;
 
 /// A builder used to create a repository [`Repo`] in various manners.
@@ -37,7 +37,7 @@ use trans::Eid;
 /// # foo().unwrap();
 /// ```
 ///
-/// Specify parameters for creating a repository.
+/// Specify options for creating a repository.
 ///
 /// ```
 /// # #![allow(unused_mut, unused_variables)]
@@ -125,6 +125,15 @@ impl RepoOpener {
         self
     }
 
+    /// Sets the option for data compression.
+    ///
+    /// This options indicates whether the LZ4 compression should be used in
+    /// the repository. Default is false.
+    pub fn compress(&mut self, compress: bool) -> &mut Self {
+        self.cfg.compress = compress;
+        self
+    }
+
     /// Sets the default maximum number of file version.
     ///
     /// The `version_limit` must be within [1, 255], 10 is the default. This
@@ -134,16 +143,21 @@ impl RepoOpener {
     /// [`version_limit`]: struct.OpenOptions.html#method.version_limit
     /// [`OpenOptions`]: struct.OpenOptions.html
     pub fn version_limit(&mut self, version_limit: u8) -> &mut Self {
-        self.cfg.version_limit = version_limit;
+        self.cfg.opts.version_limit = version_limit;
         self
     }
 
-    /// Sets the option for compression.
+    /// Sets the default option for file data chunk deduplication.
     ///
-    /// This options indicates whether the LZ4 compression should be used in
-    /// the repository. Default is false.
-    pub fn compress(&mut self, compress: bool) -> &mut Self {
-        self.cfg.compress = compress;
+    /// This option indicates whether data chunk should be deduped when
+    /// writing data to a file. This setting is a repository-wise setting,
+    /// indivisual file can overwrite it by setting [`dedup_chunk`]
+    /// in [`OpenOptions`]. Default is true.
+    ///
+    /// [`dedup_chunk`]: struct.OpenOptions.html#method.dedup_chunk
+    /// [`OpenOptions`]: struct.OpenOptions.html
+    pub fn dedup_chunk(&mut self, dedup_chunk: bool) -> &mut Self {
+        self.cfg.opts.dedup_chunk = dedup_chunk;
         self
     }
 
@@ -183,7 +197,7 @@ impl RepoOpener {
     /// return an error.
     pub fn open(&self, uri: &str, pwd: &str) -> Result<Repo> {
         // version limit must be greater than 0
-        if self.cfg.version_limit == 0 {
+        if self.cfg.opts.version_limit == 0 {
             return Err(Error::InvalidArgument);
         }
 
@@ -254,6 +268,7 @@ pub struct OpenOptions {
     create: bool,
     create_new: bool,
     version_limit: Option<u8>,
+    dedup_chunk: Option<bool>,
 }
 
 impl OpenOptions {
@@ -269,6 +284,7 @@ impl OpenOptions {
             create: false,
             create_new: false,
             version_limit: None,
+            dedup_chunk: None,
         }
     }
 
@@ -346,6 +362,18 @@ impl OpenOptions {
         self
     }
 
+    /// Sets the option for file data chunk deduplication.
+    ///
+    /// This option indicates whether data chunk should be deduped when
+    /// writing data to a file. It will fall back to repository's
+    /// [`dedup_chunk`] if it is not set.
+    ///
+    /// [`dedup_chunk`]: struct.RepoOpener.html#method.dedup_chunk
+    pub fn dedup_chunk(&mut self, dedup_chunk: bool) -> &mut OpenOptions {
+        self.dedup_chunk = Some(dedup_chunk);
+        self
+    }
+
     /// Opens a file at path with the options specified by `self`.
     pub fn open<P: AsRef<Path>>(
         &self,
@@ -371,6 +399,7 @@ pub struct RepoInfo {
     cost: Cost,
     cipher: Cipher,
     version_limit: u8,
+    dedup_chunk: bool,
     read_only: bool,
     ctime: Time,
 }
@@ -412,6 +441,11 @@ impl RepoInfo {
     /// Returns the default maximum number of file versions.
     pub fn version_limit(&self) -> u8 {
         self.version_limit
+    }
+
+    /// Returns whether the file data chunk deduplication is enabled.
+    pub fn dedup_chunk(&self) -> bool {
+        self.dedup_chunk
     }
 
     /// Returns whether this repository is read-only.
@@ -520,14 +554,15 @@ impl Repo {
 
     /// Get repository metadata infomation.
     pub fn info(&self) -> RepoInfo {
-        let meta = self.fs.meta();
+        let meta = self.fs.info();
         RepoInfo {
             volume_id: meta.vol_info.id.clone(),
             ver: meta.vol_info.ver.clone(),
             uri: meta.vol_info.uri.clone(),
             cost: meta.vol_info.cost.clone(),
             cipher: meta.vol_info.cipher.clone(),
-            version_limit: meta.version_limit,
+            version_limit: meta.opts.version_limit,
+            dedup_chunk: meta.opts.dedup_chunk,
             read_only: meta.read_only,
             ctime: meta.vol_info.ctime.clone(),
         }
@@ -587,14 +622,14 @@ impl Repo {
     fn open_file_with_options<P: AsRef<Path>>(
         &mut self,
         path: P,
-        opts: &OpenOptions,
+        open_opts: &OpenOptions,
     ) -> Result<File> {
         if self.fs.is_read_only()
-            && (opts.write
-                || opts.append
-                || opts.truncate
-                || opts.create
-                || opts.create_new)
+            && (open_opts.write
+                || open_opts.append
+                || open_opts.truncate
+                || open_opts.create
+                || open_opts.create_new)
         {
             return Err(Error::ReadOnly);
         }
@@ -603,13 +638,19 @@ impl Repo {
 
         match self.fs.resolve(path) {
             Ok(_) => {
-                if opts.create_new {
+                if open_opts.create_new {
                     return Err(Error::AlreadyExists);
                 }
             }
-            Err(ref err) if *err == Error::NotFound && opts.create => {
-                self.fs
-                    .create_fnode(path, FileType::File, opts.version_limit)?;
+            Err(ref err) if *err == Error::NotFound && open_opts.create => {
+                let mut opts = self.fs.get_opts();
+                if let Some(version_limit) = open_opts.version_limit {
+                    opts.version_limit = version_limit;
+                }
+                if let Some(dedup_chunk) = open_opts.dedup_chunk {
+                    opts.dedup_chunk = dedup_chunk;
+                }
+                self.fs.create_fnode(path, FileType::File, opts)?;
             }
             Err(err) => return Err(err),
         }
@@ -624,14 +665,14 @@ impl Repo {
             curr_len = fnode.curr_len();
         }
 
-        let pos = if opts.append {
+        let pos = if open_opts.append {
             SeekFrom::Start(curr_len as u64)
         } else {
             SeekFrom::Start(0)
         };
-        let mut file = File::new(handle, pos, opts.read, opts.write);
+        let mut file = File::new(handle, pos, open_opts.read, open_opts.write);
 
-        if opts.truncate && curr_len > 0 {
+        if open_opts.truncate && curr_len > 0 {
             file.set_len(0)?;
         }
 
@@ -686,7 +727,8 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn create_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        self.fs.create_fnode(path.as_ref(), FileType::Dir, None)?;
+        self.fs
+            .create_fnode(path.as_ref(), FileType::Dir, Options::default())?;
         Ok(())
     }
 

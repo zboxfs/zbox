@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use super::Handle;
+use super::{Handle, Options};
 use base::lru::{CountMeter, Lru, PinChecker};
 use base::Time;
 use content::{
@@ -207,7 +207,7 @@ type SubNodes = Lru<
 #[derive(Default, Clone, Deserialize, Serialize)]
 pub struct Fnode {
     ftype: FileType,
-    version_limit: u8,
+    opts: Options,
     ctime: Time,
     mtime: Time,
     kids: Vec<ChildEntry>,
@@ -230,22 +230,15 @@ pub struct Fnode {
 }
 
 impl Fnode {
-    /// Default versoin limit
-    pub const DEFAULT_VERSION_LIMIT: u8 = 10;
-
-    pub fn new(ftype: FileType, version_limit: u8, store: &StoreRef) -> Self {
-        let version_limit = match ftype {
-            FileType::File => version_limit,
-            FileType::Dir => 0,
-        };
+    pub fn new(ftype: FileType, opts: Options, store: &StoreRef) -> Self {
         Fnode {
             ftype,
-            version_limit,
+            opts,
             ctime: Time::now(),
             mtime: Time::now(),
             kids: Vec::new(),
             vers: VecDeque::new(),
-            chk_map: ChunkMap::new(),
+            chk_map: ChunkMap::new(opts.dedup_chunk),
             parent: None,
             sub_nodes: Self::default_sub_nodes(),
             store: store.clone(),
@@ -257,7 +250,7 @@ impl Fnode {
         parent: &FnodeRef,
         name: &str,
         ftype: FileType,
-        version_limit: u8,
+        opts: Options,
         txmgr: &TxMgrRef,
     ) -> Result<FnodeRef> {
         let kid = {
@@ -268,7 +261,7 @@ impl Fnode {
             }
 
             // create child fnode and add the initial version
-            let mut kid = Fnode::new(ftype, version_limit, &pfnode.store);
+            let mut kid = Fnode::new(ftype, opts, &pfnode.store);
             if kid.is_file() {
                 kid.add_version(Content::new())?;
             }
@@ -329,6 +322,12 @@ impl Fnode {
     #[inline]
     pub fn history(&self) -> Vec<Version> {
         Vec::from(self.vers.clone())
+    }
+
+    /// Get fnode options
+    #[inline]
+    pub fn get_opts(&self) -> Options {
+        self.opts
     }
 
     /// Load root fnode
@@ -483,7 +482,7 @@ impl Fnode {
     }
 
     /// Remove child fnode from parent
-    pub fn unlink(fnode: &FnodeRef) -> Result<()> {
+    pub fn remove_from_parent(fnode: &FnodeRef) -> Result<()> {
         let child = fnode.read().unwrap();
         match child.parent {
             Some(ref parent) => {
@@ -556,6 +555,8 @@ impl Fnode {
     // add a new version
     // return content if it is not duplicated, none if it is duplicated
     fn add_version(&mut self, content: Content) -> Result<Option<Content>> {
+        assert!(self.is_file());
+
         // dedup content and add the new version
         let (is_deduped, deduped_id) = {
             let mut store = self.store.write().unwrap();
@@ -570,7 +571,7 @@ impl Fnode {
         self.vers.push_back(ver);
 
         // remove the oldest version, note that version limit is zero based
-        if self.vers.len() > self.version_limit as usize {
+        if self.vers.len() > self.opts.version_limit as usize {
             let retire = self.vers.front().unwrap().num;
             self.remove_ver(retire)?;
         }
@@ -651,7 +652,7 @@ impl Debug for Fnode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Fnode")
             .field("ftype", &self.ftype)
-            .field("version_limit", &self.version_limit)
+            .field("opts", &self.opts)
             .field("ctime", &self.ctime)
             .field("mtime", &self.mtime)
             .field("kids", &self.kids)

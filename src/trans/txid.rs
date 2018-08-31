@@ -101,13 +101,7 @@ impl Serialize for Txid {
     }
 }
 
-struct TxidVisitor {}
-
-impl TxidVisitor {
-    fn new() -> Self {
-        TxidVisitor {}
-    }
-}
+struct TxidVisitor;
 
 impl<'de> de::Visitor<'de> for TxidVisitor {
     type Value = Txid;
@@ -129,7 +123,6 @@ impl<'de> Deserialize<'de> for Txid {
     where
         D: Deserializer<'de>,
     {
-        let visitor = TxidVisitor::new();
-        deserializer.deserialize_u64(visitor)
+        deserializer.deserialize_u64(TxidVisitor)
     }
 }
