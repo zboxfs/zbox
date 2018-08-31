@@ -15,7 +15,7 @@ use trans::Eid;
 /// Data chunk
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Chunk {
-    pub(super) pos: usize, // chunk start position in segment
+    pub(super) pos: usize, // chunk start position in segment data
     pub(super) len: usize, // chunk length, in bytes
     refcnt: RefCnt,
 }

@@ -294,6 +294,7 @@ impl EntryList {
         Ok((head, tail))
     }
 
+    // create reference relationship between content and segment
     pub fn link(&self, store: &Store) -> Result<()> {
         for ent in self.ents.iter() {
             let seg_ref = store.get_seg(&ent.seg_id)?;
@@ -306,6 +307,8 @@ impl EntryList {
         Ok(())
     }
 
+    // remove reference between content and segment, this is reversal
+    // for established references using link()
     pub fn unlink(
         &self,
         chk_map: &mut ChunkMap,
@@ -330,6 +333,28 @@ impl EntryList {
                 // shrink segment if it is small enought
                 let retired = store.shrink_segment(&mut seg_cow)?;
                 chk_map.remove_chunks(seg_cow.id(), &retired);
+            }
+        }
+
+        Ok(())
+    }
+
+    // remove weak reference between content and segment, the weak reference is
+    // the relationship hasn't been established by link(), used for stage
+    // segment dereference
+    pub fn unlink_weak(
+        &self,
+        chk_map: &mut ChunkMap,
+        store: &mut Store,
+    ) -> Result<()> {
+        for ent in self.ents.iter() {
+            let seg_ref = store.get_seg(&ent.seg_id)?;
+            let mut seg_cow = seg_ref.write().unwrap();
+
+            if seg_cow.is_orphan() {
+                // if segment is not used anymore, remove it
+                store.remove_segment(&mut seg_cow)?;
+                chk_map.remove_segment(seg_cow.id());
             }
         }
 

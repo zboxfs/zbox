@@ -21,9 +21,8 @@ use volume::VolumeRef;
 /// Content
 #[derive(Default, Clone, Deserialize, Serialize)]
 pub struct Content {
-    id: Eid,
-    mtree: MerkleTree,
     ents: EntryList,
+    mtree: MerkleTree,
 
     // merkle tree leaves
     #[serde(skip_serializing, skip_deserializing, default)]
@@ -33,9 +32,8 @@ pub struct Content {
 impl Content {
     pub fn new() -> Self {
         Content {
-            id: Eid::new(),
-            mtree: MerkleTree::new(),
             ents: EntryList::new(),
+            mtree: MerkleTree::new(),
             leaves: Leaves::new(),
         }
     }
@@ -62,7 +60,7 @@ impl Content {
     }
 
     /// Write into content with another content
-    pub fn replace(&mut self, other: &Content, store: &StoreRef) -> Result<()> {
+    pub fn merge_from(&mut self, other: &Content, store: &StoreRef) -> Result<()> {
         // write other content into self
         {
             let store = store.read().unwrap();
@@ -100,19 +98,18 @@ impl Content {
         self.ents.link(&mut store)
     }
 
-    pub fn unlink(
-        content: &ContentRef,
-        chk_map: &mut ChunkMap,
-        store: &StoreRef,
-    ) -> Result<()> {
-        let mut ctn = content.write().unwrap();
+    pub fn unlink(&self, chk_map: &mut ChunkMap, store: &StoreRef) -> Result<()> {
         let mut store = store.write().unwrap();
 
         // unlink entries
-        ctn.ents.unlink(chk_map, store.make_mut()?)?;
+        self.ents.unlink(chk_map, store.make_mut()?)
+    }
 
-        // content is not used anymore, remove content
-        ctn.make_del()
+    pub fn unlink_weak(&self, chk_map: &mut ChunkMap, store: &StoreRef) -> Result<()> {
+        let mut store = store.write().unwrap();
+
+        // unlink entries
+        self.ents.unlink_weak(chk_map, store.make_mut()?)
     }
 }
 
@@ -240,15 +237,15 @@ impl Writer {
         txid: Txid,
         txmgr: &TxMgrRef,
         vol: &VolumeRef,
-    ) -> Result<Self> {
-        Ok(Writer {
+    ) -> Self {
+        Writer {
             ctn: Content::new(),
             chk_map,
-            seg_wtr: SegWriter::new(txid, store, txmgr, vol)?,
+            seg_wtr: SegWriter::new(txid, store, txmgr, vol),
             mtree_wtr: MerkleTreeWriter::new(),
             txid,
             store: store.clone(),
-        })
+        }
     }
 
     // append chunk to segment and content
@@ -260,7 +257,7 @@ impl Writer {
         let mut written = self.seg_wtr.write(chunk)?;
         if written == 0 {
             // segment is full
-            map_io_err!(self.seg_wtr.renew(&self.store))?;
+            map_io_err!(self.seg_wtr.renew())?;
             written = self.seg_wtr.write(chunk)?;
         }
         assert_eq!(written, chunk_len); // must written in whole
@@ -300,11 +297,10 @@ impl Write for Writer {
         // update merkel tree
         self.mtree_wtr.write(chunk)?;
 
-        // if duplicate chunk is found
+        // if duplicate chunk is found,
         if let Some(ref loc) = self.chk_map.get(&hash) {
-            // try to increase chunk reference count
-            let store = self.store.read().unwrap();
             // get referred segment, it could be the current segment
+            let store = self.store.read().unwrap();
             let rseg = {
                 let curr_seg = self.seg_wtr.seg();
                 let seg = curr_seg.read().unwrap();
@@ -315,25 +311,25 @@ impl Write for Writer {
                 }
             };
 
-            // increase chunk reference count and append the reference
+            // create weak reference to chunk and append it to content,
+            // strong reference will be built later when the stage content
+            // is finished and deduped
             let mut ref_seg = rseg.write().unwrap();
-            if map_io_err!(ref_seg.make_mut())?.ref_chunk(loc.idx).is_ok() {
-                let chunk = &ref_seg[loc.idx];
-                let span = Span::new(
-                    loc.idx,
-                    loc.idx + 1,
-                    0,
-                    chunk.len,
-                    self.ctn.end_offset(),
-                );
-                self.ctn.append(&loc.seg_id, &span);
-                assert_eq!(chunk_len, chunk.len);
-                return Ok(chunk_len);
-            }
-        }
+            let chunk = &ref_seg[loc.idx];
+            let span = Span::new(
+                loc.idx,
+                loc.idx + 1,
+                0,
+                chunk.len,
+                self.ctn.end_offset(),
+            );
+            self.ctn.append(&loc.seg_id, &span);
+            assert_eq!(chunk_len, chunk.len);
 
-        // no duplication found, then append chunk to content
-        self.append_chunk(chunk, &hash)?;
+        } else {
+            // no duplication found, then append chunk to content
+            self.append_chunk(chunk, &hash)?;
+        }
 
         Ok(chunk_len)
     }

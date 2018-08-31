@@ -131,7 +131,7 @@ impl Store {
     }
 
     /// Dedup content based on its hash
-    pub fn dedup_content(&mut self, content: Content) -> Result<(bool, Eid)> {
+    pub fn dedup_content(&mut self, content: &Content) -> Result<(bool, Eid)> {
         let mut deduped = true;
         let ent = self
             .content_map
@@ -139,7 +139,8 @@ impl Store {
             .or_insert_with(|| ContentMapEntry::new());
         ent.inc_ref()?;
         if ent.content_id.is_empty() {
-            let ctn = content.into_cow(&self.txmgr)?;
+            // no duplication found
+            let ctn = content.clone().into_cow(&self.txmgr)?;
             let ctn = ctn.read().unwrap();
             ent.content_id = ctn.id().clone();
             deduped = false;
@@ -247,12 +248,12 @@ impl Writer {
         txmgr: &TxMgrRef,
         store: &StoreRef,
         txid: Txid,
-    ) -> Result<Self> {
+    ) -> Self {
         let st = store.read().unwrap();
-        let ctn_wtr = ContentWriter::new(chk_map, store, txid, txmgr, &st.vol)?;
-        Ok(Writer {
+        let ctn_wtr = ContentWriter::new(chk_map, store, txid, txmgr, &st.vol);
+        Writer {
             inner: Chunker::new(st.chunker_params.clone(), ctn_wtr),
-        })
+        }
     }
 
     pub fn finish_with_content(self) -> Result<Content> {

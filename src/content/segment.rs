@@ -385,6 +385,7 @@ pub struct Writer {
     data_wtr: Option<VolWriter>, // segment data writer
     txid: Txid,
     txmgr: TxMgrRef,
+    store: StoreRef,
     vol: VolumeRef,
 }
 
@@ -394,16 +395,15 @@ impl Writer {
         store: &StoreRef,
         txmgr: &TxMgrRef,
         vol: &VolumeRef,
-    ) -> Result<Self> {
-        let mut wtr = Writer {
+    ) -> Self {
+        Writer {
             seg: Arc::default(),
             data_wtr: None,
             txid,
             txmgr: txmgr.clone(),
+            store: store.clone(),
             vol: vol.clone(),
-        };
-        wtr.renew(store)?;
-        Ok(wtr)
+        }
     }
 
     #[inline]
@@ -411,7 +411,7 @@ impl Writer {
         self.seg.clone()
     }
 
-    pub fn renew(&mut self, store: &StoreRef) -> Result<()> {
+    pub fn renew(&mut self) -> Result<()> {
         // create a new segment
         let seg = Segment::new();
 
@@ -427,11 +427,8 @@ impl Writer {
 
         // if this is not the first-time renew, finish the last segment data
         // writer first
-        match self.data_wtr.take() {
-            Some(data_wtr) => {
-                data_wtr.finish()?;
-            }
-            None => {}
+        if let Some(data_wtr) = self.data_wtr.take() {
+            data_wtr.finish()?;
         }
 
         // and then create a new segment data writer and add segment to tx
@@ -439,7 +436,7 @@ impl Writer {
         self.seg = seg.into_cow(&self.txmgr)?;
 
         // inject segment to segment cache in store
-        let store = store.read().unwrap();
+        let store = self.store.read().unwrap();
         store.inject_seg_to_cache(&self.seg);
 
         Ok(())
@@ -448,6 +445,11 @@ impl Writer {
 
 impl Write for Writer {
     fn write(&mut self, chunk: &[u8]) -> IoResult<usize> {
+        // create segment and segment data if they are not created yet
+        if self.data_wtr.is_none() {
+            map_io_err!(self.renew())?;
+        }
+
         let mut seg = self.seg.write().unwrap();
         if seg.is_full() {
             return Ok(0);
@@ -475,7 +477,7 @@ impl Finish for Writer {
     fn finish(self) -> Result<usize> {
         match self.data_wtr {
             Some(data_wtr) => data_wtr.finish(),
-            None => unreachable!(),
+            None => Ok(0),
         }
     }
 }

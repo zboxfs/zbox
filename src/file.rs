@@ -394,7 +394,7 @@ impl File {
         let tx_handle = TxMgr::begin_trans(&self.handle.txmgr)?;
         tx_handle.run(|| {
             let mut wtr =
-                FnodeWriter::new(self.handle.clone(), tx_handle.txid)?;
+                FnodeWriter::new(self.handle.clone(), tx_handle.txid);
             wtr.seek(self.seek_pos(self.pos))?;
             self.wtr = Some(wtr);
             Ok(())

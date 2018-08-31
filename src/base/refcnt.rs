@@ -13,6 +13,7 @@ impl RefCnt {
         self.0
     }
 
+    #[inline]
     pub fn inc_ref(&mut self) -> Result<u32> {
         self.0
             .checked_add(1)
@@ -23,6 +24,7 @@ impl RefCnt {
             })
     }
 
+    #[inline]
     pub fn dec_ref(&mut self) -> Result<u32> {
         self.0
             .checked_sub(1)
