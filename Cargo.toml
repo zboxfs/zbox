@@ -1,6 +1,6 @@
 [package]
 name = "zbox"
-version = "0.5.1"
+version = "0.6.0"
 authors = ["Bo Lu"]
 description = "Zbox is a zero-details, privacy-focused embeddable file system."
 documentation = "https://docs.rs/zbox"

@@ -98,7 +98,7 @@ Add the following dependency to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-zbox = "0.5.1"
+zbox = "0.6.0"
 ```
 
 ## Example
