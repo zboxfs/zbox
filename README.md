@@ -75,7 +75,7 @@ Below is the feature comparison list.
 | Linux and macOS support     | :heavy_check_mark:       | :heavy_check_mark:       | :heavy_check_mark:       |
 | Windows support             | :heavy_check_mark:       | partial                  | :heavy_check_mark:       |
 
-## Storage Supported
+## Supported Storage
 
 By now, Zbox supports a variety of underlying storage, which are listed below.
 Memory and OS file storage are enabled by default, all the others can to be
@@ -87,7 +87,7 @@ enabled individually by specifying its feature when build.
 | OS file system | "file://"       | N/A            |
 | SQLite         | "sqlite://"     | storage-sqlite |
 
-There is another special storage `Faulty` ("falty://"), which is based on
+There is another special storage `Faulty` ("faulty://"), which is based on
 memory storage and can simulate random IO error. It is used internally to
 facilitate random IO error test.
 
