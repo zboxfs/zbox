@@ -7,6 +7,9 @@ use std::result;
 use rmp_serde::decode::Error as DecodeError;
 use rmp_serde::encode::Error as EncodeError;
 
+#[cfg(feature = "storage-sqlite")]
+use libsqlite3_sys::Error as SqliteError;
+
 /// The error type for operations with [`Repo`] and [`File`].
 ///
 /// [`Repo`]: struct.Repo.html
@@ -62,6 +65,9 @@ pub enum Error {
     Decode(DecodeError),
     Var(VarError),
     Io(IoError),
+
+    #[cfg(feature = "storage-sqlite")]
+    Sqlite(SqliteError),
 }
 
 impl Display for Error {
@@ -116,6 +122,9 @@ impl Display for Error {
             Error::Decode(ref err) => err.fmt(f),
             Error::Var(ref err) => err.fmt(f),
             Error::Io(ref err) => err.fmt(f),
+
+            #[cfg(feature = "storage-sqlite")]
+            Error::Sqlite(ref err) => err.fmt(f),
         }
     }
 }
@@ -172,6 +181,9 @@ impl StdError for Error {
             Error::Decode(ref err) => err.description(),
             Error::Var(ref err) => err.description(),
             Error::Io(ref err) => err.description(),
+
+            #[cfg(feature = "storage-sqlite")]
+            Error::Sqlite(ref err) => err.description(),
         }
     }
 
@@ -181,6 +193,9 @@ impl StdError for Error {
             Error::Decode(ref err) => Some(err),
             Error::Var(ref err) => Some(err),
             Error::Io(ref err) => Some(err),
+
+            #[cfg(feature = "storage-sqlite")]
+            Error::Sqlite(ref err) => Some(err),
 
             _ => None,
         }
@@ -208,6 +223,13 @@ impl From<VarError> for Error {
 impl From<IoError> for Error {
     fn from(err: IoError) -> Error {
         Error::Io(err)
+    }
+}
+
+#[cfg(feature = "storage-sqlite")]
+impl From<SqliteError> for Error {
+    fn from(err: SqliteError) -> Error {
+        Error::Sqlite(err)
     }
 }
 
@@ -263,6 +285,9 @@ impl Into<i32> for Error {
             Error::Decode(_) => -2010,
             Error::Var(_) => -2020,
             Error::Io(_) => -2030,
+
+            #[cfg(feature = "storage-sqlite")]
+            Error::Sqlite(_) => -2040,
         }
     }
 }
@@ -319,6 +344,9 @@ impl PartialEq for Error {
             (&Error::Decode(_), &Error::Decode(_)) => true,
             (&Error::Var(_), &Error::Var(_)) => true,
             (&Error::Io(ref a), &Error::Io(ref b)) => a.kind() == b.kind(),
+
+            #[cfg(feature = "storage-sqlite")]
+            (&Error::Sqlite(ref a), &Error::Sqlite(ref b)) => a == b,
 
             (_, _) => false,
         }

@@ -95,8 +95,6 @@
 //! [`File`]: struct.File.html
 //! [`RepoOpener`]: struct.RepoOpener.html
 
-//#![feature(optin_builtin_traits)]
-
 extern crate bytes;
 extern crate env_logger;
 extern crate linked_hash_map;
@@ -140,3 +138,6 @@ extern crate lazy_static;
 
 #[cfg(feature = "storage-faulty")]
 pub use self::volume::FaultyController;
+
+#[cfg(feature = "storage-sqlite")]
+extern crate libsqlite3_sys;

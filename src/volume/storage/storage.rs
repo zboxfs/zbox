@@ -63,13 +63,23 @@ impl Storage {
     const ADDRESS_CACHE_SIZE: usize = 64;
 
     pub fn new(uri: &str) -> Result<Self> {
-        let depot: Box<Storable> = if uri.starts_with("file://") {
+        let depot: Box<Storable> = if uri.starts_with("mem://") {
+            let depot = MemStorage::new();
+            Box::new(depot)
+        } else if uri.starts_with("file://") {
             let path = Path::new(&uri[7..]);
             let depot = FileStorage::new(path);
             Box::new(depot)
-        } else if uri.starts_with("mem://") {
-            let depot = MemStorage::new();
-            Box::new(depot)
+        } else if uri.starts_with("sqlite://") {
+            #[cfg(feature = "storage-sqlite")]
+            {
+                let depot = super::sqlite::SqliteStorage::new(&uri[9..]);
+                Box::new(depot)
+            }
+            #[cfg(not(feature = "storage-sqlite"))]
+            {
+                return Err(Error::InvalidUri);
+            }
         } else if uri.starts_with("faulty://") {
             #[cfg(feature = "storage-faulty")]
             {
@@ -697,6 +707,20 @@ mod tests {
         let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
         let uri = format!("file://{}", tmpdir.path().display());
         let storage = Storage::new(&uri).unwrap().into_ref();
+
+        single_span_addr_test(&storage);
+        multi_span_addr_test(&storage);
+        overwrite_test(&storage);
+        delete_test(&storage);
+    }
+
+    #[cfg(feature = "storage-sqlite")]
+    #[test]
+    fn sqlite_depot() {
+        init_env();
+        let mut storage = Storage::new("sqlite://:memory:").unwrap();
+        storage.init(Cost::default(), Cipher::default()).unwrap();
+        let storage = storage.into_ref();
 
         single_span_addr_test(&storage);
         multi_span_addr_test(&storage);

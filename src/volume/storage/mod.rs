@@ -12,6 +12,9 @@ mod faulty;
 #[cfg(feature = "storage-faulty")]
 pub use self::faulty::Controller as FaultyController;
 
+#[cfg(feature = "storage-sqlite")]
+mod sqlite;
+
 use std::fmt::Debug;
 
 use base::crypto::{Crypto, Key};

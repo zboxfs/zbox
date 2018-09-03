@@ -18,8 +18,8 @@ in the same memory space as the application. It only provides access to one
 process at a time.
 
 By abstracting IO access, Zbox supports a variety of underlying storage layers.
-Memory and OS file system are supported now, RDBMS and key-value object store
-supports are coming soon.
+Memory, OS file system and RDBMS are supported now, key-value object store
+support is coming soon.
 
 ## Disclaimer
 
@@ -32,8 +32,8 @@ Features
   no knowledge can be leaked to underlying storage
 - State-of-the-art cryptography: AES-256-GCM (hardware), XChaCha20-Poly1305,
   Argon2 password hashing and etc., empowered by [libsodium]
-- Support multiple storages, including memory, OS file system, RDBMS (coming
-  soon), Key-value object store (coming soon) and more
+- Support multiple storages, including memory, OS file system, RDBMS, Key-value
+  object store (coming soon) and more
 - Content-based data chunk deduplication and file-based deduplication
 - Data compression using [LZ4] in fast mode, optional
 - Data integrity is guaranteed by authenticated encryption primitives (AEAD
@@ -74,6 +74,22 @@ Below is the feature comparison list.
 | FUSE support                | :heavy_multiplication_x: | :heavy_check_mark:       | :heavy_check_mark:       |
 | Linux and macOS support     | :heavy_check_mark:       | :heavy_check_mark:       | :heavy_check_mark:       |
 | Windows support             | :heavy_check_mark:       | partial                  | :heavy_check_mark:       |
+
+## Storage Supported
+
+By now, Zbox supports a variety of underlying storage, which are listed below.
+Memory and OS file storage are enabled by default, all the others can to be
+enabled individually by specifying its feature when build.
+
+| Storage        | URI identifier  | Feature        |
+| -------------- | --------------- | -------------- |
+| Memory         | "mem://"        | N/A            |
+| OS file system | "file://"       | N/A            |
+| SQLite         | "sqlite://"     | storage-sqlite |
+
+There is another special storage `Faulty` ("falty://"), which is based on
+memory storage and can simulate random IO error. It is used internally to
+facilitate random IO error test.
 
 How to use
 ==========

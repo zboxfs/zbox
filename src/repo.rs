@@ -172,7 +172,7 @@ impl RepoOpener {
     /// Opens a repository at URI with the password and options specified by
     /// `self`.
     ///
-    /// Currently two types of storages are supported:
+    /// Currently three types of storages are supported:
     ///
     /// - OS file system based storage, location prefix is `file://`
     ///
@@ -184,6 +184,12 @@ impl RepoOpener {
     ///   As memory stoage is volatile, it is always be used with `create`
     ///   option. It doesn't make sense to open an existing memory storage,
     ///   thus the string after prefix is arbitrary.
+    ///
+    /// - SQLite based storage, location prefix is `sqlite://`
+    ///
+    ///   After the prefix is the path to a SQLite database file. It can also
+    ///   be a in-memory SQLite database, that is, the path can be ":memory:".
+    ///   This storage need to enabled by feature `storage-sqlite`.
     ///
     /// After a repository is opened, all of the other functions provided by
     /// Zbox will be thread-safe.

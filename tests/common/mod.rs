@@ -25,10 +25,10 @@ impl TestEnv {
         if dir.exists() {
             fs::remove_dir_all(&dir).unwrap();
         }
-        let path = "file://".to_string() + dir.to_str().unwrap();
+        let uri = "file://".to_string() + dir.to_str().unwrap();
         let repo = RepoOpener::new()
             .create_new(true)
-            .open(&path, "pwd")
+            .open(&uri, "pwd")
             .unwrap();
         TestEnv { repo, tmpdir }
     }
