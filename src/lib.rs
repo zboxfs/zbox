@@ -141,3 +141,6 @@ pub use self::volume::FaultyController;
 
 #[cfg(feature = "storage-sqlite")]
 extern crate libsqlite3_sys;
+
+#[cfg(feature = "storage-redis")]
+extern crate redis;

@@ -10,6 +10,9 @@ use rmp_serde::encode::Error as EncodeError;
 #[cfg(feature = "storage-sqlite")]
 use libsqlite3_sys::Error as SqliteError;
 
+#[cfg(feature = "storage-redis")]
+use redis::RedisError;
+
 /// The error type for operations with [`Repo`] and [`File`].
 ///
 /// [`Repo`]: struct.Repo.html
@@ -68,6 +71,9 @@ pub enum Error {
 
     #[cfg(feature = "storage-sqlite")]
     Sqlite(SqliteError),
+
+    #[cfg(feature = "storage-redis")]
+    Redis(RedisError),
 }
 
 impl Display for Error {
@@ -125,6 +131,9 @@ impl Display for Error {
 
             #[cfg(feature = "storage-sqlite")]
             Error::Sqlite(ref err) => err.fmt(f),
+
+            #[cfg(feature = "storage-redis")]
+            Error::Redis(ref err) => err.fmt(f),
         }
     }
 }
@@ -184,6 +193,9 @@ impl StdError for Error {
 
             #[cfg(feature = "storage-sqlite")]
             Error::Sqlite(ref err) => err.description(),
+
+            #[cfg(feature = "storage-redis")]
+            Error::Redis(ref err) => err.description(),
         }
     }
 
@@ -196,6 +208,9 @@ impl StdError for Error {
 
             #[cfg(feature = "storage-sqlite")]
             Error::Sqlite(ref err) => Some(err),
+
+            #[cfg(feature = "storage-redis")]
+            Error::Redis(ref err) => Some(err),
 
             _ => None,
         }
@@ -230,6 +245,13 @@ impl From<IoError> for Error {
 impl From<SqliteError> for Error {
     fn from(err: SqliteError) -> Error {
         Error::Sqlite(err)
+    }
+}
+
+#[cfg(feature = "storage-redis")]
+impl From<RedisError> for Error {
+    fn from(err: RedisError) -> Error {
+        Error::Redis(err)
     }
 }
 
@@ -288,6 +310,9 @@ impl Into<i32> for Error {
 
             #[cfg(feature = "storage-sqlite")]
             Error::Sqlite(_) => -2040,
+
+            #[cfg(feature = "storage-redis")]
+            Error::Redis(_) => -2050,
         }
     }
 }
@@ -347,6 +372,11 @@ impl PartialEq for Error {
 
             #[cfg(feature = "storage-sqlite")]
             (&Error::Sqlite(ref a), &Error::Sqlite(ref b)) => a == b,
+
+            #[cfg(feature = "storage-redis")]
+            (&Error::Redis(ref a), &Error::Redis(ref b)) => {
+                a.kind() == b.kind()
+            }
 
             (_, _) => false,
         }

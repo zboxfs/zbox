@@ -15,6 +15,9 @@ pub use self::faulty::Controller as FaultyController;
 #[cfg(feature = "storage-sqlite")]
 mod sqlite;
 
+#[cfg(feature = "storage-redis")]
+mod redis;
+
 use std::fmt::Debug;
 
 use base::crypto::{Crypto, Key};
