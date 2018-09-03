@@ -236,12 +236,22 @@ impl SqliteStorage {
 }
 
 impl Storable for SqliteStorage {
-    #[inline]
     fn exists(&self) -> Result<bool> {
-        Ok(false)
+        let mut db: *mut ffi::sqlite3 = ptr::null_mut();
+        let result = unsafe {
+            ffi::sqlite3_open_v2(
+                self.filename.as_ptr(),
+                &mut db,
+                ffi::SQLITE_OPEN_READONLY,
+                ptr::null(),
+            )
+        };
+        if !db.is_null() {
+            unsafe { ffi::sqlite3_close(db) };
+        }
+        Ok(result == ffi::SQLITE_OK)
     }
 
-    #[inline]
     fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
         // open or create db
         self.connect(
