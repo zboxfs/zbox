@@ -57,7 +57,7 @@
 //! // use std::io::Write trait to write data into it
 //! file.write_all(b"Hello, world!").unwrap();
 //!
-//! // finish writting to make a permanent version of content
+//! // finish writting to make a permanent content version
 //! file.finish().unwrap();
 //!
 //! // read file content using std::io::Read trait

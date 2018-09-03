@@ -172,7 +172,7 @@ impl RepoOpener {
     /// Opens a repository at URI with the password and options specified by
     /// `self`.
     ///
-    /// Currently three types of storages are supported:
+    /// Supported storage:
     ///
     /// - OS file system based storage, location prefix is `file://`
     ///
@@ -189,7 +189,16 @@ impl RepoOpener {
     ///
     ///   After the prefix is the path to a SQLite database file. It can also
     ///   be a in-memory SQLite database, that is, the path can be ":memory:".
-    ///   This storage need to enabled by feature `storage-sqlite`.
+    ///   This storage can be enabled by feature `storage-sqlite`.
+    ///
+    /// - Redis based storage, location prefix is `redis://`
+    ///
+    ///   After the prefix is the path to a Redis instance. Unix socket is
+    ///   supported. The URI format is:
+    ///
+    ///   `redis://[+unix+][:<passwd>@]<hostname>[:port][/<db>]`
+    ///
+    ///   This storage can be enabled by feature `storage-redis`.
     ///
     /// After a repository is opened, all of the other functions provided by
     /// Zbox will be thread-safe.
@@ -474,11 +483,15 @@ impl RepoInfo {
 /// # Create and open `Repo`
 ///
 /// `Repo` can be created on different storages using [`RepoOpener`]. It uses
-/// an URI-like string to specify its location. Currently two types of storages
-/// are supported:
+/// an URI-like string to specify its location. Supported storages are listed
+/// below:
 ///
 /// * OS file system based storage, location prefix: `file://`
 /// * Memory based storage, location prefix: `mem://`
+/// * SQLite based storage, location prefix: `sqlite://`
+/// * Redis based storage, location prefix: `redis://`
+///
+/// Check details at: [RepoOpener](struct.RepoOpener.html#method.open)
 ///
 /// `Repo` can only be opened once at a time. After opened, it keeps locked
 /// from other open attempts until it goes out scope.

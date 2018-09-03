@@ -17,9 +17,8 @@ provide shared access to multiple processes, Zbox is a file system that runs
 in the same memory space as the application. It only provides access to one
 process at a time.
 
-By abstracting IO access, Zbox supports a variety of underlying storage layers.
-Memory, OS file system and RDBMS are supported now, key-value object store
-support is coming soon.
+By abstracting IO access, Zbox supports a variety of underlying storage layers,
+including memory, OS file system, RDBMS and key-value object store.
 
 ## Disclaimer
 
@@ -86,6 +85,7 @@ enabled individually by specifying its feature when build.
 | Memory         | "mem://"        | N/A            |
 | OS file system | "file://"       | N/A            |
 | SQLite         | "sqlite://"     | storage-sqlite |
+| Redis          | "redis://"      | storage-redis  |
 
 There is another special storage `Faulty` ("faulty://"), which is based on
 memory storage and can simulate random IO error. It is used internally to
@@ -144,7 +144,7 @@ fn main() {
     // use std::io::Write trait to write data into it
     file.write_all(b"Hello, world!").unwrap();
 
-    // finish writing to make a permanent version of content
+    // finish writing to make a permanent content version
     file.finish().unwrap();
 
     // read file content using std::io::Read trait
