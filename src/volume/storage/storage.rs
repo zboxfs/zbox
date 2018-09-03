@@ -80,6 +80,16 @@ impl Storage {
             {
                 return Err(Error::InvalidUri);
             }
+        } else if uri.starts_with("redis://") {
+            #[cfg(feature = "storage-redis")]
+            {
+                let depot = super::redis::RedisStorage::new(&uri[8..])?;
+                Box::new(depot)
+            }
+            #[cfg(not(feature = "storage-redis"))]
+            {
+                return Err(Error::InvalidUri);
+            }
         } else if uri.starts_with("faulty://") {
             #[cfg(feature = "storage-faulty")]
             {
@@ -688,13 +698,7 @@ mod tests {
         assert_eq!(Reader::new(&id, storage).unwrap_err(), Error::NotFound);
     }
 
-    #[test]
-    fn mem_depot() {
-        init_env();
-        let storage = Storage::new("mem://foo").unwrap();
-        assert!(!storage.exists().unwrap());
-        let storage = storage.into_ref();
-
+    fn test_depot(storage: StorageRef) {
         single_span_addr_test(&storage);
         multi_span_addr_test(&storage);
         overwrite_test(&storage);
@@ -702,16 +706,20 @@ mod tests {
     }
 
     #[test]
+    fn mem_depot() {
+        init_env();
+        let storage = Storage::new("mem://foo").unwrap();
+        assert!(!storage.exists().unwrap());
+        test_depot(storage.into_ref());
+    }
+
+    #[test]
     fn file_depot() {
         init_env();
         let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
         let uri = format!("file://{}", tmpdir.path().display());
-        let storage = Storage::new(&uri).unwrap().into_ref();
-
-        single_span_addr_test(&storage);
-        multi_span_addr_test(&storage);
-        overwrite_test(&storage);
-        delete_test(&storage);
+        let storage = Storage::new(&uri).unwrap();
+        test_depot(storage.into_ref());
     }
 
     #[cfg(feature = "storage-sqlite")]
@@ -720,12 +728,16 @@ mod tests {
         init_env();
         let mut storage = Storage::new("sqlite://:memory:").unwrap();
         storage.init(Cost::default(), Cipher::default()).unwrap();
-        let storage = storage.into_ref();
+        test_depot(storage.into_ref());
+    }
 
-        single_span_addr_test(&storage);
-        multi_span_addr_test(&storage);
-        overwrite_test(&storage);
-        delete_test(&storage);
+    #[cfg(feature = "storage-redis")]
+    #[test]
+    fn redis_depot() {
+        init_env();
+        let mut storage = Storage::new("redis://127.0.0.1").unwrap();
+        storage.init(Cost::default(), Cipher::default()).unwrap();
+        test_depot(storage.into_ref());
     }
 
     fn perf_test(storage: &StorageRef, prefix: &str) {
