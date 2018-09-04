@@ -319,6 +319,7 @@ impl SectorMgr {
             sec_data.seek(SeekFrom::Start(blk_offset as u64))?;
             sec_data.write_all(&blks[..write_len])?;
             blks = &blks[write_len..];
+            drop(sec_data);
 
             // In case of a tx contains deletion operation
             // and that deletes blocks in the same sector, the blocks will
@@ -418,6 +419,7 @@ impl SectorMgr {
         self.cache.insert(sec.idx, sec);
 
         // switch sector data file
+        drop(sec_data);
         vio::rename(&dst_path, &data_file_path)?;
 
         Ok(())
