@@ -256,10 +256,9 @@ impl Writer {
         }
     }
 
-    pub fn finish_with_content(self) -> Result<Content> {
+    pub fn finish(self) -> Result<(Content, ChunkMap)> {
         let ctn_wtr = self.inner.into_inner()?;
-        let content = ctn_wtr.finish_with_content()?;
-        Ok(content)
+        ctn_wtr.finish()
     }
 }
 

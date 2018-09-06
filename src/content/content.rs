@@ -289,14 +289,15 @@ impl Writer {
         Ok(())
     }
 
-    pub fn finish_with_content(mut self) -> Result<Content> {
+    // finish writer, return stage content and updated chunk map
+    pub fn finish(mut self) -> Result<(Content, ChunkMap)> {
         // finish segment writer
         self.seg_wtr.finish()?;
 
         // finish merkel tree
         self.ctn.leaves = self.mtree_wtr.finish_with_leaves();
 
-        Ok(self.ctn)
+        Ok((self.ctn, self.chk_map))
     }
 }
 
@@ -311,7 +312,7 @@ impl Write for Writer {
         self.mtree_wtr.write(chunk)?;
 
         // if duplicate chunk is found,
-        if let Some(ref loc) = self.chk_map.get(&hash) {
+        if let Some(ref loc) = self.chk_map.get_refresh(&hash) {
             // get referred segment, it could be the current segment
             let store = self.store.read().unwrap();
             let rseg = {
@@ -347,13 +348,15 @@ impl Write for Writer {
     }
 
     fn flush(&mut self) -> IoResult<()> {
-        self.seg_wtr.flush().and(self.mtree_wtr.flush())
+        self.seg_wtr.flush()?;
+        self.mtree_wtr.flush()
     }
 }
 
 impl Seek for Writer {
     fn seek(&mut self, pos: SeekFrom) -> IoResult<u64> {
-        self.ctn.seek(pos).and(self.mtree_wtr.seek(pos))
+        self.ctn.seek(pos)?;
+        self.mtree_wtr.seek(pos)
     }
 }
 

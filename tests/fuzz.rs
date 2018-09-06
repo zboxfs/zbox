@@ -171,7 +171,11 @@ impl Testable for Tester {
                         let data = &fuzzer.data
                             [step.data_pos..step.data_pos + step.data_len];
                         let result = step.write_to_file(&mut file, data);
-                        if !is_faulty_err!(result) {
+                        if is_faulty_err!(result) {
+                            // write to file failed, but the file itself
+                            // is already created, do same to control group
+                            ctlgrp.add_file(&path, &fuzzer.data[..0]);
+                        } else {
                             ctlgrp.add_file(&path, &data[..]);
                         }
                     }
@@ -211,7 +215,7 @@ impl Testable for Tester {
                         node.compare_file_content(&mut fuzzer.repo_handle.repo)
                     );
                 } else {
-                    // compre directory
+                    // compare directory
                     let result = skip_faulty!(
                         fuzzer.repo_handle.repo.read_dir(&node.path)
                     );
@@ -258,6 +262,7 @@ impl Testable for Tester {
             Action::Truncate => {
                 let result = skip_faulty!(
                     OpenOptions::new()
+                        .read(true)
                         .write(true)
                         .open(&mut fuzzer.repo_handle.repo, &node.path)
                 );
@@ -268,10 +273,8 @@ impl Testable for Tester {
 
                 // truncate file
                 let mut file = result.unwrap();
-                let result = file.set_len(step.data_len);
-                if is_faulty_err!(result) {
-                    return;
-                }
+                let result = skip_faulty!(file.set_len(step.data_len));
+                result.unwrap();
 
                 // and do the same to to control group
                 let nd = ctlgrp.find_node_mut(&node.path).unwrap();
@@ -424,7 +427,7 @@ impl Testable for Tester {
 fn fuzz_test() {
     // increase below numbers to perform intensive fuzz test
     let batches = 1; // number of fuzz test batches
-    let rounds = 30; // number of rounds in one batch
+    let rounds = 50; // number of rounds in one batch
     let worker_cnt = 2; // worker thread count
 
     let storage = if cfg!(feature = "storage-faulty") {
@@ -446,5 +449,5 @@ fn fuzz_test() {
 fn fuzz_test_rerun() {
     let tester = Tester {};
     // copy batch number from std output and replace it below
-    Fuzzer::rerun("1535548510", Box::new(tester));
+    Fuzzer::rerun("1536125739", Box::new(tester));
 }

@@ -1,6 +1,7 @@
-use std::collections::HashMap;
 use std::fmt::{self, Debug};
 use std::sync::{Arc, RwLock};
+
+use linked_hash_map::LinkedHashMap;
 
 use super::wal::Wal;
 use super::{Eid, EntityType, Id, Txid};
@@ -29,7 +30,7 @@ pub type TransableRef = Arc<RwLock<Transable>>;
 /// Transaction
 pub struct Trans {
     txid: Txid,
-    cohorts: HashMap<Eid, TransableRef>,
+    cohorts: LinkedHashMap<Eid, TransableRef>,
     wal: Wal,
     wal_armor: VolumeArmor<Wal>,
 }
@@ -38,7 +39,7 @@ impl Trans {
     pub fn new(txid: Txid, vol: &VolumeRef) -> Self {
         Trans {
             txid,
-            cohorts: HashMap::new(),
+            cohorts: LinkedHashMap::new(),
             wal: Wal::new(txid),
             wal_armor: VolumeArmor::new(vol),
         }

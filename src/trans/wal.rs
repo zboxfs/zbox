@@ -5,8 +5,10 @@ use std::hash::{Hash, Hasher};
 use super::trans::Action;
 use super::{Eid, Id, Txid};
 use base::crypto::{HashKey, HASHKEY_SIZE};
-use error::Result;
-use volume::{Arm, ArmAccess, Armor, Seq, VolumeArmor, VolumeRef};
+use error::{Error, Result};
+use volume::{
+    AllocatorRef, Arm, ArmAccess, Armor, Seq, VolumeArmor, VolumeRef,
+};
 
 /// Wal entry entity type
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -178,8 +180,8 @@ impl<'de> ArmAccess<'de> for Wal {
 ///
 /// The whole wal queue should be able to fit into one block, so
 /// the persisted size should less than one block size.
-#[derive(Default, Deserialize, Serialize)]
-pub struct WalQueue {
+#[derive(Default, Clone, Deserialize, Serialize)]
+struct WalQueue {
     id: Eid,
     seq: u64,
     arm: Arm,
@@ -219,28 +221,38 @@ impl WalQueue {
     }
 
     #[inline]
-    pub fn watermarks(&self) -> (u64, u64) {
+    fn watermarks(&self) -> (u64, u64) {
         (self.txid_wmark, self.blk_wmark)
     }
 
     #[inline]
-    pub fn set_watermarks(&mut self, txid_wmark: u64, blk_wmark: u64) {
+    fn set_watermarks(&mut self, txid_wmark: u64, blk_wmark: u64) {
         self.txid_wmark = txid_wmark;
         self.blk_wmark = blk_wmark;
     }
 
     #[inline]
-    pub fn open(&mut self, vol: &VolumeRef) {
+    fn has_doing(&self) -> bool {
+        !self.doing.is_empty()
+    }
+
+    #[inline]
+    fn has_abort(&self) -> bool {
+        !self.aborting.is_empty()
+    }
+
+    #[inline]
+    fn open(&mut self, vol: &VolumeRef) {
         self.wal_armor = VolumeArmor::new(vol);
     }
 
     #[inline]
-    pub fn begin_trans(&mut self, txid: Txid) {
+    fn begin_trans(&mut self, txid: Txid) {
         assert!(!self.doing.contains(&txid));
         self.doing.insert(txid);
     }
 
-    pub fn end_trans(&mut self, wal: Wal) -> Result<()> {
+    fn commit_trans(&mut self, wal: Wal) -> Result<()> {
         // recycle the retired trans
         while self.done.len() >= Self::COMMITTED_QUEUE_SIZE {
             {
@@ -248,13 +260,21 @@ impl WalQueue {
                 let retiree_txid = self.done.front().unwrap();
                 let retiree_id = Wal::derive_id(*retiree_txid);
 
-                // load wal and recycle it
-                let retiree = self.wal_armor.load_item(&retiree_id)?;
-                retiree.recyle(&self.wal_armor)?;
-
-                // then remove the wal
-                self.wal_armor.remove_all_arms(&retiree_id)?;
+                // load the retired wal
+                match self.wal_armor.load_item(&retiree_id) {
+                    Ok(retiree) => {
+                        // recycle and remove the wal
+                        retiree.recyle(&self.wal_armor)?;
+                        self.wal_armor.remove_all_arms(&retiree_id)?;
+                    }
+                    Err(ref err) if *err == Error::NotFound => {
+                        // wal is already recycled and removed, do nothing
+                        // here but skip it
+                    }
+                    Err(err) => return Err(err),
+                }
             }
+
             self.done.pop_front();
         }
 
@@ -266,36 +286,36 @@ impl WalQueue {
     }
 
     #[inline]
-    pub fn begin_abort(&mut self, wal: &Wal) {
+    fn begin_abort(&mut self, wal: &Wal) {
         self.aborting.insert(wal.txid, wal.clone());
     }
 
     #[inline]
-    pub fn end_abort(&mut self, txid: Txid) {
+    fn end_abort(&mut self, txid: Txid) {
         self.aborting.remove(&txid);
         self.doing.remove(&txid);
     }
 
-    // hot redo failed abortion, return succeed tx count
-    pub fn hot_redo_abort(&mut self, vol: &VolumeRef) -> Result<usize> {
+    // hot redo failed abort
+    fn hot_redo_abort(&mut self, vol: &VolumeRef) -> Result<()> {
         let mut completed = Vec::new();
 
         for wal in self.aborting.values() {
             debug!("hot redo abort tx#{}", wal.txid);
             wal.clean_aborted(vol)?;
-            completed.push(wal.clone());
+            completed.push(wal.txid);
         }
 
         // remove all txs which are completed to retry abort
-        for wal in completed.iter() {
-            self.end_abort(wal.txid);
+        for txid in completed.iter() {
+            self.end_abort(*txid);
         }
 
-        Ok(completed.len())
+        Ok(())
     }
 
-    // cold redo failed abortion, return succeed tx count
-    pub fn cold_redo_abort(&mut self, vol: &VolumeRef) -> Result<usize> {
+    // cold redo failed abort
+    fn cold_redo_abort(&mut self, vol: &VolumeRef) -> Result<()> {
         let mut completed = Vec::new();
 
         for txid in &self.doing {
@@ -309,10 +329,10 @@ impl WalQueue {
 
         // remove all txs which are succeed to retry abort
         for txid in completed.iter() {
-            self.doing.remove(&txid);
+            self.end_abort(*txid);
         }
 
-        Ok(completed.len())
+        Ok(())
     }
 }
 
@@ -362,5 +382,164 @@ impl<'de> ArmAccess<'de> for WalQueue {
     #[inline]
     fn arm_mut(&mut self) -> &mut Arm {
         &mut self.arm
+    }
+}
+
+/// WalQueue Manager
+#[derive(Default)]
+pub struct WalQueueMgr {
+    // txid watermark
+    txid_wmark: Txid,
+
+    // wal queue and wal queue armor
+    walq: WalQueue,
+    walq_backup: Option<WalQueue>,
+    walq_armor: VolumeArmor<WalQueue>,
+
+    // block allocator
+    allocator: AllocatorRef,
+}
+
+impl WalQueueMgr {
+    pub fn new(walq_id: &Eid, vol: &VolumeRef) -> Self {
+        let allocator = {
+            let vol = vol.read().unwrap();
+            vol.allocator()
+        };
+        WalQueueMgr {
+            txid_wmark: Txid::from(0),
+            walq: WalQueue::new(walq_id, vol),
+            walq_backup: None,
+            walq_armor: VolumeArmor::new(vol),
+            allocator,
+        }
+    }
+
+    pub fn open(&mut self, walq_id: &Eid, vol: &VolumeRef) -> Result<()> {
+        // load wal queue
+        self.walq = self.walq_armor.load_item(walq_id)?;
+        self.walq.open(vol);
+
+        // restore water marks
+        let (txid_wmark, blk_wmark) = self.walq.watermarks();
+        self.txid_wmark = Txid::from(txid_wmark);
+        {
+            let mut allocator = self.allocator.write().unwrap();
+            allocator.set_block_wmark(blk_wmark);
+        }
+
+        // now redo abort tx if any
+        if self.walq.has_doing() {
+            self.backup_walq();
+            self.walq.cold_redo_abort(vol).or_else(|err| {
+                // if failed, restore the walq backup
+                self.restore_walq();
+                Err(err)
+            })?;
+            self.save_walq()?;
+            debug!("cold abort completed");
+        }
+
+        debug!(
+            "WalQueue opened, seq: {}, watermarks: txid: {}, block: {}",
+            self.walq.seq(),
+            txid_wmark,
+            blk_wmark
+        );
+
+        Ok(())
+    }
+
+    #[inline]
+    pub fn next_txid(&mut self) -> Txid {
+        self.txid_wmark.next()
+    }
+
+    #[inline]
+    fn backup_walq(&mut self) {
+        self.walq_backup = Some(self.walq.clone());
+    }
+
+    #[inline]
+    fn restore_walq(&mut self) {
+        self.walq = self.walq_backup.take().unwrap();
+    }
+
+    fn save_walq(&mut self) -> Result<()> {
+        // reserve one block beforehand for the wal queue, because wal queue
+        // itself will consume a block
+        let blk_wmark = {
+            let mut allocator = self.allocator.write().unwrap();
+            allocator.reserve(1)
+        };
+
+        // save watermarks to wal queue and save it,
+        self.walq.set_watermarks(self.txid_wmark.val(), blk_wmark);
+        self.walq_armor.save_item(&mut self.walq).or_else(|err| {
+            // if save failed, restore the walq backup
+            self.restore_walq();
+            Err(err)
+        })?;
+
+        // make sure the block watermark is correct
+        {
+            let allocator = self.allocator.read().unwrap();
+            assert_eq!(allocator.block_wmark(), blk_wmark);
+        }
+
+        Ok(())
+    }
+
+    pub fn begin_trans(&mut self, txid: Txid) -> Result<()> {
+        self.backup_walq();
+        self.walq.begin_trans(txid);
+        self.save_walq()
+    }
+
+    pub fn commit_trans(&mut self, wal: Wal) -> Result<()> {
+        self.backup_walq();
+        self.walq.commit_trans(wal).or_else(|err| {
+            // if commit failed, restore the walq backup
+            self.restore_walq();
+            Err(err)
+        })?;
+        self.save_walq()
+    }
+
+    #[inline]
+    pub fn begin_abort(&mut self, wal: &Wal) {
+        self.walq.begin_abort(wal)
+    }
+
+    pub fn end_abort(&mut self, txid: Txid) -> Result<()> {
+        self.backup_walq();
+        self.walq.end_abort(txid);
+        self.save_walq()
+    }
+
+    pub fn hot_redo_abort(&mut self, vol: &VolumeRef) -> Result<()> {
+        if !self.walq.has_abort() {
+            return Ok(());
+        }
+
+        self.backup_walq();
+        self.walq.hot_redo_abort(vol).or_else(|err| {
+            // if failed, restore the walq backup
+            self.restore_walq();
+            Err(err)
+        })?;
+        self.save_walq().and_then(|_| {
+            debug!("hot abort completed");
+            Ok(())
+        })
+    }
+}
+
+impl Debug for WalQueueMgr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("WalQueueMgr")
+            .field("txid_wmark", &self.txid_wmark)
+            .field("walq", &self.walq)
+            .finish()
     }
 }

@@ -311,7 +311,8 @@ impl Storable for SqliteStorage {
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
-        bind_int(stmt, 1, suffix).and(run_select_blob(stmt))
+        bind_int(stmt, 1, suffix)?;
+        run_select_blob(stmt)
     }
 
     fn put_super_block(&mut self, super_blk: &[u8], suffix: u64) -> Result<()> {
@@ -319,9 +320,9 @@ impl Storable for SqliteStorage {
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
-        bind_int(stmt, 1, suffix)
-            .and(bind_blob(stmt, 2, super_blk))
-            .and(run_dml(stmt))
+        bind_int(stmt, 1, suffix)?;
+        bind_blob(stmt, 2, super_blk)?;
+        run_dml(stmt)
     }
 
     fn get_addr(&mut self, id: &Eid) -> Result<Vec<u8>> {
@@ -329,7 +330,8 @@ impl Storable for SqliteStorage {
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
-        bind_id(stmt, 1, id).and(run_select_blob(stmt))
+        bind_id(stmt, 1, id)?;
+        run_select_blob(stmt)
     }
 
     fn put_addr(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
@@ -337,9 +339,9 @@ impl Storable for SqliteStorage {
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
-        bind_id(stmt, 1, id)
-            .and(bind_blob(stmt, 2, addr))
-            .and(run_dml(stmt))
+        bind_id(stmt, 1, id)?;
+        bind_blob(stmt, 2, addr)?;
+        run_dml(stmt)
     }
 
     fn del_addr(&mut self, id: &Eid) -> Result<()> {
@@ -347,7 +349,8 @@ impl Storable for SqliteStorage {
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
-        bind_id(stmt, 1, id).and(run_dml(stmt))
+        bind_id(stmt, 1, id)?;
+        run_dml(stmt)
     }
 
     fn get_blocks(
@@ -366,7 +369,8 @@ impl Storable for SqliteStorage {
             reset_stmt(stmt)?;
 
             // bind parameters and run sql
-            let blk = bind_int(stmt, 1, blk_idx).and(run_select_blob(stmt))?;
+            bind_int(stmt, 1, blk_idx)?;
+            let blk = run_select_blob(stmt)?;
             assert_eq!(blk.len(), BLK_SIZE);
             dst[read..read + BLK_SIZE].copy_from_slice(&blk);
             read += BLK_SIZE;
@@ -390,9 +394,9 @@ impl Storable for SqliteStorage {
             reset_stmt(stmt)?;
 
             // bind parameters and run sql
-            bind_int(stmt, 1, blk_idx)
-                .and(bind_blob(stmt, 2, &blks[..BLK_SIZE]))
-                .and(run_dml(stmt))?;
+            bind_int(stmt, 1, blk_idx)?;
+            bind_blob(stmt, 2, &blks[..BLK_SIZE])?;
+            run_dml(stmt)?;
 
             blks = &blks[BLK_SIZE..];
         }
@@ -408,7 +412,8 @@ impl Storable for SqliteStorage {
             reset_stmt(stmt)?;
 
             // bind parameters and run sql
-            bind_int(stmt, 1, blk_idx).and(run_dml(stmt))?;
+            bind_int(stmt, 1, blk_idx)?;
+            run_dml(stmt)?;
         }
 
         Ok(())

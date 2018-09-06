@@ -5,99 +5,41 @@ use std::sync::{Arc, RwLock};
 use linked_hash_map::LinkedHashMap;
 
 use super::trans::{Action, Trans, TransRef, TransableRef};
-use super::wal::{EntityType, WalQueue};
+use super::wal::{EntityType, WalQueueMgr};
 use super::{Eid, Txid};
 use base::IntoRef;
 use error::{Error, Result};
-use volume::{AllocatorRef, Arm, Armor, VolumeArmor, VolumeRef};
+use volume::{Arm, VolumeRef};
 
 /// Tranaction manager
 #[derive(Default)]
 pub struct TxMgr {
-    // txid watermark
-    txid_wmark: Txid,
-
     // transaction list
     txs: LinkedHashMap<Txid, TransRef>,
 
     // entity tx map
     ents: HashMap<Eid, Txid>,
 
-    // wal queue and wal queue armor
-    walq: WalQueue,
-    walq_armor: VolumeArmor<WalQueue>,
+    // wal queue
+    walq: WalQueueMgr,
 
-    allocator: AllocatorRef,
     vol: VolumeRef,
 }
 
 impl TxMgr {
     pub fn new(walq_id: &Eid, vol: &VolumeRef) -> Self {
-        let allocator = {
-            let vol = vol.read().unwrap();
-            vol.allocator()
-        };
         TxMgr {
-            txid_wmark: Txid::from(0),
             txs: LinkedHashMap::new(),
             ents: HashMap::new(),
-            walq: WalQueue::new(walq_id, vol),
-            walq_armor: VolumeArmor::new(vol),
-            allocator,
+            walq: WalQueueMgr::new(walq_id, vol),
             vol: vol.clone(),
         }
-    }
-
-    // save wal queue to volume
-    fn save_walq(&mut self) -> Result<()> {
-        // reserve one block ahead for the wal queue, because wal queue itself
-        // will consume a block
-        let blk_wmark = {
-            let mut allocator = self.allocator.write().unwrap();
-            allocator.reserve(1)
-        };
-
-        // save watermarks to wal queue and save it
-        self.walq.set_watermarks(self.txid_wmark.val(), blk_wmark);
-        self.walq_armor.save_item(&mut self.walq)?;
-
-        // make sure the block watermark is correct
-        {
-            let allocator = self.allocator.read().unwrap();
-            assert_eq!(allocator.block_wmark(), blk_wmark);
-        }
-
-        Ok(())
     }
 
     /// Open transaction manager
     pub fn open(walq_id: &Eid, vol: &VolumeRef) -> Result<Self> {
         let mut txmgr = TxMgr::new(walq_id, vol);
-
-        // load and open wal queue
-        txmgr.walq = txmgr.walq_armor.load_item(walq_id)?;
-        txmgr.walq.open(vol);
-
-        // restore water marks
-        let (txid_wmark, blk_wmark) = txmgr.walq.watermarks();
-        txmgr.txid_wmark = Txid::from(txid_wmark);
-        {
-            let mut allocator = txmgr.allocator.write().unwrap();
-            allocator.set_block_wmark(blk_wmark);
-        }
-
-        // now redo abort tx if any
-        if txmgr.walq.cold_redo_abort(vol)? > 0 {
-            // if there are any txs are successfully redoed abort,
-            // save the wal queue
-            txmgr.save_walq()?;
-        }
-
-        debug!(
-            "txmgr opened, watermarks: txid: {}, block: {}",
-            txid_wmark, blk_wmark
-        );
-
+        txmgr.walq.open(walq_id, vol)?;
         Ok(txmgr)
     }
 
@@ -112,25 +54,19 @@ impl TxMgr {
         let vol = tm.vol.clone();
 
         // try to redo abort tx if any tx failed abortion before,
-        if tm.walq.hot_redo_abort(&vol)? > 0 {
-            // if there are any txs are successfully redone abort,
-            // save the wal queue
-            tm.save_walq()?;
-        }
+        tm.walq.hot_redo_abort(&vol)?;
 
-        // get next txid, here we marked this thread as in tx
-        let txid = tm.txid_wmark.next();
+        // get next txid, here we marked current thread as in tx
+        let txid = tm.walq.next_txid();
         debug!("begin tx#{}", txid);
 
         // begin a transaction in wal queue
-        tm.walq.begin_trans(txid);
-        if let Err(err) = tm.save_walq() {
-            // if save wal queue failed, clean up it and remove thread tx mark
-            tm.walq.end_abort(txid);
+        tm.walq.begin_trans(txid).or_else(|err| {
+            // if failed, remove the thread tx mark
             Txid::reset_current();
             debug!("tx#{} aborted before start", txid);
-            return Err(err);
-        }
+            Err(err)
+        })?;
 
         // create a new transaction and add it to transaction manager
         let tx = Trans::new(txid, &vol).into_ref();
@@ -178,6 +114,7 @@ impl TxMgr {
     fn remove_trans(&mut self, txid: Txid) {
         self.txs.remove(&txid);
         self.ents.retain(|_, &mut v| v != txid);
+        Txid::reset_current();
     }
 
     // commit transaction
@@ -189,8 +126,7 @@ impl TxMgr {
             // commit tx, if any errors then abort the tx
             match tx
                 .commit(&self.vol)
-                .and_then(|wal| self.walq.end_trans(wal))
-                .and(self.save_walq())
+                .and_then(|wal| self.walq.commit_trans(wal))
             {
                 Ok(_) => {
                     tx.complete_commit();
@@ -205,9 +141,8 @@ impl TxMgr {
             // error happened during commit, abort the tx
             self.abort_trans(txid);
         } else {
-            // remove tx from tx manager and remove txid from current thread
+            // commit succeed, remove tx from tx manager
             self.remove_trans(txid);
-            Txid::reset_current();
         }
 
         // return the original result during commit
@@ -224,26 +159,20 @@ impl TxMgr {
             let wal = tx.get_wal();
 
             self.walq.begin_abort(&wal);
-            match tx
-                .abort(&self.vol)
-                .and(Ok(self.walq.end_abort(txid)))
-                .and(self.save_walq())
-            {
+            match tx.abort(&self.vol).and_then(|_| self.walq.end_abort(txid)) {
                 Ok(_) => debug!("tx#{} aborted", txid),
                 Err(err) => warn!("abort tx#{} failed: {}", txid, err),
             }
         }
 
-        // remove tx from tx manager and remove txid from current thread
+        // remove tx from tx manager
         self.remove_trans(txid);
-        Txid::reset_current();
     }
 }
 
 impl Debug for TxMgr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("TxMgr")
-            .field("txid_wmark", &self.txid_wmark)
             .field("txs", &self.txs)
             .field("ents", &self.ents)
             .field("walq", &self.walq)

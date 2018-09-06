@@ -193,7 +193,7 @@ pub trait Armor<'de> {
 }
 
 /// Volume Armor
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct VolumeArmor<T> {
     vol: VolumeRef,
     _t: PhantomData<T>,

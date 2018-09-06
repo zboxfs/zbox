@@ -15,7 +15,7 @@ pub mod imp {
         pub fn new() -> Self {
             Controller {
                 ctl: FaultyController::new(),
-                prob: 0.2, // set the error probability to 20%
+                prob: 0.05, // set the error probability
             }
         }
 

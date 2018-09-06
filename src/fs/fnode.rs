@@ -657,6 +657,7 @@ impl Debug for Fnode {
             .field("mtime", &self.mtime)
             .field("kids", &self.kids)
             .field("vers", &self.vers)
+            .field("chk_map", &self.chk_map)
             .field("sub_nodes", &self.sub_nodes)
             .finish()
     }
@@ -741,7 +742,7 @@ impl Write for Writer {
 
 impl Finish for Writer {
     fn finish(self) -> Result<usize> {
-        let stg_ctn = self.inner.finish_with_content()?;
+        let (stg_ctn, chk_map) = self.inner.finish()?;
         let handle = &self.handle;
 
         let mut fnode_cow = handle.fnode.write().unwrap();
@@ -765,6 +766,9 @@ impl Finish for Writer {
                 stg_ctn.unlink_weak(&mut fnode.chk_map, &handle.store)?;
             }
         }
+
+        // udpate fnode chunk map
+        fnode.chk_map = chk_map;
 
         Ok(stg_ctn.end_offset())
     }

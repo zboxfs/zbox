@@ -304,7 +304,7 @@ impl Fs {
     pub fn create_dir_all(&mut self, path: &Path) -> Result<()> {
         match self.create_fnode(path, FileType::Dir, Options::default()) {
             Ok(_) => return Ok(()),
-            Err(ref e) if *e == Error::NotFound => {}
+            Err(ref err) if *err == Error::NotFound => {}
             Err(err) => return Err(err),
         }
         match path.parent() {

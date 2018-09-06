@@ -74,7 +74,7 @@ impl Action {
     fn new_random() -> Self {
         // give each action different probability, 10 is base line
         let weight = [
-            30, // New,
+            60, // New,
             15, // Read,
             15, // Update,
             10, // Truncate,

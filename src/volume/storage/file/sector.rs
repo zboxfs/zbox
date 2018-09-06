@@ -406,7 +406,8 @@ impl SectorMgr {
 
             // read from sector and write to destination
             sec_data.seek(SeekFrom::Start(data_offset as u64))?;
-            sec_data.read_exact(&mut buf).and(dst_file.write_all(&buf))?;
+            sec_data.read_exact(&mut buf)?;
+            dst_file.write_all(&buf)?;
 
             *insec_idx = written_blk_cnt;
             written_blk_cnt += 1;
