@@ -34,11 +34,13 @@ int test_repo() {
     // repo info
     struct zbox_repo_info info;
     zbox_get_repo_info(&info, repo);
-    assert(info.version_limit == 2);
     assert(!strcmp(info.uri, uri));
     assert(info.ops_limit == ZBOX_OPS_MODERATE);
     assert(info.mem_limit == ZBOX_MEM_INTERACTIVE);
     assert(info.cipher == ZBOX_CIPHER_XCHACHA);
+    assert(!info.compress);
+    assert(info.version_limit == 2);
+    assert(info.dedup_chunk);
     assert(!info.is_read_only);
     assert(info.created > 0);
     zbox_destroy_repo_info(&info);

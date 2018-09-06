@@ -413,6 +413,7 @@ pub struct RepoInfo {
     uri: String,
     cost: Cost,
     cipher: Cipher,
+    compress: bool,
     version_limit: u8,
     dedup_chunk: bool,
     read_only: bool,
@@ -451,6 +452,11 @@ impl RepoInfo {
     /// Returns repository password encryption cipher.
     pub fn cipher(&self) -> Cipher {
         self.cipher
+    }
+
+    /// Returns whether compression is enabled.
+    pub fn compress(&self) -> bool {
+        self.compress
     }
 
     /// Returns the default maximum number of file versions.
@@ -580,6 +586,7 @@ impl Repo {
             uri: meta.vol_info.uri.clone(),
             cost: meta.vol_info.cost.clone(),
             cipher: meta.vol_info.cipher.clone(),
+            compress: meta.vol_info.compress,
             version_limit: meta.opts.version_limit,
             dedup_chunk: meta.opts.dedup_chunk,
             read_only: meta.read_only,

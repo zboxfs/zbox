@@ -10,7 +10,7 @@ use base::init_env;
 use error::Error;
 use file::{File, VersionReader};
 use fs::{Metadata, Version};
-use repo::{Repo, RepoOpener};
+use repo::{OpenOptions, Repo, RepoOpener};
 use trans::Eid;
 
 #[allow(non_camel_case_types)]
@@ -96,12 +96,32 @@ pub extern "C" fn zbox_opener_create_new(
 }
 
 #[no_mangle]
+pub extern "C" fn zbox_opener_compress(
+    opener: *mut RepoOpener,
+    compress: boolean_t,
+) {
+    unsafe {
+        (*opener).compress(compress == 1);
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn zbox_opener_version_limit(
     opener: *mut RepoOpener,
     limit: uint8_t,
 ) {
     unsafe {
         (*opener).version_limit(limit);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_opener_dedup_chunk(
+    opener: *mut RepoOpener,
+    dedup_chunk: boolean_t,
+) {
+    unsafe {
+        (*opener).dedup_chunk(dedup_chunk == 1);
     }
 }
 
@@ -172,7 +192,9 @@ pub struct CRepoInfo {
     ops_limit: c_int,
     mem_limit: c_int,
     cipher: c_int,
+    compress: boolean_t,
     version_limit: uint8_t,
+    dedup_chunk: boolean_t,
     is_read_only: boolean_t,
     created: time_t,
 }
@@ -191,7 +213,9 @@ pub extern "C" fn zbox_get_repo_info(info: *mut CRepoInfo, repo: *const Repo) {
     info.ops_limit = repo_info.ops_limit().into();
     info.mem_limit = repo_info.mem_limit().into();
     info.cipher = repo_info.cipher().into();
+    info.compress = repo_info.compress() as boolean_t;
     info.version_limit = repo_info.version_limit();
+    info.dedup_chunk = repo_info.dedup_chunk() as boolean_t;
     info.is_read_only = repo_info.is_read_only() as boolean_t;
     info.created = to_time_t(ctime);
 }
@@ -577,6 +601,97 @@ pub extern "C" fn zbox_repo_rename(
             Err(err) => err.into(),
         }
     }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_create_open_options() -> *mut OpenOptions {
+    Box::into_raw(Box::new(OpenOptions::new()))
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_open_options_read(
+    options: *mut OpenOptions,
+    read: boolean_t,
+) {
+    unsafe {
+        (*options).read(read == 1);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_open_options_write(
+    options: *mut OpenOptions,
+    write: boolean_t,
+) {
+    unsafe {
+        (*options).write(write == 1);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_open_options_append(
+    options: *mut OpenOptions,
+    append: boolean_t,
+) {
+    unsafe {
+        (*options).append(append == 1);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_open_options_truncate(
+    options: *mut OpenOptions,
+    truncate: boolean_t,
+) {
+    unsafe {
+        (*options).truncate(truncate == 1);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_open_options_create(
+    options: *mut OpenOptions,
+    create: boolean_t,
+) {
+    unsafe {
+        (*options).create(create == 1);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_open_options_create_new(
+    options: *mut OpenOptions,
+    create_new: boolean_t,
+) {
+    unsafe {
+        (*options).create_new(create_new == 1);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_open_options_version_limit(
+    options: *mut OpenOptions,
+    limit: uint8_t,
+) {
+    unsafe {
+        (*options).version_limit(limit);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_open_options_dedup_chunk(
+    options: *mut OpenOptions,
+    dedup_chunk: boolean_t,
+) {
+    unsafe {
+        (*options).dedup_chunk(dedup_chunk == 1);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn zbox_free_open_options(options: *mut OpenOptions) {
+    let _owned = unsafe { Box::from_raw(options) };
+    // _owned droped here
 }
 
 #[no_mangle]

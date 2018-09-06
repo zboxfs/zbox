@@ -18,7 +18,9 @@ struct zbox_repo_info {
     enum zbox_ops_limit ops_limit;
     enum zbox_mem_limit mem_limit;
     enum zbox_cipher cipher;
+    bool compress;
     uint8_t version_limit;
+    bool dedup_chunk;
     bool is_read_only;
     time_t created;
 };
@@ -32,7 +34,9 @@ extern void zbox_opener_mem_limit(zbox_opener opener, enum zbox_mem_limit limit)
 extern void zbox_opener_cipher(zbox_opener opener, enum zbox_cipher cipher);
 extern void zbox_opener_create(zbox_opener opener, bool create);
 extern void zbox_opener_create_new(zbox_opener opener, bool create_new);
+extern void zbox_opener_compress(zbox_opener opener, bool compress);
 extern void zbox_opener_version_limit(zbox_opener opener, uint8_t limit);
+extern void zbox_opener_dedup_chunk(zbox_opener opener, bool dedup_chunk);
 extern void zbox_opener_read_only(zbox_opener opener, bool read_only);
 extern void zbox_free_opener(zbox_opener opener);
 

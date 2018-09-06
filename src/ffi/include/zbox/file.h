@@ -10,19 +10,20 @@
 extern "C" {
 #endif
 
-typedef void *zbox_options;
+typedef void *zbox_open_options;
 typedef void *zbox_version_reader;
 
 // file open options
-extern zbox_options zbox_create_options();
-extern void zbox_options_read(zbox_options options, bool read);
-extern void zbox_options_write(zbox_options options, bool write);
-extern void zbox_options_append(zbox_options options, bool append);
-extern void zbox_options_truncate(zbox_options options, bool truncate);
-extern void zbox_options_create(zbox_options options, bool create);
-extern void zbox_options_create_new(zbox_options options, bool create_new);
-extern void zbox_options_version_limit(zbox_options options, uint8_t limit);
-extern void zbox_free_options(zbox_options options);
+extern zbox_open_options zbox_create_open_options();
+extern void zbox_open_options_read(zbox_open_options options, bool read);
+extern void zbox_open_options_write(zbox_open_options options, bool write);
+extern void zbox_open_options_append(zbox_open_options options, bool append);
+extern void zbox_open_options_truncate(zbox_open_options options, bool truncate);
+extern void zbox_open_options_create(zbox_open_options options, bool create);
+extern void zbox_open_options_create_new(zbox_open_options options, bool create_new);
+extern void zbox_open_options_version_limit(zbox_open_options options, uint8_t limit);
+extern void zbox_open_options_dedup_chunk(zbox_open_options options, bool dedup_chunk);
+extern void zbox_free_open_options(zbox_open_options options);
 
 // metadata
 extern int zbox_file_metadata(struct zbox_metadata *metadata,
