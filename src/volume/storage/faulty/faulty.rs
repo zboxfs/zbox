@@ -149,28 +149,28 @@ impl Storable for FaultyStorage {
         ms.put_super_block(super_blk, suffix)
     }
 
-    fn get_addr(&mut self, id: &Eid) -> Result<Vec<u8>> {
+    fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
         self.ctlr.make_random_error()?;
 
         let mut inner = self.inner.write().unwrap();
         let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.get_addr(id)
+        ms.get_address(id)
     }
 
-    fn put_addr(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
+    fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
         self.ctlr.make_random_error()?;
 
         let mut inner = self.inner.write().unwrap();
         let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.put_addr(id, addr)
+        ms.put_address(id, addr)
     }
 
-    fn del_addr(&mut self, id: &Eid) -> Result<()> {
+    fn del_address(&mut self, id: &Eid) -> Result<()> {
         self.ctlr.make_random_error()?;
 
         let mut inner = self.inner.write().unwrap();
         let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.del_addr(id)
+        ms.del_address(id)
     }
 
     fn get_blocks(
@@ -242,8 +242,8 @@ mod tests {
             let mut fs2 = FaultyStorage::new(&loc2);
             fs.init(crypto.clone(), key.clone()).unwrap();
             fs2.init(crypto.clone(), key.clone()).unwrap();
-            fs.put_addr(&id, &buf).unwrap();
-            fs2.put_addr(&id2, &buf2).unwrap();
+            fs.put_address(&id, &buf).unwrap();
+            fs2.put_address(&id2, &buf2).unwrap();
         }
 
         {
@@ -253,10 +253,10 @@ mod tests {
             assert!(fs2.exists().unwrap());
             fs.open(crypto.clone(), key.clone()).unwrap();
             fs2.open(crypto.clone(), key.clone()).unwrap();
-            assert_eq!(fs.get_addr(&id).unwrap(), buf);
-            assert_eq!(fs.get_addr(&id2).unwrap_err(), Error::NotFound);
-            assert_eq!(fs2.get_addr(&id2).unwrap(), buf2);
-            assert_eq!(fs2.get_addr(&id).unwrap_err(), Error::NotFound);
+            assert_eq!(fs.get_address(&id).unwrap(), buf);
+            assert_eq!(fs.get_address(&id2).unwrap_err(), Error::NotFound);
+            assert_eq!(fs2.get_address(&id2).unwrap(), buf2);
+            assert_eq!(fs2.get_address(&id).unwrap_err(), Error::NotFound);
         }
     }
 }

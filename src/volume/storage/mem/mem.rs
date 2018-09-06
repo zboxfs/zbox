@@ -54,19 +54,19 @@ impl Storable for MemStorage {
         Ok(())
     }
 
-    fn get_addr(&mut self, id: &Eid) -> Result<Vec<u8>> {
+    fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
         self.addr_map
             .get(id)
             .map(|addr| addr.clone())
             .ok_or(Error::NotFound)
     }
 
-    fn put_addr(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
+    fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
         self.addr_map.insert(id.clone(), addr.to_vec());
         Ok(())
     }
 
-    fn del_addr(&mut self, id: &Eid) -> Result<()> {
+    fn del_address(&mut self, id: &Eid) -> Result<()> {
         self.addr_map.remove(id);
         Ok(())
     }

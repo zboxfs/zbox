@@ -120,17 +120,17 @@ impl Storable for RedisStorage {
         self.set_bytes(&key, super_blk)
     }
 
-    fn get_addr(&mut self, id: &Eid) -> Result<Vec<u8>> {
+    fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
         let key = addr_key(id);
         self.get_bytes(&key)
     }
 
-    fn put_addr(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
+    fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
         let key = addr_key(id);
         self.set_bytes(&key, addr)
     }
 
-    fn del_addr(&mut self, id: &Eid) -> Result<()> {
+    fn del_address(&mut self, id: &Eid) -> Result<()> {
         let key = addr_key(id);
         self.del(&key)
     }
@@ -212,11 +212,11 @@ mod tests {
         assert_eq!(&s[..], &buf[..]);
 
         // address
-        rs.put_addr(&id, &buf).unwrap();
-        let s = rs.get_addr(&id).unwrap();
+        rs.put_address(&id, &buf).unwrap();
+        let s = rs.get_address(&id).unwrap();
         assert_eq!(&s[..], &buf[..]);
-        rs.del_addr(&id).unwrap();
-        assert_eq!(rs.get_addr(&id).unwrap_err(), Error::NotFound);
+        rs.del_address(&id).unwrap();
+        assert_eq!(rs.get_address(&id).unwrap_err(), Error::NotFound);
 
         // block
         rs.put_blocks(0, 3, &blks).unwrap();

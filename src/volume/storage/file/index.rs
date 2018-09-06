@@ -178,7 +178,7 @@ impl IndexMgr {
     }
 
     // delete entity address from index
-    pub fn del_addr(&mut self, id: &Eid) -> Result<()> {
+    pub fn del_address(&mut self, id: &Eid) -> Result<()> {
         {
             match self.open_index(id, false) {
                 Ok(index) => {

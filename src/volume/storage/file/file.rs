@@ -111,18 +111,18 @@ impl Storable for FileStorage {
     }
 
     #[inline]
-    fn get_addr(&mut self, id: &Eid) -> Result<Vec<u8>> {
+    fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
         self.idx_mgr.read_addr(id)
     }
 
     #[inline]
-    fn put_addr(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
+    fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
         self.idx_mgr.write_addr(id, addr)
     }
 
     #[inline]
-    fn del_addr(&mut self, id: &Eid) -> Result<()> {
-        self.idx_mgr.del_addr(id)
+    fn del_address(&mut self, id: &Eid) -> Result<()> {
+        self.idx_mgr.del_address(id)
     }
 
     #[inline]
@@ -208,19 +208,19 @@ mod tests {
         let addr2 = vec![4, 5, 6];
 
         // add address 1
-        fs.put_addr(&id, &addr).unwrap();
-        let tgt = fs.get_addr(&id).unwrap();
+        fs.put_address(&id, &addr).unwrap();
+        let tgt = fs.get_address(&id).unwrap();
         assert_eq!(&tgt[..], &addr[..]);
 
         // add address 2
-        fs.put_addr(&id2, &addr2).unwrap();
-        let tgt = fs.get_addr(&id2).unwrap();
+        fs.put_address(&id2, &addr2).unwrap();
+        let tgt = fs.get_address(&id2).unwrap();
         assert_eq!(&tgt[..], &addr2[..]);
 
         // delete address 1, address 2 should still be there
-        fs.del_addr(&id).unwrap();
-        assert_eq!(fs.get_addr(&id).unwrap_err(), Error::NotFound);
-        let tgt = fs.get_addr(&id2).unwrap();
+        fs.del_address(&id).unwrap();
+        assert_eq!(fs.get_address(&id).unwrap_err(), Error::NotFound);
+        let tgt = fs.get_address(&id2).unwrap();
         assert_eq!(&tgt[..], &addr2[..]);
 
         // re-open storage
@@ -229,8 +229,8 @@ mod tests {
         fs.open(Crypto::default(), Key::new_empty()).unwrap();
 
         // address 1 is deleted, address 2 should still be there
-        assert_eq!(fs.get_addr(&id).unwrap_err(), Error::NotFound);
-        let tgt = fs.get_addr(&id2).unwrap();
+        assert_eq!(fs.get_address(&id).unwrap_err(), Error::NotFound);
+        let tgt = fs.get_address(&id2).unwrap();
         assert_eq!(&tgt[..], &addr2[..]);
     }
 

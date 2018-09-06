@@ -159,14 +159,14 @@ impl Storage {
     }
 
     // read entity address from depot and save to address cache
-    fn get_addr(&mut self, id: &Eid) -> Result<Addr> {
+    fn get_address(&mut self, id: &Eid) -> Result<Addr> {
         // get from address cache first
         if let Some(addr) = self.addr_cache.get_refresh(id) {
             return Ok(addr.clone());
         }
 
         // if not in the cache, load if from depot
-        let buf = self.depot.get_addr(id)?;
+        let buf = self.depot.get_address(id)?;
         let buf = self.crypto.decrypt(&buf, &self.key)?;
         let mut de = Deserializer::new(&buf[..]);
         let addr: Addr = Deserialize::deserialize(&mut de)?;
@@ -178,14 +178,14 @@ impl Storage {
     }
 
     // write entity address to depot
-    fn put_addr(&mut self, id: &Eid, addr: &Addr) -> Result<()> {
+    fn put_address(&mut self, id: &Eid, addr: &Addr) -> Result<()> {
         // serialize address and encrypt address
         let mut buf = Vec::new();
         addr.serialize(&mut Serializer::new(&mut buf))?;
         let buf = self.crypto.encrypt(&buf, &self.key)?;
 
         // write to depot and remove address from cache
-        self.depot.put_addr(id, &buf)?;
+        self.depot.put_address(id, &buf)?;
         self.addr_cache.insert(id.clone(), addr.clone());
 
         Ok(())
@@ -219,7 +219,7 @@ impl Storage {
 
     pub fn del(&mut self, id: &Eid) -> Result<()> {
         // get address first
-        let addr = match self.get_addr(id) {
+        let addr = match self.get_address(id) {
             Ok(addr) => addr,
             Err(ref err) if *err == Error::NotFound => return Ok(()),
             Err(err) => return Err(err),
@@ -229,7 +229,7 @@ impl Storage {
         self.remove_address_blocks(&addr)?;
 
         // remove address
-        self.depot.del_addr(id)?;
+        self.depot.del_address(id)?;
         self.addr_cache.remove(id);
 
         Ok(())
@@ -282,7 +282,7 @@ impl Reader {
     pub fn new(id: &Eid, storage: &StorageRef) -> Result<Self> {
         let (addr, dec_frame_size) = {
             let mut storage = storage.write().unwrap();
-            let addr = storage.get_addr(id)?;
+            let addr = storage.get_address(id)?;
             (addr, storage.crypto.decrypted_len(FRAME_SIZE))
         };
 
@@ -500,7 +500,7 @@ impl Finish for Writer {
         let mut storage = self.storage.write().unwrap();
 
         // if the old address exists, remove all of its blocks
-        match storage.get_addr(&self.id) {
+        match storage.get_address(&self.id) {
             Ok(old_addr) => {
                 storage.remove_address_blocks(&old_addr)?;
             }
@@ -509,7 +509,7 @@ impl Finish for Writer {
         }
 
         // write new address
-        storage.put_addr(&self.id, &self.addr)?;
+        storage.put_address(&self.id, &self.addr)?;
 
         Ok(self.addr.len)
     }

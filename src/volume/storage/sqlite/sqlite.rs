@@ -325,7 +325,7 @@ impl Storable for SqliteStorage {
         run_dml(stmt)
     }
 
-    fn get_addr(&mut self, id: &Eid) -> Result<Vec<u8>> {
+    fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
         let stmt = self.stmts[2];
         reset_stmt(stmt)?;
 
@@ -334,7 +334,7 @@ impl Storable for SqliteStorage {
         run_select_blob(stmt)
     }
 
-    fn put_addr(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
+    fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
         let stmt = self.stmts[3];
         reset_stmt(stmt)?;
 
@@ -344,7 +344,7 @@ impl Storable for SqliteStorage {
         run_dml(stmt)
     }
 
-    fn del_addr(&mut self, id: &Eid) -> Result<()> {
+    fn del_address(&mut self, id: &Eid) -> Result<()> {
         let stmt = self.stmts[4];
         reset_stmt(stmt)?;
 
@@ -471,11 +471,11 @@ mod tests {
         assert_eq!(&s[..], &buf[..]);
 
         // address
-        ss.put_addr(&id, &buf).unwrap();
-        let s = ss.get_addr(&id).unwrap();
+        ss.put_address(&id, &buf).unwrap();
+        let s = ss.get_address(&id).unwrap();
         assert_eq!(&s[..], &buf[..]);
-        ss.del_addr(&id).unwrap();
-        assert_eq!(ss.get_addr(&id).unwrap_err(), Error::NotFound);
+        ss.del_address(&id).unwrap();
+        assert_eq!(ss.get_address(&id).unwrap_err(), Error::NotFound);
 
         // block
         ss.put_blocks(0, 3, &blks).unwrap();
