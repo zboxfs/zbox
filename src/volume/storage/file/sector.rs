@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::u16;
 
 use bytes::BufMut;
+use linked_hash_map::LinkedHashMap;
 
 use super::file_armor::FileArmor;
 use super::vio;
@@ -27,6 +28,9 @@ const BLK_DELETE_MARK: u16 = u16::MAX;
 
 // sector cache size
 const SECTOR_CACHE_SIZE: usize = 16;
+
+// sector data file cache size
+const SECTOR_DATA_CACHE_SIZE: usize = 4;
 
 // split continuous blocks into sectors
 // return: Vec(sector index, start block index, block count)
@@ -163,7 +167,13 @@ impl Debug for Sector {
 // sector manager
 pub struct SectorMgr {
     sec_armor: FileArmor<Sector>,
-    cache: Lru<u64, Sector, CountMeter<Sector>, PinChecker<Sector>>,
+
+    // sector cache
+    sec_cache: Lru<u64, Sector, CountMeter<Sector>, PinChecker<Sector>>,
+
+    // sector data file cache
+    sec_data_cache: LinkedHashMap<u64, vio::File>,
+
     hash_key: HashKey,
 }
 
@@ -175,7 +185,8 @@ impl SectorMgr {
     pub fn new(base: &Path) -> Self {
         SectorMgr {
             sec_armor: FileArmor::new(base),
-            cache: Lru::new(SECTOR_CACHE_SIZE),
+            sec_cache: Lru::new(SECTOR_CACHE_SIZE),
+            sec_data_cache: LinkedHashMap::new(),
             hash_key: HashKey::new_empty(),
         }
     }
@@ -213,13 +224,13 @@ impl SectorMgr {
         sec_idx: u64,
         create: bool,
     ) -> Result<&mut Sector> {
-        if !self.cache.contains_key(&sec_idx) {
+        if !self.sec_cache.contains_key(&sec_idx) {
             let sec_id = self.sector_id_from(sec_idx);
 
             // load sector and insert into cache
             match self.sec_armor.load_item(&sec_id) {
                 Ok(sec) => {
-                    self.cache.insert(sec_idx, sec);
+                    self.sec_cache.insert(sec_idx, sec);
                 }
                 Err(ref err) if *err == Error::NotFound => {
                     if create {
@@ -227,7 +238,7 @@ impl SectorMgr {
                         // and save it to cache
                         let mut sec = Sector::new(&sec_id, sec_idx);
                         self.sec_armor.save_item(&mut sec)?;
-                        self.cache.insert(sec_idx, sec);
+                        self.sec_cache.insert(sec_idx, sec);
                     } else {
                         return Err(Error::NotFound);
                     }
@@ -236,33 +247,43 @@ impl SectorMgr {
             }
         }
 
-        let sec = self.cache.get_refresh(&sec_idx).unwrap();
+        let sec = self.sec_cache.get_refresh(&sec_idx).unwrap();
 
         Ok(sec)
     }
 
     // save sector to file
     fn save_sector(&mut self, sec_idx: u64) -> Result<()> {
-        let mut sec = self.cache.get_refresh(&sec_idx).unwrap();
+        let mut sec = self.sec_cache.get_refresh(&sec_idx).unwrap();
         self.sec_armor.save_item(&mut sec)
     }
 
     // open sector data file
     fn open_sector_data(
-        &self,
+        &mut self,
         sec_idx: u64,
         create: bool,
     ) -> Result<vio::File> {
-        let path = self.sector_data_path(sec_idx);
-        if !create && !path.exists() {
-            return Err(Error::NotFound);
+        if !self.sec_data_cache.contains_key(&sec_idx) {
+            // open sector data file and save it to cache
+            let path = self.sector_data_path(sec_idx);
+            if !create && !path.exists() {
+                return Err(Error::NotFound);
+            }
+            ensure_parents_dir(&path)?;
+            let data_file = vio::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(&path)?;
+            self.sec_data_cache.insert(sec_idx, data_file);
+            if self.sec_data_cache.len() >= SECTOR_DATA_CACHE_SIZE {
+                self.sec_data_cache.pop_front();
+            }
         }
-        ensure_parents_dir(&path)?;
-        let data_file = vio::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(&path)?;
+
+        let data_file = self.sec_data_cache.get_refresh(&sec_idx).unwrap();
+        let data_file = data_file.try_clone()?;
         Ok(data_file)
     }
 
@@ -417,10 +438,11 @@ impl SectorMgr {
         sec.actual_size = written_blk_cnt as usize * BLK_SIZE;
         sec.curr_size = sec.actual_size;
         self.sec_armor.save_item(&mut sec)?;
-        self.cache.insert(sec.idx, sec);
+        self.sec_cache.insert(sec.idx, sec);
 
-        // switch sector data file
+        // close all opened sector data files and switch it
         drop(sec_data);
+        self.sec_data_cache.remove(&sec_idx);
         vio::rename(&dst_path, &data_file_path)?;
 
         Ok(())
@@ -463,7 +485,7 @@ impl SectorMgr {
                 let sec_data_path = self.sector_data_path(sec_idx);
                 vio::remove_file(&sec_data_path)?;
                 remove_empty_parent_dir(&sec_data_path)?;
-                self.cache.remove(&sec_idx);
+                self.sec_cache.remove(&sec_idx);
             } else if is_shrinkable {
                 // shrink sector if possible
                 self.shrink_sector(sec_idx)?;
