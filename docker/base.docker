@@ -1,13 +1,23 @@
-FROM rust:latest
+FROM ubuntu:xenial
+
+RUN apt-get update && \
+    apt-get install -yq sudo curl file build-essential wget git g++ cmake \
+            pkg-config bison flex unzip openjdk-8-jdk lib32stdc++6 lib32z1 \
+            python docker libssl-dev
+
+# install Rust
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+ENV PATH /root/.cargo/bin:$PATH
+RUN rustup default stable
 
 # define libsodium library environment variables
-ENV libsodium libsodium-1.0.15
-ENV libsodium_file ${libsodium}.tar.gz
+ENV LIBSODIUM libsodium-1.0.16
+ENV LIBSODIUM_FILE ${LIBSODIUM}.tar.gz
 
 # download libsodium and its signature
 WORKDIR /usr/local/src
-RUN wget https://download.libsodium.org/libsodium/releases/${libsodium_file}
-RUN wget https://download.libsodium.org/libsodium/releases/${libsodium_file}.sig
+RUN wget https://download.libsodium.org/libsodium/releases/${LIBSODIUM_FILE} && \
+    wget https://download.libsodium.org/libsodium/releases/${LIBSODIUM_FILE}.sig
 
 # import libsodium's author's public key
 # from https://download.libsodium.org/doc/installation/
@@ -140,24 +150,24 @@ sjoMDQMqgw6KyZ++6FgAUGX5I1dBOYLJoonhOH/lNmxjQvc=\n\
 =Hkmu\n\
 -----END PGP PUBLIC KEY BLOCK-----\n'\
 > pub.key
-RUN gpg --import pub.key
-RUN gpg --verify ${libsodium_file}.sig
+RUN gpg --import pub.key && \
+    gpg --verify ${LIBSODIUM_FILE}.sig
 
 # install libsodium
-RUN tar zxvf ${libsodium_file} && rm ${libsodium_file}
-WORKDIR ${libsodium}
+RUN tar zxf ${LIBSODIUM_FILE} && rm ${LIBSODIUM_FILE}
+WORKDIR ${LIBSODIUM}
 RUN ./configure && make && make install
 
 # set environment variable
 ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
 
 # pre-fetch dependencies
-RUN mkdir /usr/local/src/zbox
-WORKDIR /usr/local/src/zbox
+RUN mkdir /tmp/zbox
+WORKDIR /tmp/zbox
 COPY Cargo.toml ./
 COPY src ./src
 RUN cargo fetch
-RUN rm -rf /usr/local/src/zbox
+RUN rm -rf /tmp/zbox
 
 # set working dir
-WORKDIR /zbox
+WORKDIR /root/zbox

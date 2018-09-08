@@ -98,13 +98,14 @@ For reference documentation, please visit [documentation](https://docs.rs/zbox).
 ## Requirements
 
 - [Rust] stable >= 1.21
-- [libsodium] >= 1.0.15
+- [libsodium] >= 1.0.16
 
 ## Supported Platforms
 
 - 64-bit Debian-based Linux, such as Ubuntu
 - 64-bit macOS
 - 64-bit Windows
+- 64-bit Android, API level >= 21
 
 32-bit and other OS are `NOT` supported yet.
 
@@ -156,25 +157,32 @@ fn main() {
 
 ## Build with Docker
 
-Zbox comes with Docker support, it is based on [rust:latest] and [libsodium] is
-included. Check the [Dockerfile](Dockerfile) for the details.
+Zbox comes with [Docker] support, it is easier to build Zbox with [zboxfs/base]
+image. This image is based on Ubuntu 16.04 and has Rust stable and libsodium
+included. Check more details in the [Dockerfile](docker/base.docker).
 
-First, we build the Docker image which can be used to compile Zbox, run below
-commands from Zbox project folder.
+You can also use image [zboxfs/android] to build Zbox for Android. It is based
+on [zboxfs/base] image and has Android NDK included. Check more details in the
+[Dockerfile](docker/android.docker).
+
+To build for Linux x86_64:
 ```bash
-docker build --force-rm -t zbox ./
+docker run --rm -v $PWD:/root/zbox zboxfs/base cargo build
 ```
 
-After the Docker image is built, we can use it to build Zbox.
+To build for Android x86_64:
 ```bash
-cargo clean
-docker run --rm -v $PWD:/zbox zbox cargo build
+docker run --rm -v $PWD:/root/zbox zboxfs/android cargo build --target x86_64-linux-android
+```
+
+To build for Android arm64:
+```bash
+docker run --rm -v $PWD:/root/zbox zboxfs/android cargo build --target aarch64-linux-android
 ```
 
 Or run the test suite.
 ```bash
-cargo clean
-docker run --rm -v $PWD:/zbox zbox cargo test
+docker run --rm -v $PWD:/root/zbox zboxfs/base cargo test
 ```
 
 ## Static linking with libsodium
@@ -267,3 +275,6 @@ file for details.
 [LUKS]: https://gitlab.com/cryptsetup/cryptsetup/
 [VeraCrypt]: https://veracrypt.codeplex.com
 [rust:latest]: https://hub.docker.com/_/rust/
+[Docker]: https://www.docker.com
+[zboxfs/base]: https://hub.docker.com/r/zboxfs/base/
+[zboxfs/android]: https://hub.docker.com/r/zboxfs/android/
