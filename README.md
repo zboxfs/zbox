@@ -32,7 +32,7 @@ Features
 - State-of-the-art cryptography: AES-256-GCM (hardware), XChaCha20-Poly1305,
   Argon2 password hashing and etc., empowered by [libsodium]
 - Support multiple storages, including memory, OS file system, RDBMS, Key-value
-  object store (coming soon) and more
+  object store and more
 - Content-based data chunk deduplication and file-based deduplication
 - Data compression using [LZ4] in fast mode, optional
 - Data integrity is guaranteed by authenticated encryption primitives (AEAD
@@ -105,7 +105,7 @@ For reference documentation, please visit [documentation](https://docs.rs/zbox).
 - 64-bit Debian-based Linux, such as Ubuntu
 - 64-bit macOS
 - 64-bit Windows
-- 64-bit Android, API level >= 21
+- 64-bit Android, API level >= 21 (in progress)
 
 32-bit and other OS are `NOT` supported yet.
 
