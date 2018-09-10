@@ -98,13 +98,13 @@ cargo test --doc
 Zbox contains fuzz test, which is included in the integration test suite.
 To save test time, the default number of fuzz test iteration is very low.
 You can increase the number of batch and round by modifing the
-[fuzz.rs](src/tests/fuzz.rs) file to perform intensive fuzz test.
+[fuzz.rs](tests/fuzz.rs) file to perform intensive fuzz test.
 
 The fuzz test will save test cases in `fuzz_test` folder under current
 directory. Each fuzz test batch will be assigned a unique number which will be
 shown on screen during the test. In case of failure, you can use that number to
 reproduce the failed test case. Please check more details in the
-[fuzz.rs](src/tests/fuzz.rs) file.
+[fuzz.rs](tests/fuzz.rs) file.
 
 Run the fuzz test separately:
 
