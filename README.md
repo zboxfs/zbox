@@ -77,7 +77,7 @@ Below is the feature comparison list.
 ## Supported Storage
 
 By now, Zbox supports a variety of underlying storage, which are listed below.
-Memory and OS file storage are enabled by default, all the others can to be
+Memory and OS file storage are enabled by default, all the others can be
 enabled individually by specifying its feature when build.
 
 | Storage        | URI identifier  | Feature        |
