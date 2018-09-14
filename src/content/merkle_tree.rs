@@ -2,7 +2,7 @@ use std::cmp::{max, min};
 use std::fmt::{self, Debug};
 use std::io::{Read, Result as IoResult, Seek, SeekFrom, Write};
 
-use base::crypto::{Crypto, Hash, HashState, HASH_STATE_SIZE};
+use base::crypto::{Crypto, Hash, HashState};
 use base::utils;
 use error::Result;
 
@@ -127,11 +127,10 @@ impl MerkleTree {
         let m = indices[0];
         let parent = parent(m, lvl_begin, lvl_node_cnt);
         if indices.len() == 2 {
-            let mut state: HashState = [0u8; HASH_STATE_SIZE];
-            Crypto::hash_init_to(&mut state);
+            let mut state = Crypto::hash_init();
             Crypto::hash_update(&mut state, &self.nodes[m]);
             Crypto::hash_update(&mut state, &self.nodes[m + 1]);
-            Crypto::hash_final_to(&mut state, &mut self.nodes[parent]);
+            self.nodes[parent] = Crypto::hash_final(&mut state);
         } else {
             self.nodes[parent] = self.nodes[m].clone();
         }

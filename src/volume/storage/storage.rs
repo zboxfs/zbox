@@ -134,7 +134,7 @@ impl Storage {
     pub fn init(&mut self, cost: Cost, cipher: Cipher) -> Result<()> {
         // create crypto and master key
         self.crypto = Crypto::new(cost, cipher)?;
-        self.key = Key::new();
+        self.key = Crypto::gen_master_key();
 
         // initialise depot
         self.depot.init(self.crypto.clone(), self.key.derive(0))
@@ -803,7 +803,7 @@ mod tests {
         fs::create_dir(&dir).unwrap();
 
         let crypto = Crypto::new(Cost::default(), Cipher::Aes).unwrap();
-        let key = Key::new();
+        let key = Key::new_empty();
         let mut depot = FileStorage::new(&dir);
         depot.init(crypto.clone(), key.derive(0)).unwrap();
 

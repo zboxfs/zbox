@@ -71,6 +71,7 @@ extern "C" {
 
     // key derivation
     // --------------
+    fn crypto_kdf_keygen(key: *mut u8);
     fn crypto_kdf_derive_from_key(
         subkey: *mut u8,
         subkey_len: usize,
@@ -165,14 +166,6 @@ impl<T: Sized> SafeBox<T> {
             sodium_memzero(ptr, size);
             SafeBox { ptr: ptr as *mut T }
         }
-    }
-
-    pub fn new() -> Self {
-        let mut ret = Self::new_empty();
-        unsafe {
-            randombytes_buf(ret.as_mut_ptr(), ret.len());
-        }
-        ret
     }
 
     pub fn as_ptr(&self) -> *const u8 {
@@ -414,9 +407,26 @@ impl Salt {
     }
 }
 
-/// Hash state for multi-part generic hashing, 64 bytes aligned
 pub const HASH_STATE_SIZE: usize = 384;
-pub type HashState = [u8; HASH_STATE_SIZE];
+
+/// Hash state for multi-part generic hashing, 64 bytes aligned
+#[repr(align(64))]
+pub struct HashState {
+    state: [u8; HASH_STATE_SIZE],
+}
+
+impl HashState {
+    fn new_empty() -> Self {
+        HashState {
+            state: [0u8; HASH_STATE_SIZE],
+        }
+    }
+
+    #[inline]
+    fn as_mut_ptr(&mut self) -> *mut u8 {
+        (&mut self.state).as_mut_ptr()
+    }
+}
 
 /// Password hash operation limit.
 ///
@@ -426,9 +436,9 @@ pub type HashState = [u8; HASH_STATE_SIZE];
 /// See <https://download.libsodium.org/doc/password_hashing/> for more details.
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize, Serialize)]
 pub enum OpsLimit {
-    Interactive = 4,
-    Moderate = 6,
-    Sensitive = 8,
+    Interactive = 2,
+    Moderate = 3,
+    Sensitive = 4,
 }
 
 impl Default for OpsLimit {
@@ -816,7 +826,7 @@ impl Crypto {
 
     /// Initialise hash state for multi-part hashing.
     pub fn hash_init() -> HashState {
-        let mut state: HashState = [0u8; HASH_STATE_SIZE];
+        let mut state = HashState::new_empty();
         Crypto::hash_init_to(&mut state);
         state
     }
@@ -875,7 +885,7 @@ impl Crypto {
                 &pwdhash.salt.0 as *const u8,
                 pwdhash.cost.ops_limit as u64,
                 pwdhash.cost.mem_limit as usize,
-                1,
+                2,  // version 1.3 of the Argon2id algorithm
             ) {
                 0 => Ok(pwdhash),
                 _ => Err(Error::Hashing),
@@ -886,6 +896,15 @@ impl Crypto {
     // --------------
     // Key derivation
     // --------------
+    /// Generate master key
+    pub fn gen_master_key() -> Key {
+        let mut key = Key::new_empty();
+        unsafe {
+            crypto_kdf_keygen(key.as_mut_ptr());
+        }
+        key
+    }
+
     /// Key derivation
     pub fn derive_from_key(key: &Key, subkey_id: u64) -> Result<Key> {
         let mut subkey = Key::new_empty();
@@ -1140,7 +1159,7 @@ mod tests {
         let crypto = Crypto::default();
         const LEN: usize = 10;
         let msg = vec![3u8; LEN];
-        let key = Key::new();
+        let key = Key::new_empty();
         let ad = vec![42u8; 4];
 
         // encryption
