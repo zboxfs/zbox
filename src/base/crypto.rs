@@ -168,18 +168,22 @@ impl<T: Sized> SafeBox<T> {
         }
     }
 
+    #[inline]
     pub fn as_ptr(&self) -> *const u8 {
         self.ptr as *const u8
     }
 
+    #[inline]
     pub fn as_mut_ptr(&mut self) -> *mut u8 {
         self.ptr as *mut u8
     }
 
+    #[inline]
     pub fn as_slice(&self) -> &[u8] {
         unsafe { slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
         mem::size_of::<T>()
     }
@@ -324,6 +328,7 @@ impl RandomSeed {
         ret
     }
 
+    #[inline]
     pub fn as_ptr(&self) -> *const u8 {
         (&self.0).as_ptr()
     }
@@ -338,10 +343,12 @@ pub const HASH_SIZE: usize = 32;
 pub struct Hash([u8; HASH_SIZE]);
 
 impl Hash {
+    #[inline]
     pub fn new_empty() -> Self {
         Self::default()
     }
 
+    #[inline]
     pub fn as_mut_ptr(&mut self) -> *mut u8 {
         self.0.as_mut_ptr()
     }
@@ -350,6 +357,7 @@ impl Hash {
 impl Deref for Hash {
     type Target = [u8];
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -396,6 +404,7 @@ impl Salt {
         salt
     }
 
+    #[inline]
     pub fn as_ref(&self) -> &[u8] {
         &self.0
     }
@@ -416,6 +425,7 @@ pub struct HashState {
 }
 
 impl HashState {
+    #[inline]
     fn new_empty() -> Self {
         HashState {
             state: [0u8; HASH_STATE_SIZE],
@@ -442,6 +452,7 @@ pub enum OpsLimit {
 }
 
 impl Default for OpsLimit {
+    #[inline]
     fn default() -> Self {
         OpsLimit::Interactive
     }
@@ -487,6 +498,7 @@ pub enum MemLimit {
 }
 
 impl Default for MemLimit {
+    #[inline]
     fn default() -> Self {
         MemLimit::Interactive
     }
@@ -574,6 +586,7 @@ pub struct PwdHash {
 }
 
 impl PwdHash {
+    #[inline]
     pub fn new() -> Self {
         PwdHash::default()
     }

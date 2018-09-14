@@ -2,7 +2,7 @@
 
 set -ev
 
-sodium=libsodium-1.0.15
+sodium=libsodium-1.0.16
 base_dir=$TRAVIS_BUILD_DIR/libsodium
 sodium_dir=$base_dir/$sodium
 
