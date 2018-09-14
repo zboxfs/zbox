@@ -17,25 +17,28 @@ use trans::{Finish, TxHandle, TxMgr};
 /// [`version_reader`]: struct.File.html#method.version_reader
 /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
 #[derive(Debug)]
-pub struct VersionReader<'a> {
-    handle: &'a Handle,
+pub struct VersionReader {
+    handle: Handle,
     rdr: FnodeReader,
 }
 
-impl<'a> VersionReader<'a> {
-    fn new(handle: &'a Handle, ver: usize) -> Result<Self> {
+impl VersionReader {
+    fn new(handle: &Handle, ver: usize) -> Result<Self> {
         let rdr = FnodeReader::new(handle.fnode.clone(), ver)?;
-        Ok(VersionReader { handle, rdr })
+        Ok(VersionReader {
+            handle: handle.clone(),
+            rdr,
+        })
     }
 }
 
-impl<'a> Read for VersionReader<'a> {
+impl Read for VersionReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.rdr.read(buf)
     }
 }
 
-impl<'a> Seek for VersionReader<'a> {
+impl Seek for VersionReader {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         self.rdr.seek(pos)
     }

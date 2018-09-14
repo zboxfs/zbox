@@ -475,7 +475,7 @@ impl RepoInfo {
     }
 
     /// Returns the creation time of this repository.
-    pub fn created(&self) -> SystemTime {
+    pub fn created_at(&self) -> SystemTime {
         self.ctime.to_system_time()
     }
 }

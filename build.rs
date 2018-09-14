@@ -20,7 +20,7 @@ fn main() {
         }
     } else {
         pkg_config::Config::new()
-            .atleast_version("1.0.11")
+            .atleast_version("1.0.16")
             .statik(true)
             .probe("libsodium")
             .unwrap();

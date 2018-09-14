@@ -104,7 +104,7 @@ impl Version {
     }
 
     /// Returns the creation time of this version of content.
-    pub fn created(&self) -> SystemTime {
+    pub fn created_at(&self) -> SystemTime {
         self.ctime.to_system_time()
     }
 }
@@ -154,12 +154,12 @@ impl Metadata {
     }
 
     /// Returns the creation time listed in this metadata.
-    pub fn created(&self) -> SystemTime {
+    pub fn created_at(&self) -> SystemTime {
         self.ctime.to_system_time()
     }
 
     /// Returns the last modification time listed in this metadata.
-    pub fn modified(&self) -> SystemTime {
+    pub fn modified_at(&self) -> SystemTime {
         self.mtime.to_system_time()
     }
 }

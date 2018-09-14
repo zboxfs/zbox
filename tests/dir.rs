@@ -32,7 +32,7 @@ fn dir_create() {
     thread::sleep(time::Duration::from_millis(1500));
     repo.create_dir_all("/xxx/111/222/333").unwrap();
     let m2 = repo.metadata("/xxx/111/222").unwrap();
-    assert!(m2.modified() > m.modified());
+    assert!(m2.modified_at() > m.modified_at());
 }
 
 #[test]

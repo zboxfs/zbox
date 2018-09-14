@@ -14,6 +14,10 @@ pub use self::version::Version;
 
 use std::sync::{Arc, Once, RwLock, ONCE_INIT};
 
+#[cfg(target_os = "android")]
+use android_log;
+
+#[cfg(not(target_os = "android"))]
 use env_logger;
 
 static INIT: Once = ONCE_INIT;
@@ -25,7 +29,14 @@ static INIT: Once = ONCE_INIT;
 pub fn init_env() {
     // only call the initialisation code once globally
     INIT.call_once(|| {
-        env_logger::try_init().ok();
+        #[cfg(target_os = "android")]
+        {
+            android_log::init("Zbox2").unwrap();
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            env_logger::try_init().ok();
+        }
         crypto::Crypto::init().expect("Initialise crypto failed");
     });
 }

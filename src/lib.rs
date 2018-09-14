@@ -144,3 +144,12 @@ extern crate libsqlite3_sys;
 
 #[cfg(feature = "storage-redis")]
 extern crate redis;
+
+#[cfg(feature = "jni-lib")]
+extern crate jni;
+
+#[cfg(target_os = "android")]
+extern crate android_log;
+
+#[cfg(feature = "jni-lib")]
+pub mod jni_lib;

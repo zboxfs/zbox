@@ -196,7 +196,7 @@ pub struct CRepoInfo {
     version_limit: uint8_t,
     dedup_chunk: boolean_t,
     is_read_only: boolean_t,
-    created: time_t,
+    created_at: time_t,
 }
 
 #[no_mangle]
@@ -204,7 +204,7 @@ pub extern "C" fn zbox_get_repo_info(info: *mut CRepoInfo, repo: *const Repo) {
     let repo_info = unsafe { (*repo).info() };
     let version = CString::new(repo_info.version()).unwrap();
     let uri = CString::new(repo_info.uri()).unwrap();
-    let ctime = repo_info.created();
+    let ctime = repo_info.created_at();
 
     let info = unsafe { &mut (*info) };
     info.volume_id = repo_info.volume_id().clone();
@@ -217,7 +217,7 @@ pub extern "C" fn zbox_get_repo_info(info: *mut CRepoInfo, repo: *const Repo) {
     info.version_limit = repo_info.version_limit();
     info.dedup_chunk = repo_info.dedup_chunk() as boolean_t;
     info.is_read_only = repo_info.is_read_only() as boolean_t;
-    info.created = to_time_t(ctime);
+    info.created_at = to_time_t(ctime);
 }
 
 #[no_mangle]
@@ -368,8 +368,8 @@ impl From<Metadata> for CMetadata {
             ftype: n.file_type().into(),
             len: n.len(),
             curr_version: n.curr_version(),
-            ctime: to_time_t(n.created()),
-            mtime: to_time_t(n.modified()),
+            ctime: to_time_t(n.created_at()),
+            mtime: to_time_t(n.modified_at()),
         }
     }
 }
@@ -464,7 +464,7 @@ pub extern "C" fn zbox_repo_metadata(
 pub struct CVersion {
     num: size_t,
     len: size_t,
-    created: time_t,
+    created_at: time_t,
 }
 
 #[repr(C)]
@@ -482,7 +482,7 @@ impl From<Vec<Version>> for VersionList {
                 CVersion {
                     num: ver.num(),
                     len: ver.len(),
-                    created: to_time_t(ver.created()),
+                    created_at: to_time_t(ver.created_at()),
                 }
             })
             .collect();
