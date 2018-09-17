@@ -8,7 +8,7 @@ use jni::objects::{JByteBuffer, JClass, JObject, JString, JValue};
 use jni::sys::{jboolean, jint, jlong, jobjectArray, JNI_FALSE};
 use jni::JNIEnv;
 
-use super::super::{File, VersionReader};
+use file::{File, VersionReader};
 use base::crypto::{Cipher, MemLimit, OpsLimit};
 use base::init_env;
 use error::Result;

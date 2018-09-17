@@ -29,5 +29,18 @@ ENV PKG_CONFIG_PATH_x86_64_linux_android ${LIBSODIUM_HOME}/libsodium-android-wes
 # enable static link for libsodium
 ENV SODIUM_STATIC 1
 
+# pre-fetch dependencies
+RUN mkdir /tmp/zbox
+WORKDIR /tmp/zbox
+COPY Cargo.toml ./
+COPY Cargo.lock ./
+COPY build.rs ./
+COPY src ./src
+RUN export RUSTFLAGS=-L${LIBSODIUM_HOME}/android-toolchain-westmere/sysroot/usr/lib64 && \
+    cargo build --features jni-lib --target x86_64-linux-android && \
+    cargo build --features jni-lib --target x86_64-linux-android --release && \
+    unset RUSTFLAGS && \
+    rm -rf /tmp/zbox
+
 # set work dir
 WORKDIR /root/zbox
