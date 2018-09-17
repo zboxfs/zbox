@@ -8,27 +8,26 @@ RUN cd /usr/local && \
     wget -q http://dl.google.com/android/repository/android-ndk-r17c-linux-x86_64.zip && \
     unzip -q android-ndk-r17c-linux-x86_64.zip && \
     rm android-ndk-r17c-linux-x86_64.zip
-ENV NDK_HOME /usr/local/android-ndk-r17c
+ENV ANDROID_NDK_HOME /usr/local/android-ndk-r17c
+ENV NDK_PLATFORM android-21
 
-# make standalone NDK toolchain
-RUN mkdir /root/ndk && \
-    cd /root/ndk && \
-    ${NDK_HOME}/build/tools/make_standalone_toolchain.py --arch arm64 --api 21 --install-dir ./arm64 && \
-    ${NDK_HOME}/build/tools/make_standalone_toolchain.py --arch x86_64 --api 21 --install-dir ./x86_64
-ENV PATH $PATH:/root/ndk/arm64/bin:/root/ndk/x86_64/bin
-
-# use Android NDK to rebuild libsodium for arm64 and x86_64
-ENV CFLAGS '-Os'
-RUN cd /usr/local/src/libsodium-1.0.16 && \
-    CC=/root/ndk/arm64/bin/aarch64-linux-android-clang ./configure --host=aarch64-linux-android --prefix=/root/libsodium/arm64 && \
-    make clean && make && make install && \
-    CC=/root/ndk/x86_64/bin/x86_64-linux-android-clang ./configure --host=x86_64-linux-android --prefix=/root/libsodium/x86_64 && \
-    make clean && make && make install
+# build libsodium for arm64 and x86_64
+ENV LIBSODIUM_HOME /usr/local/src/${LIBSODIUM}
+WORKDIR ${LIBSODIUM_HOME}
+RUN ./dist-build/android-armv8-a.sh && \
+    ./dist-build/android-x86_64.sh && \
+    mkdir /opt/ndk && \
+    ln -s ${LIBSODIUM_HOME}/android-toolchain-armv8-a /opt/ndk/arm64 && \
+    ln -s ${LIBSODIUM_HOME}/android-toolchain-westmere /opt/ndk/x86_64
+ENV PATH $PATH:/opt/ndk/arm64/bin:/opt/ndk/x86_64/bin
 
 # setup for pkg-config
 ENV PKG_CONFIG_ALLOW_CROSS 1
-ENV PKG_CONFIG_PATH_aarch64_linux_android /root/libsodium/arm64/lib/pkgconfig
-ENV PKG_CONFIG_PATH_x86_64_linux_android /root/libsodium/x86_64/lib/pkgconfig
+ENV PKG_CONFIG_PATH_aarch64_linux_android ${LIBSODIUM_HOME}/libsodium-android-armv8-a/lib/pkgconfig
+ENV PKG_CONFIG_PATH_x86_64_linux_android ${LIBSODIUM_HOME}/libsodium-android-westmere/lib/pkgconfig
 
 # enable static link for libsodium
 ENV SODIUM_STATIC 1
+
+# set work dir
+WORKDIR /root/zbox

@@ -2,8 +2,7 @@ FROM ubuntu:xenial
 
 RUN apt-get update && \
     apt-get install -yq sudo curl file build-essential wget git g++ cmake \
-            pkg-config bison flex unzip openjdk-8-jdk lib32stdc++6 lib32z1 \
-            python docker libssl-dev
+            pkg-config unzip python
 
 # install Rust
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
@@ -16,8 +15,8 @@ ENV LIBSODIUM_FILE ${LIBSODIUM}.tar.gz
 
 # download libsodium and its signature
 WORKDIR /usr/local/src
-RUN wget https://download.libsodium.org/libsodium/releases/${LIBSODIUM_FILE} && \
-    wget https://download.libsodium.org/libsodium/releases/${LIBSODIUM_FILE}.sig
+RUN wget -q https://download.libsodium.org/libsodium/releases/${LIBSODIUM_FILE} && \
+    wget -q https://download.libsodium.org/libsodium/releases/${LIBSODIUM_FILE}.sig
 
 # import libsodium's author's public key
 # from https://download.libsodium.org/doc/installation/
@@ -165,6 +164,7 @@ ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
 RUN mkdir /tmp/zbox
 WORKDIR /tmp/zbox
 COPY Cargo.toml ./
+COPY Cargo.lock ./
 COPY src ./src
 RUN cargo fetch
 RUN rm -rf /tmp/zbox
