@@ -122,8 +122,6 @@ mod trans;
 mod version;
 mod volume;
 
-pub mod ffi;
-
 pub use self::base::crypto::{Cipher, MemLimit, OpsLimit};
 pub use self::base::init_env;
 pub use self::error::{Error, Result};
@@ -131,6 +129,9 @@ pub use self::file::{File, VersionReader};
 pub use self::fs::fnode::{DirEntry, FileType, Metadata, Version};
 pub use self::repo::{OpenOptions, Repo, RepoInfo, RepoOpener};
 pub use self::trans::Eid;
+
+#[cfg(feature = "ffi")]
+pub mod ffi;
 
 #[cfg(feature = "storage-faulty")]
 #[macro_use]

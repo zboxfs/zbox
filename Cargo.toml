@@ -25,6 +25,9 @@ default = []
 # performance test compilation flag
 test-perf = []
 
+# ffi compilation flag
+ffi = []
+
 # faulty storage for random io error test
 storage-faulty = ["lazy_static"]
 
