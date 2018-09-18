@@ -18,6 +18,9 @@ mod sqlite;
 #[cfg(feature = "storage-redis")]
 mod redis;
 
+#[cfg(feature = "storage-zbox")]
+mod zbox;
+
 use std::fmt::Debug;
 
 use base::crypto::{Crypto, Key};

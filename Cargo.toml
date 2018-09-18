@@ -37,6 +37,9 @@ storage-sqlite = ["libsqlite3-sys"]
 # redis storage
 storage-redis = ["redis"]
 
+# zbox storage
+storage-zbox = []
+
 [dependencies]
 bytes = "0.4.9"
 env_logger = "0.5.9"
