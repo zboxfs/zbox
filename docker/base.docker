@@ -1,8 +1,18 @@
 FROM ubuntu:xenial
 
 RUN apt-get update && \
-    apt-get install -yq sudo curl file build-essential wget git g++ cmake \
-            pkg-config unzip python
+    apt-get install -yq sudo curl file wget make pkg-config && \
+    apt-get remove -y gcc g++ cpp && \
+    apt-get autoremove -y
+
+# install llvm and use clang as the default compiler
+RUN wget -q -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+RUN echo 'deb http://apt.llvm.org/xenial/ llvm-toolchain-xenial-6.0 main\n\
+deb-src http://apt.llvm.org/xenial/ llvm-toolchain-xenial-6.0 main'\
+> /etc/apt/sources.list.d/llvm.list && \
+    apt-get install -yq clang-6.0 lldb-6.0 lld-6.0 && \
+    update-alternatives --install /usr/bin/cc cc /usr/bin/clang-6.0 100 && \
+    update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-6.0 100
 
 # install Rust
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
@@ -12,9 +22,11 @@ RUN rustup default stable
 # define libsodium library environment variables
 ENV LIBSODIUM libsodium-1.0.16
 ENV LIBSODIUM_FILE ${LIBSODIUM}.tar.gz
+ENV LIBSODIUM_HOME /opt/${LIBSODIUM}
 
 # download libsodium and its signature
-WORKDIR /usr/local/src
+RUN mkdir ${LIBSODIUM_HOME}
+WORKDIR /opt
 RUN wget -q https://download.libsodium.org/libsodium/releases/${LIBSODIUM_FILE} && \
     wget -q https://download.libsodium.org/libsodium/releases/${LIBSODIUM_FILE}.sig
 
@@ -152,22 +164,21 @@ sjoMDQMqgw6KyZ++6FgAUGX5I1dBOYLJoonhOH/lNmxjQvc=\n\
 RUN gpg --import pub.key && \
     gpg --verify ${LIBSODIUM_FILE}.sig
 
-# install libsodium
+# compire and install libsodium
 RUN tar zxf ${LIBSODIUM_FILE} && rm ${LIBSODIUM_FILE}
-WORKDIR ${LIBSODIUM}
-RUN ./configure && make && make install
+WORKDIR ${LIBSODIUM_HOME}
+RUN ./configure --prefix=/opt && make && make install
+ENV PKG_CONFIG_PATH=/opt/lib/pkgconfig
 
-# set environment variable
-ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
-
-# pre-fetch dependencies
+# pre-build dependencies
 RUN mkdir /tmp/zbox
 WORKDIR /tmp/zbox
 COPY Cargo.toml ./
 COPY Cargo.lock ./
 COPY src ./src
-RUN cargo fetch
-RUN rm -rf /tmp/zbox
+COPY build.rs ./
+RUN cargo build && \
+    rm -rf /tmp/zbox
 
 # set working dir
 WORKDIR /root/zbox

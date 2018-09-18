@@ -19,6 +19,9 @@ fn main() {
             println!("cargo:rustc-link-lib={0}=sodium", mode);
         }
     } else {
+        // the static linking doesn't work if libsodium is installed
+        // under '/usr' dir, in that case use the environment variables
+        // mentioned above
         pkg_config::Config::new()
             .atleast_version("1.0.16")
             .statik(true)

@@ -1,5 +1,7 @@
 FROM zboxfs/base
 
+RUN apt-get install -yq unzip
+
 # add rust target for arm64 and x86_64
 RUN rustup target add aarch64-linux-android x86_64-linux-android
 
@@ -12,7 +14,6 @@ ENV ANDROID_NDK_HOME /usr/local/android-ndk-r17c
 ENV NDK_PLATFORM android-21
 
 # build libsodium for arm64 and x86_64
-ENV LIBSODIUM_HOME /usr/local/src/${LIBSODIUM}
 WORKDIR ${LIBSODIUM_HOME}
 RUN ./dist-build/android-armv8-a.sh && \
     ./dist-build/android-x86_64.sh && \
@@ -26,20 +27,15 @@ ENV PKG_CONFIG_ALLOW_CROSS 1
 ENV PKG_CONFIG_PATH_aarch64_linux_android ${LIBSODIUM_HOME}/libsodium-android-armv8-a/lib/pkgconfig
 ENV PKG_CONFIG_PATH_x86_64_linux_android ${LIBSODIUM_HOME}/libsodium-android-westmere/lib/pkgconfig
 
-# enable static link for libsodium
-ENV SODIUM_STATIC 1
-
-# pre-fetch dependencies
+# pre-build dependencies
 RUN mkdir /tmp/zbox
 WORKDIR /tmp/zbox
 COPY Cargo.toml ./
 COPY Cargo.lock ./
-COPY build.rs ./
 COPY src ./src
-RUN export RUSTFLAGS=-L${LIBSODIUM_HOME}/android-toolchain-westmere/sysroot/usr/lib64 && \
-    cargo build --features jni-lib --target x86_64-linux-android && \
-    cargo build --features jni-lib --target x86_64-linux-android --release && \
-    unset RUSTFLAGS && \
+COPY build.rs ./
+RUN RUSTFLAGS=-L/opt/ndk/x86_64/sysroot/usr/lib64 cargo build --target x86_64-linux-android && \
+    cargo clean && \
     rm -rf /tmp/zbox
 
 # set work dir

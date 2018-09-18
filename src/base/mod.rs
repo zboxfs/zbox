@@ -31,7 +31,7 @@ pub fn init_env() {
     INIT.call_once(|| {
         #[cfg(target_os = "android")]
         {
-            android_log::init("Zbox2").unwrap();
+            android_log::init("Zbox").unwrap();
         }
         #[cfg(not(target_os = "android"))]
         {

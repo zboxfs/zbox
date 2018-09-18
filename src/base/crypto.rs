@@ -898,7 +898,7 @@ impl Crypto {
                 &pwdhash.salt.0 as *const u8,
                 pwdhash.cost.ops_limit as u64,
                 pwdhash.cost.mem_limit as usize,
-                2,  // version 1.3 of the Argon2id algorithm
+                2, // version 1.3 of the Argon2id algorithm
             ) {
                 0 => Ok(pwdhash),
                 _ => Err(Error::Hashing),

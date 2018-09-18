@@ -8,15 +8,23 @@ use jni::objects::{JByteBuffer, JClass, JObject, JString, JValue};
 use jni::sys::{jboolean, jint, jlong, jobjectArray, JNI_FALSE};
 use jni::JNIEnv;
 
-use file::{File, VersionReader};
 use base::crypto::{Cipher, MemLimit, OpsLimit};
 use base::init_env;
 use error::Result;
+use file::{File, VersionReader};
 use fs::{Metadata, Version};
 use repo::{OpenOptions, Repo, RepoOpener};
 
 // field name in Java class to hold its Rust object
 const RUST_OBJ_FIELD: &'static str = "rustObj";
+
+// field name in Java class to identify Rust object
+// 100 - RepoOpener
+// 101 - Repo
+// 102 - OpenOptions
+// 103 - File
+// 104 - VersionReader
+const RUST_OBJID_FIELD: &'static str = "rustObjId";
 
 #[inline]
 fn u8_to_bool(a: u8) -> bool {
@@ -56,24 +64,58 @@ pub extern "system" fn Java_io_zbox_Env_init(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_RepoOpener_jniSetRustObj(
+pub extern "system" fn Java_io_zbox_RustObject_jniSetRustObj(
     env: JNIEnv,
     obj: JObject,
 ) {
-    let opener = RepoOpener::new();
-    unsafe {
-        env.set_rust_field(obj, RUST_OBJ_FIELD, opener).unwrap();
+    let cls = env.get_object_class(obj).unwrap();
+    let rust_obj_id = env.get_static_field(cls, RUST_OBJID_FIELD, "I").unwrap();
+    match rust_obj_id.i().unwrap() {
+        100 => {
+            let rust_obj = RepoOpener::new();
+            unsafe {
+                env.set_rust_field(obj, RUST_OBJ_FIELD, rust_obj).unwrap();
+            }
+        }
+        102 => {
+            let rust_obj = OpenOptions::new();
+            unsafe {
+                env.set_rust_field(obj, RUST_OBJ_FIELD, rust_obj).unwrap();
+            }
+        }
+        _ => {}
     }
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_RepoOpener_jniTakeRustObj(
+pub extern "system" fn Java_io_zbox_RustObject_jniTakeRustObj(
     env: JNIEnv,
     obj: JObject,
 ) {
-    unsafe {
-        env.take_rust_field::<&str, RepoOpener>(obj, RUST_OBJ_FIELD)
-            .unwrap();
+    let cls = env.get_object_class(obj).unwrap();
+    let rust_obj_id = env.get_static_field(cls, RUST_OBJID_FIELD, "I").unwrap();
+    match rust_obj_id.i().unwrap() {
+        100 => unsafe {
+            env.take_rust_field::<&str, RepoOpener>(obj, RUST_OBJ_FIELD)
+                .unwrap();
+        },
+        101 => unsafe {
+            env.take_rust_field::<&str, Repo>(obj, RUST_OBJ_FIELD)
+                .unwrap();
+        },
+        102 => unsafe {
+            env.take_rust_field::<&str, OpenOptions>(obj, RUST_OBJ_FIELD)
+                .unwrap();
+        },
+        103 => unsafe {
+            env.take_rust_field::<&str, File>(obj, RUST_OBJ_FIELD)
+                .unwrap();
+        },
+        104 => unsafe {
+            env.take_rust_field::<&str, VersionReader>(obj, RUST_OBJ_FIELD)
+                .unwrap();
+        },
+        _ => {}
     }
 }
 
@@ -220,17 +262,6 @@ pub extern "system" fn Java_io_zbox_RepoOpener_jniOpen<'a>(
             throw(&env, err);
             JObject::null()
         }
-    }
-}
-
-#[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniTakeRustObj(
-    env: JNIEnv,
-    obj: JObject,
-) {
-    unsafe {
-        env.take_rust_field::<&str, Repo>(obj, RUST_OBJ_FIELD)
-            .unwrap();
     }
 }
 
@@ -777,28 +808,6 @@ pub extern "system" fn Java_io_zbox_Repo_jniRename(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_OpenOptions_jniSetRustObj(
-    env: JNIEnv,
-    obj: JObject,
-) {
-    let opts = OpenOptions::new();
-    unsafe {
-        env.set_rust_field(obj, RUST_OBJ_FIELD, opts).unwrap();
-    }
-}
-
-#[no_mangle]
-pub extern "system" fn Java_io_zbox_OpenOptions_jniTakeRustObj(
-    env: JNIEnv,
-    obj: JObject,
-) {
-    unsafe {
-        env.take_rust_field::<&str, OpenOptions>(obj, RUST_OBJ_FIELD)
-            .unwrap();
-    }
-}
-
-#[no_mangle]
 pub extern "system" fn Java_io_zbox_OpenOptions_jniRead(
     env: JNIEnv,
     obj: JObject,
@@ -931,17 +940,6 @@ pub extern "system" fn Java_io_zbox_OpenOptions_jniOpen<'a>(
             throw(&env, err);
             JObject::null()
         }
-    }
-}
-
-#[no_mangle]
-pub extern "system" fn Java_io_zbox_File_jniTakeRustObj(
-    env: JNIEnv,
-    obj: JObject,
-) {
-    unsafe {
-        env.take_rust_field::<&str, File>(obj, RUST_OBJ_FIELD)
-            .unwrap();
     }
 }
 
@@ -1129,17 +1127,6 @@ pub extern "system" fn Java_io_zbox_File_jniSeek(
             throw(&env, err);
             0
         }
-    }
-}
-
-#[no_mangle]
-pub extern "system" fn Java_io_zbox_VersionReader_jniTakeRustObj(
-    env: JNIEnv,
-    obj: JObject,
-) {
-    unsafe {
-        env.take_rust_field::<&str, VersionReader>(obj, RUST_OBJ_FIELD)
-            .unwrap();
     }
 }
 
