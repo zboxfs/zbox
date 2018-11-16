@@ -1,4 +1,4 @@
-<img src="https://www.zbox.io/svg/logo.svg" alt="Zbox Logo" height="96" /> Zbox
+<img src="https://www.zbox.io/svg/logo.svg" alt="Zbox Logo" height="96" /> ZboxFS
 ======
 [![Travis](https://img.shields.io/travis/zboxfs/zbox.svg?style=flat-square)](https://travis-ci.org/zboxfs/zbox)
 [![Crates.io](https://img.shields.io/crates/d/zbox.svg?style=flat-square)](https://crates.io/crates/zbox)
@@ -7,22 +7,22 @@
 [![license](https://img.shields.io/github/license/zboxfs/zbox.svg?style=flat-square)](https://github.com/zboxfs/zbox)
 [![GitHub stars](https://img.shields.io/github/stars/zboxfs/zbox.svg?style=social&label=Stars)](https://github.com/zboxfs/zbox)
 
-Zbox is a zero-details, privacy-focused embeddable file system. Its goal is
+ZboxFS is a zero-details, privacy-focused embeddable file system. Its goal is
 to help application store files securely, privately and reliably. By
 encapsulating files and directories into an encrypted repository, it provides
 a virtual file system and exclusive access to authorised application.
 
 Unlike other system-level file systems, such as [ext4], [XFS] and [Btrfs], which
-provide shared access to multiple processes, Zbox is a file system that runs
+provide shared access to multiple processes, ZboxFS is a file system that runs
 in the same memory space as the application. It only provides access to one
 process at a time.
 
-By abstracting IO access, Zbox supports a variety of underlying storage layers,
+By abstracting IO access, ZboxFS supports a variety of underlying storage layers,
 including memory, OS file system, RDBMS and key-value object store.
 
 ## Disclaimer
 
-Zbox is under active development, we are not responsible for any data loss
+ZboxFS is under active development, we are not responsible for any data loss
 or leak caused by using it. Always back up your files and use at your own risk!
 
 Features
@@ -48,13 +48,13 @@ Many OS-level file systems support encryption, such as [EncFS], [APFS] and
 [ZFS]. Some disk encryption tools also provide virtual file system, such as
 [TrueCrypt], [LUKS] and [VeraCrypt].
 
-This diagram shows the difference between Zbox and them.
+This diagram shows the difference between ZboxFS and them.
 
 ![Comparison](https://www.zbox.io/svg/zbox-compare.svg)
 
 Below is the feature comparison list.
 
-|                             | Zbox                     | OS-level File Systems    | Disk Encryption Tools    |
+|                             | ZboxFS                   | OS-level File Systems    | Disk Encryption Tools    |
 | --------------------------- | ------------------------ | ------------------------ | ------------------------ |
 | Encrypts file contents      | :heavy_check_mark:       | partial                  | :heavy_check_mark:       |
 | Encrypts file metadata      | :heavy_check_mark:       | partial                  | :heavy_check_mark:       |
@@ -76,7 +76,7 @@ Below is the feature comparison list.
 
 ## Supported Storage
 
-By now, Zbox supports a variety of underlying storage, which are listed below.
+By now, ZboxFS supports a variety of underlying storage, which are listed below.
 Memory and OS file storage are enabled by default, all the others can be
 enabled individually by specifying its feature when build.
 
@@ -157,11 +157,11 @@ fn main() {
 
 ## Build with Docker
 
-Zbox comes with [Docker] support, it is easier to build Zbox with [zboxfs/base]
+ZboxFS comes with [Docker] support, it is easier to build ZboxFS with [zboxfs/base]
 image. This image is based on Ubuntu 16.04 and has Rust stable and libsodium
 included. Check more details in the [Dockerfile](docker/base.docker).
 
-You can also use image [zboxfs/android] to build Zbox for Android. It is based
+You can also use image [zboxfs/android] to build ZboxFS for Android. It is based
 on [zboxfs/base] image and has Android NDK included. Check more details in the
 [Dockerfile](docker/android.docker).
 
@@ -187,7 +187,7 @@ docker run --rm -v $PWD:/root/zbox zboxfs/base cargo test
 
 ## Static linking with libsodium
 
-By default, Zbox uses dynamic linking when it is linked with libsodium. If you
+By default, ZboxFS uses dynamic linking when it is linked with libsodium. If you
 want to change this behavior and use static linking, you can enable below two
 environment variables.
 
@@ -259,7 +259,7 @@ Community
 
 License
 =======
-`Zbox` is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE)
+`ZboxFS` is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE)
 file for details.
 
 [ext4]: https://en.wikipedia.org/wiki/Ext4

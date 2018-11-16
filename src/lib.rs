@@ -1,4 +1,4 @@
-//! Zbox is a zero-details, privacy-focused embeddable file system.
+//! ZboxFS is a zero-details, privacy-focused embeddable file system.
 //!
 //! It keeps files securely, privately and reliably on underlying storages.
 //! By encapsulating files and directories into an encrypted repository, it
@@ -12,10 +12,10 @@
 //! - [`File`] provides similar file I/O methods to [`std::fs::File`]
 //!
 //! [`init_env`] initialises the environment and should be called before
-//! any other methods provied by Zbox.
+//! any other methods provied by ZboxFS.
 //!
 //! After repository is opened by [`RepoOpener`], all of the other functions
-//! provided by Zbox will be thread-safe.
+//! provided by ZboxFS will be thread-safe.
 //!
 //! # Examples
 //!

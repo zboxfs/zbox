@@ -1,6 +1,6 @@
-# Contributing to Zbox
+# Contributing to ZboxFS
 
-Zbox welcomes contribution from everyone in the form of suggestions, bug
+ZboxFS welcomes contribution from everyone in the form of suggestions, bug
 reports, pull requests, and feedback. This document gives some guidance if you
 are thinking of helping us.
 
@@ -17,7 +17,7 @@ Verifiable example].
 [Minimal, Complete, and Verifiable example]: https://stackoverflow.com/help/mcve
 
 When making a feature request, please make it clear what problem you intend to
-solve with the feature, any ideas for how Zbox could support solving that
+solve with the feature, any ideas for how ZboxFS could support solving that
 problem, any possible alternatives, and any disadvantages.
 
 ## Formatting code
@@ -31,7 +31,7 @@ automatically format code while you're editing.
 
 ## Branching
 
-Zbox has two main branches, both branches should always be compilable and
+ZboxFS has two main branches, both branches should always be compilable and
 passed all the unit and integration tests before pushed to GitHub.
 
 - [master](https://github.com/zboxfs/zbox/tree/master)
@@ -51,7 +51,7 @@ eventually merged back to `master`. Those branches should also regularly use
 
 ## Debugging
 
-Zbox uses [env_logger](https://crates.io/crates/env_logger) to output debug
+ZboxFS uses [env_logger](https://crates.io/crates/env_logger) to output debug
 information. You can use the below environment variable to enable debug log
 output.
 
@@ -95,7 +95,7 @@ cargo test --doc
 
 ### Run fuzz test
 
-Zbox contains fuzz test, which is included in the integration test suite.
+ZboxFS contains fuzz test, which is included in the integration test suite.
 To save test time, the default number of fuzz test iteration is very low.
 You can increase the number of batch and round by modifing the
 [fuzz.rs](tests/fuzz.rs) file to perform intensive fuzz test.
@@ -116,7 +116,7 @@ Run the fuzz test separately:
 
 For file system test, we need to simulate many IO error scenerios which is
 hard because OS file system IO errors are very rare. To solve this problem,
-Zbox uses a special storage `faulty` to simulate random IO errors. This storage
+ZboxFS uses a special storage `faulty` to simulate random IO errors. This storage
 is based on memory storage, but can generate random IO error deterministically.
 The generator can be switched on and off on the fly, and the error probability
 is also adjustable.
@@ -141,6 +141,6 @@ cargo test --tests perf_test --release --features perf-test -- --nocapture
 
 ## Code of Conduct
 
-In all Zbox-related forums, we follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+In all ZboxFS-related forums, we follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 For escalation or moderation issues please contact us (support@zbox.io).
 

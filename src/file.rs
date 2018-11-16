@@ -52,7 +52,7 @@ impl Seek for VersionReader {
 ///
 /// Files are automatically closed when they go out of scope.
 ///
-/// As Zbox internally cached file content, it is no need to use buffered
+/// As ZboxFS internally cached file content, it is no need to use buffered
 /// reader, such as [`BufReader<R>`].
 ///
 /// # Examples

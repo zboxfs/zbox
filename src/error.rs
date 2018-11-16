@@ -423,7 +423,7 @@ impl PartialEq for Error {
     }
 }
 
-/// A specialized [`Result`] type for Zbox operations.
+/// A specialized [`Result`] type for ZboxFS operations.
 ///
 /// See the [`zbox::Error`] for all the  errors.
 ///

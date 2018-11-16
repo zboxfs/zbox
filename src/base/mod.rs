@@ -22,16 +22,16 @@ use env_logger;
 
 static INIT: Once = ONCE_INIT;
 
-/// Initialise Zbox environment.
+/// Initialise ZboxFS environment.
 ///
-/// This function should be called before any other functions provided by Zbox.
+/// This function should be called before any other functions provided by ZboxFS.
 /// This function can be called more than one time.
 pub fn init_env() {
     // only call the initialisation code once globally
     INIT.call_once(|| {
         #[cfg(target_os = "android")]
         {
-            android_log::init("Zbox").unwrap();
+            android_log::init("ZboxFS").unwrap();
         }
         #[cfg(not(target_os = "android"))]
         {

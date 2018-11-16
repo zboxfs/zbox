@@ -201,7 +201,7 @@ impl RepoOpener {
     ///   This storage can be enabled by feature `storage-redis`.
     ///
     /// After a repository is opened, all of the other functions provided by
-    /// Zbox will be thread-safe.
+    /// ZboxFS will be thread-safe.
     ///
     /// The application should destroy the password as soon as possible after
     /// calling this function.
