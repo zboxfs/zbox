@@ -8,6 +8,7 @@ use libsqlite3_sys as ffi;
 use base::crypto::{Crypto, Key};
 use error::{Error, Result};
 use trans::Eid;
+use volume::address::Span;
 use volume::storage::Storable;
 use volume::BLK_SIZE;
 
@@ -353,18 +354,11 @@ impl Storable for SqliteStorage {
         run_dml(stmt)
     }
 
-    fn get_blocks(
-        &mut self,
-        dst: &mut [u8],
-        start_idx: u64,
-        cnt: usize,
-    ) -> Result<()> {
-        assert_eq!(dst.len(), BLK_SIZE * cnt);
-
+    fn get_blocks(&mut self, dst: &mut [u8], span: Span) -> Result<()> {
         let stmt = self.stmts[5];
 
         let mut read = 0;
-        for blk_idx in start_idx..start_idx + cnt as u64 {
+        for blk_idx in span {
             // reset statement and binding
             reset_stmt(stmt)?;
 
@@ -379,17 +373,10 @@ impl Storable for SqliteStorage {
         Ok(())
     }
 
-    fn put_blocks(
-        &mut self,
-        start_idx: u64,
-        cnt: usize,
-        mut blks: &[u8],
-    ) -> Result<()> {
-        assert_eq!(blks.len(), BLK_SIZE * cnt);
-
+    fn put_blocks(&mut self, span: Span, blks: &[u8]) -> Result<()> {
         let stmt = self.stmts[6];
 
-        for blk_idx in start_idx..start_idx + cnt as u64 {
+        for blk_idx in span {
             // reset statement and binding
             reset_stmt(stmt)?;
 
@@ -404,10 +391,10 @@ impl Storable for SqliteStorage {
         Ok(())
     }
 
-    fn del_blocks(&mut self, start_idx: u64, cnt: usize) -> Result<()> {
+    fn del_blocks(&mut self, span: Span) -> Result<()> {
         let stmt = self.stmts[7];
 
-        for blk_idx in start_idx..start_idx + cnt as u64 {
+        for blk_idx in span {
             // reset statement and binding
             reset_stmt(stmt)?;
 

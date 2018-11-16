@@ -6,8 +6,8 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use super::vio;
-use super::{ensure_parents_dir, remove_empty_parent_dir};
 use base::crypto::{Crypto, Key};
+use base::utils::{ensure_parents_dir, remove_empty_parent_dir};
 use error::{Error, Result};
 use trans::Eid;
 use trans::Finish;
@@ -189,14 +189,6 @@ impl<T> FileArmor<T> {
         }
     }
 
-    pub fn id_to_path(&self, id: &Eid) -> PathBuf {
-        let bytes_str = id.to_string();
-        self.base
-            .join(&bytes_str[0..2])
-            .join(&bytes_str[2..4])
-            .join(&bytes_str)
-    }
-
     #[inline]
     pub fn set_crypto_ctx(&mut self, crypto: Crypto, key: Key) {
         self.crypto = crypto;
@@ -210,7 +202,7 @@ impl<'de, T: ArmAccess<'de> + Debug> Armor<'de> for FileArmor<T> {
     type ItemWriter = CryptoWriter;
 
     fn get_item_reader(&self, arm_id: &Eid) -> Result<Self::ItemReader> {
-        let path = self.id_to_path(arm_id);
+        let path = arm_id.to_path_buf(&self.base);
         match vio::OpenOptions::new().read(true).open(&path) {
             Ok(file) => Ok(CryptoReader::new(file, &self.crypto, &self.key)),
             Err(ref err) if err.kind() == ErrorKind::NotFound => {
@@ -221,7 +213,7 @@ impl<'de, T: ArmAccess<'de> + Debug> Armor<'de> for FileArmor<T> {
     }
 
     fn get_item_writer(&self, arm_id: &Eid) -> Result<Self::ItemWriter> {
-        let path = self.id_to_path(arm_id);
+        let path = arm_id.to_path_buf(&self.base);
         ensure_parents_dir(&path)?;
         let file = vio::OpenOptions::new()
             .write(true)
@@ -232,7 +224,7 @@ impl<'de, T: ArmAccess<'de> + Debug> Armor<'de> for FileArmor<T> {
     }
 
     fn del_arm(&self, arm_id: &Eid) -> Result<()> {
-        let path = self.id_to_path(arm_id);
+        let path = arm_id.to_path_buf(&self.base);
         vio::remove_file(&path)?;
         remove_empty_parent_dir(&path)?;
         Ok(())

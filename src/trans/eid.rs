@@ -1,5 +1,6 @@
 use std::fmt::{self, Debug};
 use std::ops::Index;
+use std::path::{Path, PathBuf};
 
 use base::crypto::Crypto;
 
@@ -38,6 +39,17 @@ impl Eid {
         let mut ret = Eid::new_empty();
         ret.0.copy_from_slice(buf);
         ret
+    }
+
+    pub(crate) fn to_path_buf(&self, base: &Path) -> PathBuf {
+        let s = self.to_string();
+        base.join(&s[0..2]).join(&s[2..4]).join(&s)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn to_rel_path(&self) -> PathBuf {
+        let base = Path::new("");
+        self.to_path_buf(&base)
     }
 }
 

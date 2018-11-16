@@ -1,41 +1,116 @@
+use std::cmp::{max, min};
+use std::iter::IntoIterator;
 use std::ops::Index;
 use std::slice::Iter;
 
 use super::{BLKS_PER_FRAME, BLK_SIZE, FRAME_SIZE};
 
-/// Span
+/// Block span
 #[derive(Debug, Clone, Copy, Default, PartialEq, Deserialize, Serialize)]
 pub struct Span {
-    pub begin: u64,  // begin block index
-    pub end: u64,    // end block index, exclusive
-    pub offset: u64, // offset in span list
+    pub begin: usize, // begin block index
+    pub cnt: usize,   // number of blocks in the span
 }
 
 impl Span {
     #[inline]
-    pub fn new(begin: u64, end: u64, offset: u64) -> Self {
-        Span { begin, end, offset }
+    pub fn new(begin: usize, cnt: usize) -> Self {
+        Span { begin, cnt }
     }
 
     #[inline]
-    pub fn block_count(&self) -> usize {
-        (self.end - self.begin) as usize
+    pub fn end(&self) -> usize {
+        self.begin + self.cnt
     }
 
     #[inline]
-    pub fn block_len(&self) -> usize {
-        self.block_count() * BLK_SIZE
+    pub fn bytes_len(&self) -> usize {
+        self.cnt * BLK_SIZE
     }
 
-    pub fn split_to(&mut self, at: u64) -> Span {
-        assert!(self.begin <= at && at < self.end);
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.cnt == 0
+    }
+
+    pub fn split_to(&mut self, at: usize) -> Span {
+        assert!(self.begin <= at && at < self.end());
         let ret = Span {
             begin: self.begin,
-            end: at,
-            offset: self.offset,
+            cnt: self.cnt - (self.end() - at),
         };
         self.begin = at;
-        self.offset = self.offset + ret.block_len() as u64;
+        self.cnt -= ret.cnt;
+        ret
+    }
+
+    #[allow(dead_code)]
+    pub fn advance(&mut self, cnt: usize) {
+        assert!(cnt <= self.cnt);
+        self.begin += cnt;
+        self.cnt -= cnt;
+    }
+
+    #[allow(dead_code)]
+    pub fn union(&self, other: Span) -> Option<Span> {
+        if self.end() < other.begin || other.end() < self.begin {
+            return None;
+        }
+        let begin = min(self.begin, other.begin);
+        let end = max(self.end(), other.end());
+        Some(Span::new(begin, end - begin))
+    }
+
+    pub fn divide_by(&self, size: usize) -> Vec<Span> {
+        let mut ret = Vec::new();
+
+        if self.is_empty() {
+            return ret;
+        }
+
+        let mut span = self.clone();
+        let mut at = span.begin + size - span.begin % size;
+        while at < span.end() {
+            let split = span.split_to(at);
+            ret.push(split);
+            at += size;
+        }
+        ret.push(span);
+        ret
+    }
+}
+
+impl IntoIterator for Span {
+    type Item = usize;
+    type IntoIter = ::std::ops::Range<usize>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.begin..self.end()
+    }
+}
+
+/// Block span with offset location
+#[derive(Debug, Clone, Copy, Default, PartialEq, Deserialize, Serialize)]
+pub struct LocSpan {
+    pub span: Span,
+    pub offset: usize, // offset in span list
+}
+
+impl LocSpan {
+    #[inline]
+    pub fn new(begin: usize, cnt: usize, offset: usize) -> Self {
+        LocSpan {
+            span: Span::new(begin, cnt),
+            offset,
+        }
+    }
+
+    pub fn split_to(&mut self, at: usize) -> LocSpan {
+        let ret = LocSpan {
+            span: self.span.split_to(at),
+            offset: self.offset,
+        };
+        self.offset += ret.span.bytes_len();
         ret
     }
 }
@@ -44,66 +119,63 @@ impl Span {
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Addr {
     pub len: usize,
-    pub list: Vec<Span>,
+    pub list: Vec<LocSpan>,
 }
 
 impl Addr {
     #[inline]
-    pub fn iter(&self) -> Iter<Span> {
+    pub fn iter(&self) -> Iter<LocSpan> {
         self.list.iter()
     }
 
     // append a span to address
-    pub fn append(&mut self, begin_idx: u64, blk_cnt: usize, len: usize) {
-        let end_idx = begin_idx + blk_cnt as u64;
-
+    pub fn append(&mut self, span: Span, len: usize) {
         if self.list.is_empty() {
-            self.list.push(Span::new(begin_idx, end_idx, 0));
+            self.list.push(LocSpan::new(span.begin, span.cnt, 0));
             self.len = len;
             return;
         }
 
-        if begin_idx == self.list.last_mut().unwrap().end {
+        if span.begin == self.list.last_mut().unwrap().span.end() {
             // merge to the last span
             let last = self.list.last_mut().unwrap();
-            last.end += blk_cnt as u64;
+            last.span.cnt += span.cnt;
         } else {
-            self.list
-                .push(Span::new(begin_idx, end_idx, self.len as u64));
+            self.list.push(LocSpan::new(span.begin, span.cnt, self.len));
         }
         self.len += len;
     }
 
-    // split address to frames
-    pub fn split_to_frames(&self) -> Vec<Addr> {
+    // divide address to frames
+    pub fn divide_to_frames(&self) -> Vec<Addr> {
         let mut frames = vec![Addr::default()];
-        let mut frm_idx: usize = 0;
-        let mut blks_cnt: usize = 0;
+        let mut frm_idx = 0;
+        let mut blk_cnt = 0;
 
-        for span in self.list.iter() {
-            let mut span = span.clone();
-            span.offset = (frm_idx * FRAME_SIZE + blks_cnt * BLK_SIZE) as u64;
+        for loc_span in self.list.iter() {
+            let mut loc_span = loc_span.clone();
+            loc_span.offset = frm_idx * FRAME_SIZE + blk_cnt * BLK_SIZE;
 
             loop {
-                let blks_left = BLKS_PER_FRAME - blks_cnt;
+                let blk_left = BLKS_PER_FRAME - blk_cnt;
 
-                if span.block_count() <= blks_left {
+                if loc_span.span.cnt <= blk_left {
                     // span can fit into frame
-                    frames[frm_idx].list.push(span);
-                    blks_cnt += span.block_count();
+                    frames[frm_idx].list.push(loc_span);
+                    blk_cnt += loc_span.span.cnt;
                     break;
                 }
 
                 // span cannot fit into frame, must split span first
-                let at = span.begin + blks_left as u64;
-                let split = span.split_to(at);
+                let at = loc_span.span.begin + blk_left;
+                let split = loc_span.split_to(at);
 
                 // finish current frame and start a new frame
                 frames[frm_idx].list.push(split);
                 frames[frm_idx].len = FRAME_SIZE;
                 frames.push(Addr::default());
                 frm_idx += 1;
-                blks_cnt = 0;
+                blk_cnt = 0;
             }
         }
 
@@ -116,8 +188,8 @@ impl Addr {
 }
 
 impl IntoIterator for Addr {
-    type Item = Span;
-    type IntoIter = ::std::vec::IntoIter<Span>;
+    type Item = LocSpan;
+    type IntoIter = ::std::vec::IntoIter<LocSpan>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.list.into_iter()
@@ -125,9 +197,9 @@ impl IntoIterator for Addr {
 }
 
 impl Index<usize> for Addr {
-    type Output = Span;
+    type Output = LocSpan;
 
-    fn index(&self, index: usize) -> &Span {
+    fn index(&self, index: usize) -> &LocSpan {
         &self.list[index]
     }
 }
@@ -138,170 +210,103 @@ mod tests {
 
     #[test]
     fn split_addr() {
-        // #1, a address is smaller than a frame
-        let span = Span {
-            begin: 0,
-            end: 1,
-            offset: 0,
-        };
+        // #1, address is smaller than a frame
+        let lspan = LocSpan::new(0, 1, 0);
         let addr = Addr {
             len: 3,
-            list: vec![span.clone()],
+            list: vec![lspan.clone()],
         };
-        let frms = addr.split_to_frames();
+        let frms = addr.divide_to_frames();
         assert_eq!(frms.len(), 1);
         assert_eq!(frms[0].len, addr.len);
-        assert_eq!(frms[0].list[0], span);
+        assert_eq!(frms[0].list[0], lspan);
 
-        // #2, a address is equal a frame
-        let span = Span {
-            begin: 0,
-            end: BLKS_PER_FRAME as u64,
-            offset: 0,
-        };
+        // #2, address is equal to a frame
+        let lspan = LocSpan::new(0, BLKS_PER_FRAME, 0);
         let addr = Addr {
             len: FRAME_SIZE,
-            list: vec![span.clone()],
+            list: vec![lspan.clone()],
         };
-        let frms = addr.split_to_frames();
+        let frms = addr.divide_to_frames();
         assert_eq!(frms.len(), 1);
         assert_eq!(frms[0].len, addr.len);
-        assert_eq!(frms[0].list[0], span);
+        assert_eq!(frms[0].list[0], lspan);
 
-        // #3, a address is greater a frame
-        let span = Span {
-            begin: 0,
-            end: BLKS_PER_FRAME as u64 + 1,
-            offset: 0,
-        };
+        // #3, address is greater than a frame
+        let lspan = LocSpan::new(0, BLKS_PER_FRAME + 1, 0);
         let addr = Addr {
             len: FRAME_SIZE + 3,
-            list: vec![span.clone()],
+            list: vec![lspan.clone()],
         };
-        let frms = addr.split_to_frames();
+        let frms = addr.divide_to_frames();
         assert_eq!(frms.len(), 2);
         assert_eq!(frms[0].len, FRAME_SIZE);
-        assert_eq!(
-            frms[0].list[0],
-            Span {
-                begin: 0,
-                end: BLKS_PER_FRAME as u64,
-                offset: 0
-            }
-        );
+        assert_eq!(frms[0].list[0], LocSpan::new(0, BLKS_PER_FRAME, 0));
         assert_eq!(frms[1].len, 3);
         assert_eq!(
             frms[1].list[0],
-            Span {
-                begin: BLKS_PER_FRAME as u64,
-                end: BLKS_PER_FRAME as u64 + 1,
-                offset: FRAME_SIZE as u64,
-            }
+            LocSpan::new(BLKS_PER_FRAME, 1, FRAME_SIZE)
         );
 
         // #4, 2 address are smaller than a frame
-        let span = Span {
-            begin: 0,
-            end: 1,
-            offset: 0,
-        };
-        let span2 = Span {
-            begin: 3,
-            end: 4,
-            offset: BLK_SIZE as u64,
-        };
+        let lspan = LocSpan::new(0, 1, 0);
+        let lspan2 = LocSpan::new(3, 1, BLK_SIZE);
         let addr = Addr {
             len: BLK_SIZE + 3,
-            list: vec![span.clone(), span2.clone()],
+            list: vec![lspan.clone(), lspan2.clone()],
         };
-        let frms = addr.split_to_frames();
+        let frms = addr.divide_to_frames();
         assert_eq!(frms.len(), 1);
         assert_eq!(frms[0].len, addr.len);
         assert_eq!(frms[0].list.len(), 2);
-        assert_eq!(frms[0].list[0], span);
-        assert_eq!(frms[0].list[1], span2);
+        assert_eq!(frms[0].list[0], lspan);
+        assert_eq!(frms[0].list[1], lspan2);
 
         // #5, 2 address is greater than a frame
-        let span = Span {
-            begin: 0,
-            end: 1,
-            offset: 0,
-        };
-        let span2 = Span {
-            begin: 3,
-            end: BLKS_PER_FRAME as u64 + 3,
-            offset: BLK_SIZE as u64,
-        };
+        let lspan = LocSpan::new(0, 1, 0);
+        let lspan2 = LocSpan::new(3, BLKS_PER_FRAME, BLK_SIZE);
         let addr = Addr {
             len: BLK_SIZE + FRAME_SIZE,
-            list: vec![span.clone(), span2.clone()],
+            list: vec![lspan.clone(), lspan2.clone()],
         };
-        let frms = addr.split_to_frames();
+        let frms = addr.divide_to_frames();
         assert_eq!(frms.len(), 2);
         assert_eq!(frms[0].len, FRAME_SIZE);
         assert_eq!(frms[0].list.len(), 2);
-        assert_eq!(frms[0].list[0], span);
-        let end = span2.begin + BLKS_PER_FRAME as u64 - 1;
+        assert_eq!(frms[0].list[0], lspan);
         assert_eq!(
             frms[0].list[1],
-            Span {
-                begin: span2.begin,
-                end,
-                offset: BLK_SIZE as u64,
-            }
+            LocSpan::new(lspan2.span.begin, BLKS_PER_FRAME - 1, BLK_SIZE)
         );
         assert_eq!(frms[1].len, BLK_SIZE);
         assert_eq!(frms[1].list.len(), 1);
         assert_eq!(
             frms[1].list[0],
-            Span {
-                begin: end,
-                end: end + 1,
-                offset: FRAME_SIZE as u64,
-            }
+            LocSpan::new(lspan2.span.begin + BLKS_PER_FRAME - 1, 1, FRAME_SIZE)
         );
 
         // #6, 1 address is greater than 2 frame
-        let span = Span {
-            begin: 0,
-            end: BLKS_PER_FRAME as u64 * 2 + 1,
-            offset: 0,
-        };
+        let lspan = LocSpan::new(0, BLKS_PER_FRAME * 2 + 1, 0);
         let addr = Addr {
             len: FRAME_SIZE * 2 + 3,
-            list: vec![span.clone()],
+            list: vec![lspan.clone()],
         };
-        let frms = addr.split_to_frames();
+        let frms = addr.divide_to_frames();
         assert_eq!(frms.len(), 3);
         assert_eq!(frms[0].len, FRAME_SIZE);
         assert_eq!(frms[0].list.len(), 1);
-        assert_eq!(
-            frms[0].list[0],
-            Span {
-                begin: 0,
-                end: BLKS_PER_FRAME as u64,
-                offset: 0,
-            }
-        );
+        assert_eq!(frms[0].list[0], LocSpan::new(0, BLKS_PER_FRAME, 0));
         assert_eq!(frms[1].len, FRAME_SIZE);
         assert_eq!(frms[1].list.len(), 1);
         assert_eq!(
             frms[1].list[0],
-            Span {
-                begin: BLKS_PER_FRAME as u64,
-                end: BLKS_PER_FRAME as u64 * 2,
-                offset: FRAME_SIZE as u64,
-            }
+            LocSpan::new(BLKS_PER_FRAME, BLKS_PER_FRAME, FRAME_SIZE)
         );
         assert_eq!(frms[2].len, 3);
         assert_eq!(frms[2].list.len(), 1);
         assert_eq!(
             frms[2].list[0],
-            Span {
-                begin: BLKS_PER_FRAME as u64 * 2,
-                end: BLKS_PER_FRAME as u64 * 2 + 1,
-                offset: FRAME_SIZE as u64 * 2,
-            }
+            LocSpan::new(BLKS_PER_FRAME * 2, 1, FRAME_SIZE * 2)
         );
     }
 }

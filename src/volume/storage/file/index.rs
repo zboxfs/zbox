@@ -11,7 +11,7 @@ use error::{Error, Result};
 use trans::{Eid, Id};
 use volume::{Arm, ArmAccess, Armor, Seq};
 
-// entity index stub
+// entity index
 #[derive(Clone, Deserialize, Serialize)]
 struct Index {
     id: Eid,
@@ -87,7 +87,7 @@ pub struct IndexMgr {
 
 impl IndexMgr {
     // index cache size
-    const CACHE_SIZE: usize = 16;
+    const CACHE_SIZE: usize = 32;
 
     pub fn new(base: &Path) -> Self {
         IndexMgr {
@@ -116,7 +116,7 @@ impl IndexMgr {
         Eid::from_slice(&hash)
     }
 
-    // load index from disk file and put into cache
+    // load index from disk file
     fn load_index(&mut self, bucket_id: u8) -> Result<Index> {
         let index_id = self.bucket_id_to_eid(bucket_id);
         self.idx_armor.load_item(&index_id)
@@ -132,23 +132,19 @@ impl IndexMgr {
     // open index for an entity, if not exists then create it
     fn open_index(&mut self, id: &Eid, create: bool) -> Result<&mut Index> {
         let bucket_id = id[0];
+
         if !self.cache.contains_key(&bucket_id) {
             // load index and insert into cache
             match self.load_index(bucket_id) {
                 Ok(index) => {
                     self.cache.insert(bucket_id, index);
                 }
-                Err(ref err) if *err == Error::NotFound => {
-                    if create {
-                        // create a new index and save it to cache
-                        let index =
-                            Index::new(self.bucket_id_to_eid(bucket_id));
-                        self.cache.insert(bucket_id, index);
-                    } else {
-                        return Err(Error::NotFound);
-                    }
+                Err(ref err) if *err == Error::NotFound && create => {
+                    // create a new index and save it to cache
+                    let index = Index::new(self.bucket_id_to_eid(bucket_id));
+                    self.cache.insert(bucket_id, index);
                 }
-                Err(err) => return Err(Error::from(err)),
+                Err(err) => return Err(err),
             }
         }
 

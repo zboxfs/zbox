@@ -5,6 +5,7 @@ use base::crypto::{Crypto, Key};
 use base::IntoRef;
 use error::{Error, Result};
 use trans::Eid;
+use volume::address::Span;
 use volume::storage::Storable;
 use volume::BLK_SIZE;
 
@@ -12,7 +13,7 @@ use volume::BLK_SIZE;
 #[derive(Clone)]
 pub struct MemStorage {
     super_blk_map: HashMap<u64, Vec<u8>>,
-    blk_map: HashMap<u64, Vec<u8>>,
+    blk_map: HashMap<usize, Vec<u8>>,
     addr_map: HashMap<Eid, Vec<u8>>,
 }
 
@@ -49,6 +50,7 @@ impl Storable for MemStorage {
             .ok_or(Error::NotFound)
     }
 
+    #[inline]
     fn put_super_block(&mut self, super_blk: &[u8], suffix: u64) -> Result<()> {
         self.super_blk_map.insert(suffix, super_blk.to_vec());
         Ok(())
@@ -61,25 +63,22 @@ impl Storable for MemStorage {
             .ok_or(Error::NotFound)
     }
 
+    #[inline]
     fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
         self.addr_map.insert(id.clone(), addr.to_vec());
         Ok(())
     }
 
+    #[inline]
     fn del_address(&mut self, id: &Eid) -> Result<()> {
         self.addr_map.remove(id);
         Ok(())
     }
 
-    fn get_blocks(
-        &mut self,
-        dst: &mut [u8],
-        start_idx: u64,
-        cnt: usize,
-    ) -> Result<()> {
-        assert_eq!(dst.len(), BLK_SIZE * cnt);
+    fn get_blocks(&mut self, dst: &mut [u8], span: Span) -> Result<()> {
+        assert_eq!(dst.len(), span.bytes_len());
         let mut read = 0;
-        for blk_idx in start_idx..start_idx + cnt as u64 {
+        for blk_idx in span {
             match self.blk_map.get(&blk_idx) {
                 Some(blk) => {
                     dst[read..read + BLK_SIZE].copy_from_slice(blk);
@@ -91,22 +90,17 @@ impl Storable for MemStorage {
         Ok(())
     }
 
-    fn put_blocks(
-        &mut self,
-        start_idx: u64,
-        cnt: usize,
-        mut blks: &[u8],
-    ) -> Result<()> {
-        assert_eq!(blks.len(), BLK_SIZE * cnt);
-        for blk_idx in start_idx..start_idx + cnt as u64 {
+    fn put_blocks(&mut self, span: Span, mut blks: &[u8]) -> Result<()> {
+        assert_eq!(blks.len(), span.bytes_len());
+        for blk_idx in span {
             self.blk_map.insert(blk_idx, blks[..BLK_SIZE].to_vec());
             blks = &blks[BLK_SIZE..];
         }
         Ok(())
     }
 
-    fn del_blocks(&mut self, start_idx: u64, cnt: usize) -> Result<()> {
-        for blk_idx in start_idx..start_idx + cnt as u64 {
+    fn del_blocks(&mut self, span: Span) -> Result<()> {
+        for blk_idx in span {
             self.blk_map.remove(&blk_idx);
         }
         Ok(())
@@ -145,15 +139,16 @@ mod tests {
         Crypto::random_buf_deterministic(&mut buf, &seed);
 
         let mut ms = MemStorage::new();
+        let span = Span::new(0, BLK_CNT);
 
         // write
         let now = Instant::now();
-        ms.put_blocks(0, BLK_CNT, &buf).unwrap();
+        ms.put_blocks(span, &buf).unwrap();
         let write_time = now.elapsed();
 
         // read
         let now = Instant::now();
-        ms.get_blocks(&mut buf, 0, BLK_CNT).unwrap();
+        ms.get_blocks(&mut buf, span).unwrap();
         let read_time = now.elapsed();
 
         println!(

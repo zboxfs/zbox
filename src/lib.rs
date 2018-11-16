@@ -146,6 +146,9 @@ extern crate libsqlite3_sys;
 #[cfg(feature = "storage-redis")]
 extern crate redis;
 
+#[cfg(feature = "storage-zbox")]
+extern crate reqwest;
+
 #[cfg(target_os = "android")]
 extern crate jni;
 

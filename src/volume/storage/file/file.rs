@@ -7,6 +7,7 @@ use super::vio;
 use base::crypto::{Crypto, Key};
 use error::{Error, Result};
 use trans::Eid;
+use volume::address::Span;
 use volume::storage::Storable;
 
 /// File Storage
@@ -126,28 +127,18 @@ impl Storable for FileStorage {
     }
 
     #[inline]
-    fn get_blocks(
-        &mut self,
-        dst: &mut [u8],
-        start_idx: u64,
-        cnt: usize,
-    ) -> Result<()> {
-        self.sec_mgr.read_blocks(dst, start_idx, cnt)
+    fn get_blocks(&mut self, dst: &mut [u8], span: Span) -> Result<()> {
+        self.sec_mgr.read_blocks(dst, span)
     }
 
     #[inline]
-    fn put_blocks(
-        &mut self,
-        start_idx: u64,
-        cnt: usize,
-        blks: &[u8],
-    ) -> Result<()> {
-        self.sec_mgr.write_blocks(start_idx, cnt, blks)
+    fn put_blocks(&mut self, span: Span, blks: &[u8]) -> Result<()> {
+        self.sec_mgr.write_blocks(span, blks)
     }
 
     #[inline]
-    fn del_blocks(&mut self, start_idx: u64, cnt: usize) -> Result<()> {
-        self.sec_mgr.del_blocks(start_idx, cnt)
+    fn del_blocks(&mut self, span: Span) -> Result<()> {
+        self.sec_mgr.del_blocks(span)
     }
 }
 
@@ -249,29 +240,35 @@ mod tests {
         let mut tgt = vec![0u8; BLK_SIZE * 4];
 
         // write 4 blocks
-        fs.put_blocks(0, 4, &blks).unwrap();
+        fs.put_blocks(Span::new(0, 4), &blks).unwrap();
 
         // read 4 blocks
-        fs.get_blocks(&mut tgt, 0, 4).unwrap();
+        fs.get_blocks(&mut tgt, Span::new(0, 4)).unwrap();
         assert_eq!(&tgt[..], &blks[..]);
 
         // delete block 1, block 2 should still be there
         {
             let blk = &mut tgt[..BLK_SIZE];
-            fs.del_blocks(1, 1).unwrap();
-            assert_eq!(fs.get_blocks(blk, 1, 1).unwrap_err(), Error::NotFound);
-            fs.get_blocks(blk, 2, 1).unwrap();
+            fs.del_blocks(Span::new(1, 1)).unwrap();
+            assert_eq!(
+                fs.get_blocks(blk, Span::new(1, 1)).unwrap_err(),
+                Error::NotFound
+            );
+            fs.get_blocks(blk, Span::new(2, 1)).unwrap();
             assert_eq!(blk, &blks[BLK_SIZE * 2..BLK_SIZE * 3]);
         }
 
         // get continuous blocks with deleted block inside should fail
-        assert_eq!(fs.get_blocks(&mut tgt, 0, 4).unwrap_err(), Error::NotFound);
+        assert_eq!(
+            fs.get_blocks(&mut tgt, Span::new(0, 4)).unwrap_err(),
+            Error::NotFound
+        );
 
         // write more blocks, more than a sector
         // sector #1: 4096 blocks, sector #2: 4 blocks
         let idx = 4;
         for i in 0..4096 / 4 {
-            fs.put_blocks(idx + i * 4, 4, &blks).unwrap();
+            fs.put_blocks(Span::new(idx + i * 4, 4), &blks).unwrap();
         }
 
         // re-open storage
@@ -281,25 +278,28 @@ mod tests {
 
         // blocks should still be there
         let blk = &mut tgt[..BLK_SIZE];
-        fs.get_blocks(blk, 0, 1).unwrap();
+        fs.get_blocks(blk, Span::new(0, 1)).unwrap();
         assert_eq!(blk, &blks[..BLK_SIZE]);
-        assert_eq!(fs.get_blocks(blk, 1, 1).unwrap_err(), Error::NotFound);
+        assert_eq!(
+            fs.get_blocks(blk, Span::new(1, 1)).unwrap_err(),
+            Error::NotFound
+        );
 
         // delete many blocks in sector #1 should shrink the sector
-        fs.del_blocks(0, 4092).unwrap();
+        fs.del_blocks(Span::new(0, 4092)).unwrap();
 
         // delete all blocks in sector #1 should remove the sector
-        fs.del_blocks(0, 4096).unwrap();
+        fs.del_blocks(Span::new(0, 4096)).unwrap();
 
         // delete all blocks in unfiished sector #2 should not remove the sector
-        fs.del_blocks(4096, 4).unwrap();
+        fs.del_blocks(Span::new(4096, 4)).unwrap();
 
         // continu write until the end of sector #2,
         // this should shrink sector #2
         let idx = 4100;
         for i in 0..4092 / 4 {
-            fs.del_blocks(idx - 4 + i * 4, 4).unwrap();
-            fs.put_blocks(idx + i * 4, 4, &blks).unwrap();
+            fs.del_blocks(Span::new(idx - 4 + i * 4, 4)).unwrap();
+            fs.put_blocks(Span::new(idx + i * 4, 4), &blks).unwrap();
         }
     }
 
@@ -314,15 +314,16 @@ mod tests {
         let mut buf = vec![0u8; DATA_LEN];
         let seed = RandomSeed::from(&[0u8; RANDOM_SEED_SIZE]);
         Crypto::random_buf_deterministic(&mut buf, &seed);
+        let span = Span::new(0, BLK_CNT);
 
         // write
         let now = Instant::now();
-        fs.put_blocks(0, BLK_CNT, &buf).unwrap();
+        fs.put_blocks(span, &buf).unwrap();
         let write_time = now.elapsed();
 
         // read
         let now = Instant::now();
-        fs.get_blocks(&mut buf, 0, BLK_CNT).unwrap();
+        fs.get_blocks(&mut buf, span).unwrap();
         let read_time = now.elapsed();
 
         println!(

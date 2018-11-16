@@ -3,6 +3,7 @@ use std::fmt::{self, Debug, Formatter};
 use std::marker::PhantomData;
 use std::mem;
 use std::ops::Deref;
+use std::path::{Path, PathBuf};
 use std::ptr;
 use std::result::Result as StdResult;
 use std::slice;
@@ -351,6 +352,13 @@ impl Hash {
     #[inline]
     pub fn as_mut_ptr(&mut self) -> *mut u8 {
         self.0.as_mut_ptr()
+    }
+
+    #[allow(dead_code)]
+    pub fn to_rel_path(&self) -> PathBuf {
+        let base = Path::new("");
+        let s = self.to_string();
+        base.join(&s[0..2]).join(&s[2..4]).join(&s)
     }
 }
 

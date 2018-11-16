@@ -52,7 +52,7 @@ impl Trans {
 
     #[inline]
     pub fn begin_trans(&mut self) -> Result<()> {
-        self.wal_armor.save_item(&mut self.wal)
+        self.wal_armor.save_item_flush(&mut self.wal)
     }
 
     // add an entity to this transaction
@@ -66,10 +66,12 @@ impl Trans {
     ) -> Result<()> {
         // add a wal entry and save wal, if this failed remove entry from wal
         self.wal.add_entry(id, action, ent_type, arm);
-        self.wal_armor.save_item(&mut self.wal).or_else(|err| {
-            self.wal.remove_entry(id);
-            Err(err)
-        })?;
+        self.wal_armor
+            .save_item_flush(&mut self.wal)
+            .or_else(|err| {
+                self.wal.remove_entry(id);
+                Err(err)
+            })?;
 
         // add entity to cohorts
         self.cohorts.entry(id.clone()).or_insert(entity);

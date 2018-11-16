@@ -1,4 +1,8 @@
+use std::fs;
+use std::path::Path;
 use std::time::Duration;
+
+use error::Result;
 
 /// Calculate usize align offset, size must be 2^n integer
 #[inline]
@@ -59,4 +63,24 @@ pub fn speed_str(duration: &Duration, data_len: usize) -> String {
     let secs = duration.as_secs() as f32
         + duration.subsec_nanos() as f32 / 1_000_000_000.0;
     format!("{} MB/s", data_len as f32 / (1024.0 * 1024.0) / secs)
+}
+
+/// Ensure all parents dir are created along the path
+pub fn ensure_parents_dir(path: &Path) -> Result<()> {
+    let parent = path.parent().unwrap();
+    if !parent.exists() {
+        fs::create_dir_all(parent)?;
+    }
+    Ok(())
+}
+
+/// Remove parent dir if it is empty
+pub fn remove_empty_parent_dir(path: &Path) -> Result<()> {
+    for parent in path.ancestors().skip(1) {
+        if fs::read_dir(parent)?.count() > 0 {
+            break;
+        }
+        fs::remove_dir(&parent)?;
+    }
+    Ok(())
 }

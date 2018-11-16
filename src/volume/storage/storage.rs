@@ -44,7 +44,7 @@ pub struct Storage {
     key: Key,
 
     // decrypted frame cache, key is the begin block index
-    frame_cache: Lru<u64, Vec<u8>, FrameCacheMeter, PinChecker<Vec<u8>>>,
+    frame_cache: Lru<usize, Vec<u8>, FrameCacheMeter, PinChecker<Vec<u8>>>,
 
     // entity address cache
     addr_cache: Lru<Eid, Addr, CountMeter<Addr>, PinChecker<Addr>>,
@@ -97,6 +97,16 @@ impl Storage {
                 Box::new(depot)
             }
             #[cfg(not(feature = "storage-faulty"))]
+            {
+                return Err(Error::InvalidUri);
+            }
+        } else if uri.starts_with("zbox://") {
+            #[cfg(feature = "storage-zbox")]
+            {
+                let depot = super::zbox::ZboxStorage::new(&uri[7..])?;
+                Box::new(depot)
+            }
+            #[cfg(not(feature = "storage-zbox"))]
             {
                 return Err(Error::InvalidUri);
             }
@@ -153,11 +163,6 @@ impl Storage {
         self.allocator.clone()
     }
 
-    fn allocate_blocks(&mut self, blk_cnt: usize) -> u64 {
-        let mut allocator = self.allocator.write().unwrap();
-        allocator.allocate(blk_cnt)
-    }
-
     // read entity address from depot and save to address cache
     fn get_address(&mut self, id: &Eid) -> Result<Addr> {
         // get from address cache first
@@ -194,22 +199,21 @@ impl Storage {
     // remove all blocks in a address
     fn remove_address_blocks(&mut self, addr: &Addr) -> Result<()> {
         let mut inaddr_idx = 0;
-        for span in addr.iter() {
-            let blk_cnt = span.block_count();
+        for loc_span in addr.iter() {
+            let blk_cnt = loc_span.span.cnt;
 
             // delete blocks
-            self.depot.del_blocks(span.begin, blk_cnt)?;
+            self.depot.del_blocks(loc_span.span)?;
 
-            let mut blk_idx = span.begin;
-            let end_idx = inaddr_idx + blk_cnt as u64;
+            let mut blk_idx = loc_span.span.begin;
+            let end_idx = inaddr_idx + blk_cnt;
 
             while inaddr_idx < end_idx {
-                let offset = inaddr_idx % BLKS_PER_FRAME as u64;
+                let offset = inaddr_idx % BLKS_PER_FRAME;
                 if offset == 0 {
                     self.frame_cache.remove(&blk_idx);
                 }
-                let step =
-                    min(end_idx - inaddr_idx, BLKS_PER_FRAME as u64 - offset);
+                let step = min(end_idx - inaddr_idx, BLKS_PER_FRAME - offset);
                 inaddr_idx += step;
                 blk_idx += step;
             }
@@ -268,7 +272,7 @@ pub struct Reader {
     frm_idx: usize,
 
     // frame cache key, the 1st block index in the frame
-    frm_key: u64,
+    frm_key: usize,
 
     // decrypted frame
     dec_frame: Vec<u8>,
@@ -287,8 +291,8 @@ impl Reader {
         };
 
         // split address to frames and set the first frame key
-        let addrs = addr.split_to_frames();
-        let frm_key = addrs[0].list[0].begin;
+        let addrs = addr.divide_to_frames();
+        let frm_key = addrs[0].list[0].span.begin;
 
         let mut rdr = Reader {
             storage: storage.clone(),
@@ -338,14 +342,13 @@ impl Read for Reader {
         {
             // read a frame from depot
             let mut read = 0;
-            for span in self.addrs[self.frm_idx].iter() {
-                let read_len = span.block_len();
+            for loc_span in self.addrs[self.frm_idx].iter() {
+                let read_len = loc_span.span.bytes_len();
                 storage
                     .depot
                     .get_blocks(
                         &mut self.frame[read..read + read_len],
-                        span.begin,
-                        span.block_count(),
+                        loc_span.span,
                     )
                     .map_err(|err| {
                         if err == Error::NotFound {
@@ -392,7 +395,7 @@ impl Read for Reader {
             self.frm_idx += 1;
             self.dec_frame_len = 0;
             if self.frm_idx < self.addrs.len() {
-                self.frm_key = self.addrs[self.frm_idx].list[0].begin;
+                self.frm_key = self.addrs[self.frm_idx].list[0].span.begin;
             }
         }
 
@@ -456,17 +459,16 @@ impl Writer {
         Crypto::random_buf(&mut self.frame[enc_len..aligned_len]);
 
         // allocate blocks
-        let begin_blk_idx = storage.allocate_blocks(blk_cnt);
+        let span = {
+            let mut allocator = storage.allocator.write().unwrap();
+            allocator.allocate(blk_cnt)
+        };
 
         // write frame to depot
-        storage.depot.put_blocks(
-            begin_blk_idx,
-            blk_cnt,
-            &self.frame[..aligned_len],
-        )?;
+        storage.depot.put_blocks(span, &self.frame[..aligned_len])?;
 
         // append to address and reset stage buffer
-        self.addr.append(begin_blk_idx, blk_cnt, enc_len);
+        self.addr.append(span, enc_len);
         self.stg_len = 0;
 
         Ok(())
@@ -487,14 +489,14 @@ impl Write for Writer {
     }
 
     fn flush(&mut self) -> IoResult<()> {
-        // do nothing, use finish() to finalise writing
-        Ok(())
+        let mut storage = self.storage.write().unwrap();
+        map_io_err!(storage.depot.flush())
     }
 }
 
 impl Finish for Writer {
     fn finish(mut self) -> Result<usize> {
-        // flush frame to depot
+        // write frame to depot
         self.write_frame()?;
 
         let mut storage = self.storage.write().unwrap();
@@ -528,6 +530,7 @@ mod tests {
     use base::crypto::{Cipher, Cost, Crypto, RandomSeed, RANDOM_SEED_SIZE};
     use base::init_env;
     use base::utils::speed_str;
+    use volume::address::Span;
 
     struct SizeVar {
         blk_size: usize,
@@ -820,20 +823,21 @@ mod tests {
         let now = Instant::now();
         for frame in data.chunks(chunk_size) {
             let _enc_len = crypto.encrypt_to(&mut buf, frame, &key).unwrap();
-            depot.put_blocks(blk_cnt, BLKS_PER_FRAME, &buf).unwrap();
-            blk_cnt += BLKS_PER_FRAME as u64;
+            depot
+                .put_blocks(Span::new(blk_cnt, BLKS_PER_FRAME), &buf)
+                .unwrap();
+            blk_cnt += BLKS_PER_FRAME;
         }
         let write_time = now.elapsed();
 
         // read
         let mut dst = vec![0u8; chunk_size];
         let now = Instant::now();
-        for frm_idx in 0..blk_cnt / BLKS_PER_FRAME as u64 {
+        for frm_idx in 0..blk_cnt / BLKS_PER_FRAME {
             depot
                 .get_blocks(
                     &mut buf,
-                    frm_idx * BLKS_PER_FRAME as u64,
-                    BLKS_PER_FRAME,
+                    Span::new(frm_idx * BLKS_PER_FRAME, BLKS_PER_FRAME),
                 )
                 .unwrap();
             crypto.decrypt_to(&mut dst, &buf, &key).unwrap();

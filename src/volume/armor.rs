@@ -179,6 +179,23 @@ pub trait Armor<'de> {
         })
     }
 
+    // save item and then flush
+    fn save_item_flush(&self, item: &mut Self::Item) -> Result<()> {
+        self.save_item(item)?;
+
+        (|| {
+            let arm_id = item.arm().to_eid(item.id());
+            let mut wtr = self.get_item_writer(&arm_id)?;
+            wtr.flush()?;
+            Ok(())
+        })().or_else(|err| {
+            // item arm has been toggled in save_item(), if flush failed we
+            // need to revert it back
+            item.arm_mut().toggle();
+            Err(err)
+        })
+    }
+
     // remove the other arm
     fn remove_other_arm(&self, item: &Self::Item) -> Result<()> {
         let arm_id = item.arm().other().to_eid(item.id());
@@ -226,6 +243,7 @@ where
         Ok(VolWriter::new(arm_id, &self.vol)?)
     }
 
+    #[inline]
     fn del_arm(&self, arm_id: &Eid) -> Result<()> {
         let mut vol = self.vol.write().unwrap();
         vol.del(arm_id)

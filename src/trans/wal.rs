@@ -188,7 +188,7 @@ struct WalQueue {
 
     // txid and block watermark
     txid_wmark: u64,
-    blk_wmark: u64,
+    blk_wmark: usize,
 
     // completed tx queue
     done: VecDeque<Txid>,
@@ -221,12 +221,12 @@ impl WalQueue {
     }
 
     #[inline]
-    fn watermarks(&self) -> (u64, u64) {
+    fn watermarks(&self) -> (u64, usize) {
         (self.txid_wmark, self.blk_wmark)
     }
 
     #[inline]
-    fn set_watermarks(&mut self, txid_wmark: u64, blk_wmark: u64) {
+    fn set_watermarks(&mut self, txid_wmark: u64, blk_wmark: usize) {
         self.txid_wmark = txid_wmark;
         self.blk_wmark = blk_wmark;
     }
@@ -475,11 +475,13 @@ impl WalQueueMgr {
 
         // save watermarks to wal queue and save it,
         self.walq.set_watermarks(self.txid_wmark.val(), blk_wmark);
-        self.walq_armor.save_item(&mut self.walq).or_else(|err| {
-            // if save failed, restore the walq backup
-            self.restore_walq();
-            Err(err)
-        })?;
+        self.walq_armor
+            .save_item_flush(&mut self.walq)
+            .or_else(|err| {
+                // if save failed, restore the walq backup
+                self.restore_walq();
+                Err(err)
+            })?;
 
         // make sure the block watermark is correct
         {

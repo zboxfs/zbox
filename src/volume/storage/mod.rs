@@ -26,6 +26,7 @@ use std::fmt::Debug;
 use base::crypto::{Crypto, Key};
 use error::Result;
 use trans::Eid;
+use volume::address::Span;
 
 /// Storable trait
 pub trait Storable: Debug + Send + Sync {
@@ -48,17 +49,12 @@ pub trait Storable: Debug + Send + Sync {
     fn del_address(&mut self, id: &Eid) -> Result<()>;
 
     // block operations
-    fn get_blocks(
-        &mut self,
-        dst: &mut [u8],
-        start_idx: u64,
-        cnt: usize,
-    ) -> Result<()>;
-    fn put_blocks(
-        &mut self,
-        start_idx: u64,
-        cnt: usize,
-        blks: &[u8],
-    ) -> Result<()>;
-    fn del_blocks(&mut self, start_idx: u64, cnt: usize) -> Result<()>;
+    fn get_blocks(&mut self, dst: &mut [u8], span: Span) -> Result<()>;
+    fn put_blocks(&mut self, span: Span, blks: &[u8]) -> Result<()>;
+    fn del_blocks(&mut self, span: Span) -> Result<()>;
+
+    // flush writting
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
 }

@@ -7,6 +7,7 @@ use base::crypto::{Crypto, Key};
 use base::IntoRef;
 use error::{Error, Result};
 use trans::Eid;
+use volume::address::Span;
 use volume::storage::Storable;
 use volume::BLK_SIZE;
 
@@ -24,7 +25,7 @@ fn addr_key(id: &Eid) -> String {
 
 // redis key for block
 #[inline]
-fn blk_key(blk_idx: u64) -> String {
+fn blk_key(blk_idx: usize) -> String {
     format!("block:{}", blk_idx)
 }
 
@@ -135,16 +136,9 @@ impl Storable for RedisStorage {
         self.del(&key)
     }
 
-    fn get_blocks(
-        &mut self,
-        dst: &mut [u8],
-        start_idx: u64,
-        cnt: usize,
-    ) -> Result<()> {
-        assert_eq!(dst.len(), BLK_SIZE * cnt);
-
+    fn get_blocks(&mut self, dst: &mut [u8], span: Span) -> Result<()> {
         let mut read = 0;
-        for blk_idx in start_idx..start_idx + cnt as u64 {
+        for blk_idx in span {
             let key = blk_key(blk_idx);
             let blk = self.get_bytes(&key)?;
             assert_eq!(blk.len(), BLK_SIZE);
@@ -155,15 +149,8 @@ impl Storable for RedisStorage {
         Ok(())
     }
 
-    fn put_blocks(
-        &mut self,
-        start_idx: u64,
-        cnt: usize,
-        mut blks: &[u8],
-    ) -> Result<()> {
-        assert_eq!(blks.len(), BLK_SIZE * cnt);
-
-        for blk_idx in start_idx..start_idx + cnt as u64 {
+    fn put_blocks(&mut self, span: Span, blks: &[u8]) -> Result<()> {
+        for blk_idx in span {
             let key = blk_key(blk_idx);
             self.set_bytes(&key, &blks[..BLK_SIZE])?;
             blks = &blks[BLK_SIZE..];
@@ -172,8 +159,8 @@ impl Storable for RedisStorage {
         Ok(())
     }
 
-    fn del_blocks(&mut self, start_idx: u64, cnt: usize) -> Result<()> {
-        for blk_idx in start_idx..start_idx + cnt as u64 {
+    fn del_blocks(&mut self, span: Span) -> Result<()> {
+        for blk_idx in span {
             let key = blk_key(blk_idx);
             self.del(&key)?;
         }

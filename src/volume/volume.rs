@@ -60,7 +60,7 @@ impl Volume {
 
         // initialise info
         self.info.id = Eid::new();
-        self.info.ver = Version::current();
+        self.info.ver = Version::current_repo_version();
         self.info.compress = cfg.compress;
         self.info.cost = cfg.cost;
         self.info.cipher = cfg.cipher;
@@ -97,7 +97,7 @@ impl Volume {
         let super_blk = SuperBlk::load(pwd, storage.depot_mut())?;
 
         // check volume version
-        if !super_blk.body.ver.match_current_minor() {
+        if !super_blk.body.ver.match_repo_version() {
             return Err(Error::WrongVersion);
         }
 

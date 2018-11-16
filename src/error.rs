@@ -13,6 +13,9 @@ use libsqlite3_sys::Error as SqliteError;
 #[cfg(feature = "storage-redis")]
 use redis::RedisError;
 
+#[cfg(feature = "storage-zbox")]
+use reqwest::Error as ReqwestError;
+
 /// The error type for operations with [`Repo`] and [`File`].
 ///
 /// [`Repo`]: struct.Repo.html
@@ -74,6 +77,11 @@ pub enum Error {
 
     #[cfg(feature = "storage-redis")]
     Redis(RedisError),
+
+    #[cfg(feature = "storage-zbox")]
+    Reqwest(ReqwestError),
+    #[cfg(feature = "storage-zbox")]
+    NotInSync,
 }
 
 impl Display for Error {
@@ -134,6 +142,11 @@ impl Display for Error {
 
             #[cfg(feature = "storage-redis")]
             Error::Redis(ref err) => err.fmt(f),
+
+            #[cfg(feature = "storage-zbox")]
+            Error::Reqwest(ref err) => err.fmt(f),
+            #[cfg(feature = "storage-zbox")]
+            Error::NotInSync => write!(f, "Repo is not in sync"),
         }
     }
 }
@@ -196,6 +209,11 @@ impl StdError for Error {
 
             #[cfg(feature = "storage-redis")]
             Error::Redis(ref err) => err.description(),
+
+            #[cfg(feature = "storage-zbox")]
+            Error::Reqwest(ref err) => err.description(),
+            #[cfg(feature = "storage-zbox")]
+            Error::NotInSync => "Repo is not in sync",
         }
     }
 
@@ -211,6 +229,9 @@ impl StdError for Error {
 
             #[cfg(feature = "storage-redis")]
             Error::Redis(ref err) => Some(err),
+
+            #[cfg(feature = "storage-zbox")]
+            Error::Reqwest(ref err) => Some(err),
 
             _ => None,
         }
@@ -252,6 +273,13 @@ impl From<SqliteError> for Error {
 impl From<RedisError> for Error {
     fn from(err: RedisError) -> Error {
         Error::Redis(err)
+    }
+}
+
+#[cfg(feature = "storage-zbox")]
+impl From<ReqwestError> for Error {
+    fn from(err: ReqwestError) -> Error {
+        Error::Reqwest(err)
     }
 }
 
@@ -313,6 +341,11 @@ impl Into<i32> for Error {
 
             #[cfg(feature = "storage-redis")]
             Error::Redis(_) => -2050,
+
+            #[cfg(feature = "storage-zbox")]
+            Error::Reqwest(_) => -2060,
+            #[cfg(feature = "storage-zbox")]
+            Error::NotInSync => -2061,
         }
     }
 }
@@ -377,6 +410,13 @@ impl PartialEq for Error {
             (&Error::Redis(ref a), &Error::Redis(ref b)) => {
                 a.kind() == b.kind()
             }
+
+            #[cfg(feature = "storage-zbox")]
+            (&Error::Reqwest(ref a), &Error::Reqwest(ref b)) => {
+                a.status() == b.status()
+            }
+            #[cfg(feature = "storage-zbox")]
+            (&Error::NotInSync, &Error::NotInSync) => true,
 
             (_, _) => false,
         }

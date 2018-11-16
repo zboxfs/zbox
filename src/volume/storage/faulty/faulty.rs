@@ -7,6 +7,7 @@ use base::lru::{CountMeter, Lru, PinChecker};
 use base::IntoRef;
 use error::Result;
 use trans::Eid;
+use volume::address::Span;
 use volume::storage::mem::MemStorage;
 use volume::storage::Storable;
 
@@ -108,7 +109,6 @@ impl FaultyStorage {
 }
 
 impl Storable for FaultyStorage {
-    #[inline]
     fn exists(&self) -> Result<bool> {
         self.ctlr.make_random_error()?;
 
@@ -116,7 +116,6 @@ impl Storable for FaultyStorage {
         Ok(inner.contains_key(&self.loc))
     }
 
-    #[inline]
     fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
         let mut inner = self.inner.write().unwrap();
         assert!(!inner.contains_key(&self.loc));
@@ -124,7 +123,6 @@ impl Storable for FaultyStorage {
         Ok(())
     }
 
-    #[inline]
     fn open(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
         self.ctlr.make_random_error()?;
 
@@ -173,38 +171,28 @@ impl Storable for FaultyStorage {
         ms.del_address(id)
     }
 
-    fn get_blocks(
-        &mut self,
-        dst: &mut [u8],
-        start_idx: u64,
-        cnt: usize,
-    ) -> Result<()> {
+    fn get_blocks(&mut self, dst: &mut [u8], span: Span) -> Result<()> {
         self.ctlr.make_random_error()?;
 
         let mut inner = self.inner.write().unwrap();
         let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.get_blocks(dst, start_idx, cnt)
+        ms.get_blocks(dst, span)
     }
 
-    fn put_blocks(
-        &mut self,
-        start_idx: u64,
-        cnt: usize,
-        blks: &[u8],
-    ) -> Result<()> {
+    fn put_blocks(&mut self, span: Span, blks: &[u8]) -> Result<()> {
         self.ctlr.make_random_error()?;
 
         let mut inner = self.inner.write().unwrap();
         let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.put_blocks(start_idx, cnt, blks)
+        ms.put_blocks(span, blks)
     }
 
-    fn del_blocks(&mut self, start_idx: u64, cnt: usize) -> Result<()> {
+    fn del_blocks(&mut self, span: Span) -> Result<()> {
         self.ctlr.make_random_error()?;
 
         let mut inner = self.inner.write().unwrap();
         let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.del_blocks(start_idx, cnt)
+        ms.del_blocks(span)
     }
 }
 

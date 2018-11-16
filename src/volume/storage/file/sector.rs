@@ -1,4 +1,3 @@
-use std::cmp::min;
 use std::fmt::{self, Debug};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -9,19 +8,19 @@ use linked_hash_map::LinkedHashMap;
 
 use super::file_armor::FileArmor;
 use super::vio;
-use super::{ensure_parents_dir, remove_empty_parent_dir};
 use base::crypto::{Crypto, HashKey, Key};
 use base::lru::{CountMeter, Lru, PinChecker};
-use base::utils::{align_floor_u64, align_offset};
+use base::utils::{ensure_parents_dir, remove_empty_parent_dir};
 use error::{Error, Result};
 use trans::{Eid, Id};
+use volume::address::Span;
 use volume::{Arm, ArmAccess, Armor, Seq, BLK_SIZE};
 
 // how many blocks in a sector, must be 2^n and less than u16::MAX
-pub const SECTOR_BLK_CNT: usize = 4 * 1024;
+pub const BLKS_PER_SECTOR: usize = 4 * 1024;
 
 // sector size, in bytes
-pub const SECTOR_SIZE: usize = BLK_SIZE * SECTOR_BLK_CNT;
+pub const SECTOR_SIZE: usize = BLK_SIZE * BLKS_PER_SECTOR;
 
 // block deletion mark
 const BLK_DELETE_MARK: u16 = u16::MAX;
@@ -32,32 +31,13 @@ const SECTOR_CACHE_SIZE: usize = 16;
 // sector data file cache size
 const SECTOR_DATA_CACHE_SIZE: usize = 4;
 
-// split continuous blocks into sectors
-// return: Vec(sector index, start block index, block count)
-fn split_to_sector(
-    mut start_idx: u64,
-    mut cnt: usize,
-) -> Vec<(u64, u64, usize)> {
-    let mut ret = Vec::new();
-    while cnt > 0 {
-        let sec_idx = start_idx / SECTOR_BLK_CNT as u64;
-        let end_idx = align_floor_u64(start_idx, SECTOR_BLK_CNT as u64)
-            + SECTOR_BLK_CNT as u64;
-        let blk_cnt = min(cnt, (end_idx - start_idx) as usize);
-        ret.push((sec_idx, start_idx, blk_cnt));
-        start_idx += blk_cnt as u64;
-        cnt -= blk_cnt;
-    }
-    ret
-}
-
 // sector
 #[derive(Default, Clone, Deserialize, Serialize)]
 struct Sector {
     id: Eid,
     seq: u64,
     arm: Arm,
-    idx: u64,
+    idx: usize,
 
     // sector current size in bytes, excluding deleted blocks
     // curr_size > 0 means sector is finished writing
@@ -66,13 +46,13 @@ struct Sector {
     // sector actual size in bytes, including deleted blocks
     actual_size: usize,
 
-    // block offset map, length is SECTOR_BLK_CNT, u16::MAX means deleted
+    // block offset map, length is BLKS_PER_SECTOR, u16::MAX means deleted
     blk_map: Vec<u16>,
 }
 
 impl Sector {
     #[inline]
-    fn new(id: &Eid, idx: u64) -> Self {
+    fn new(id: &Eid, idx: usize) -> Self {
         Sector {
             id: id.clone(),
             seq: 0,
@@ -80,7 +60,7 @@ impl Sector {
             idx,
             curr_size: 0,
             actual_size: 0,
-            blk_map: (0..SECTOR_BLK_CNT as u16).collect(),
+            blk_map: (0..BLKS_PER_SECTOR as u16).collect(),
         }
     }
 
@@ -96,12 +76,12 @@ impl Sector {
     }
 
     // mark blocks as deleted
-    fn mark_blocks_deletion(&mut self, start_idx: u64, cnt: usize) {
-        let insec_idx = align_offset(start_idx as usize, SECTOR_BLK_CNT);
+    fn mark_blocks_deletion(&mut self, span: Span) {
+        let insec_idx = span.begin % BLKS_PER_SECTOR;
         let mut deleted_size = 0;
 
         // mark blocks as deleted
-        for idx in insec_idx..insec_idx + cnt {
+        for idx in insec_idx..insec_idx + span.cnt {
             if self.blk_map[idx] != BLK_DELETE_MARK {
                 self.blk_map[idx] = BLK_DELETE_MARK;
                 deleted_size += BLK_SIZE;
@@ -166,13 +146,15 @@ impl Debug for Sector {
 
 // sector manager
 pub struct SectorMgr {
+    base: PathBuf,
+
     sec_armor: FileArmor<Sector>,
 
     // sector cache
-    sec_cache: Lru<u64, Sector, CountMeter<Sector>, PinChecker<Sector>>,
+    sec_cache: Lru<usize, Sector, CountMeter<Sector>, PinChecker<Sector>>,
 
     // sector data file cache
-    sec_data_cache: LinkedHashMap<u64, vio::File>,
+    sec_data_cache: LinkedHashMap<usize, vio::File>,
 
     hash_key: HashKey,
 }
@@ -184,6 +166,7 @@ impl SectorMgr {
 
     pub fn new(base: &Path) -> Self {
         SectorMgr {
+            base: base.to_path_buf(),
             sec_armor: FileArmor::new(base),
             sec_cache: Lru::new(SECTOR_CACHE_SIZE),
             sec_data_cache: LinkedHashMap::new(),
@@ -203,17 +186,17 @@ impl SectorMgr {
     }
 
     // convert sector index to Eid
-    fn sector_id_from(&self, sec_idx: u64) -> Eid {
+    fn sector_idx_to_id(&self, sec_idx: usize) -> Eid {
         let mut buf = Vec::with_capacity(8);
-        buf.put_u64_le(sec_idx);
+        buf.put_u64_le(sec_idx as u64);
         let hash = Crypto::hash_with_key(&buf, &self.hash_key);
         Eid::from_slice(&hash)
     }
 
     // sector data file path
-    fn sector_data_path(&self, sec_idx: u64) -> PathBuf {
-        let id = self.sector_id_from(sec_idx);
-        let mut path = self.sec_armor.id_to_path(&id);
+    fn sector_data_path(&self, sec_idx: usize) -> PathBuf {
+        let id = self.sector_idx_to_id(sec_idx);
+        let mut path = id.to_path_buf(&self.base);
         path.set_extension(Self::SECTOR_DATA_EXT);
         path
     }
@@ -221,11 +204,11 @@ impl SectorMgr {
     // open a sector where the block index sits in
     fn open_sector(
         &mut self,
-        sec_idx: u64,
+        sec_idx: usize,
         create: bool,
     ) -> Result<&mut Sector> {
         if !self.sec_cache.contains_key(&sec_idx) {
-            let sec_id = self.sector_id_from(sec_idx);
+            let sec_id = self.sector_idx_to_id(sec_idx);
 
             // load sector and insert into cache
             match self.sec_armor.load_item(&sec_id) {
@@ -253,7 +236,7 @@ impl SectorMgr {
     }
 
     // save sector to file
-    fn save_sector(&mut self, sec_idx: u64) -> Result<()> {
+    fn save_sector(&mut self, sec_idx: usize) -> Result<()> {
         let mut sec = self.sec_cache.get_refresh(&sec_idx).unwrap();
         self.sec_armor.save_item(&mut sec)
     }
@@ -261,7 +244,7 @@ impl SectorMgr {
     // open sector data file
     fn open_sector_data(
         &mut self,
-        sec_idx: u64,
+        sec_idx: usize,
         create: bool,
     ) -> Result<vio::File> {
         if !self.sec_data_cache.contains_key(&sec_idx) {
@@ -288,21 +271,18 @@ impl SectorMgr {
     }
 
     // read data blocks
-    pub fn read_blocks(
-        &mut self,
-        dst: &mut [u8],
-        start_idx: u64,
-        cnt: usize,
-    ) -> Result<()> {
-        assert_eq!(dst.len(), BLK_SIZE * cnt);
+    pub fn read_blocks(&mut self, dst: &mut [u8], span: Span) -> Result<()> {
+        assert_eq!(dst.len(), span.bytes_len());
+
         let mut read = 0;
-        for (sec_idx, start_idx, cnt) in split_to_sector(start_idx, cnt) {
+        for sec_span in span.divide_by(BLKS_PER_SECTOR) {
+            let sec_idx = sec_span.begin / BLKS_PER_SECTOR;
             let mut sec_data = self.open_sector_data(sec_idx, false)?;
             let blk_offset = {
                 let sec = self.open_sector(sec_idx, false)?;
-                let map_idx = align_offset(start_idx as usize, SECTOR_BLK_CNT);
+                let map_idx = sec_span.begin % BLKS_PER_SECTOR;
                 let insec_idx = sec.blk_map[map_idx];
-                if sec.blk_map[map_idx..map_idx + cnt]
+                if sec.blk_map[map_idx..map_idx + sec_span.cnt]
                     .iter()
                     .any(|b| *b == BLK_DELETE_MARK)
                 {
@@ -312,7 +292,7 @@ impl SectorMgr {
             };
 
             // read blocks bytes
-            let read_len = cnt * BLK_SIZE;
+            let read_len = sec_span.bytes_len();
             sec_data.seek(SeekFrom::Start(blk_offset))?;
             sec_data.read_exact(&mut dst[read..read + read_len])?;
             read += read_len;
@@ -322,21 +302,16 @@ impl SectorMgr {
     }
 
     // write data blocks to sector
-    pub fn write_blocks(
-        &mut self,
-        start_idx: u64,
-        cnt: usize,
-        mut blks: &[u8],
-    ) -> Result<()> {
-        assert_eq!(blks.len(), BLK_SIZE * cnt);
+    pub fn write_blocks(&mut self, span: Span, mut blks: &[u8]) -> Result<()> {
+        assert_eq!(blks.len(), span.bytes_len());
 
-        for (sec_idx, start_idx, cnt) in split_to_sector(start_idx, cnt) {
+        for sec_span in span.divide_by(BLKS_PER_SECTOR) {
+            let sec_idx = sec_span.begin / BLKS_PER_SECTOR;
             let mut sec_data = self.open_sector_data(sec_idx, true)?;
-            let blk_offset =
-                align_offset(start_idx as usize, SECTOR_BLK_CNT) * BLK_SIZE;
+            let blk_offset = (sec_span.begin % BLKS_PER_SECTOR) * BLK_SIZE;
 
             // write blocks bytes to sector data file
-            let write_len = cnt * BLK_SIZE;
+            let write_len = sec_span.bytes_len();
             sec_data.seek(SeekFrom::Start(blk_offset as u64))?;
             sec_data.write_all(&blks[..write_len])?;
             blks = &blks[write_len..];
@@ -351,9 +326,9 @@ impl SectorMgr {
                 let sec = self.open_sector(sec_idx, true)?;
 
                 assert!(!sec.is_finished());
-                let map_idx = align_offset(start_idx as usize, SECTOR_BLK_CNT);
+                let map_idx = sec_span.begin % BLKS_PER_SECTOR;
                 let mut corrected = 0;
-                for i in map_idx..map_idx + cnt {
+                for i in map_idx..map_idx + sec_span.cnt {
                     if sec.blk_map[i] == BLK_DELETE_MARK {
                         sec.blk_map[i] = i as u16;
                         corrected += 1;
@@ -370,7 +345,7 @@ impl SectorMgr {
             }
 
             // if we reached the end of sector, mark it as finished
-            if (start_idx as usize + cnt) % SECTOR_BLK_CNT == 0 {
+            if sec_span.end() % BLKS_PER_SECTOR == 0 {
                 let is_shrinkable = {
                     let sec = self.open_sector(sec_idx, false)?;
                     sec.curr_size = SECTOR_SIZE;
@@ -397,7 +372,7 @@ impl SectorMgr {
     }
 
     // shrink a sector
-    fn shrink_sector(&mut self, sec_idx: u64) -> Result<()> {
+    fn shrink_sector(&mut self, sec_idx: usize) -> Result<()> {
         let mut sec = self.open_sector(sec_idx, false)?.clone();
         let mut sec_data = self.open_sector_data(sec_idx, false)?;
 
@@ -449,8 +424,9 @@ impl SectorMgr {
     }
 
     // delete data blocks
-    pub fn del_blocks(&mut self, start_idx: u64, cnt: usize) -> Result<()> {
-        for (sec_idx, start_idx, cnt) in split_to_sector(start_idx, cnt) {
+    pub fn del_blocks(&mut self, span: Span) -> Result<()> {
+        for sec_span in span.divide_by(BLKS_PER_SECTOR) {
+            let sec_idx = sec_span.begin / BLKS_PER_SECTOR;
             let sec_id;
             let actual_size;
             let is_finished;
@@ -460,7 +436,7 @@ impl SectorMgr {
                 match self.open_sector(sec_idx, false) {
                     Ok(sec) => {
                         // mark blocks as deleted
-                        sec.mark_blocks_deletion(start_idx, cnt);
+                        sec.mark_blocks_deletion(sec_span);
 
                         sec_id = sec.id.clone();
                         actual_size = sec.actual_size;
