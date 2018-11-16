@@ -1,10 +1,11 @@
 extern crate rand;
+extern crate rand_xorshift;
 extern crate tempdir;
 extern crate zbox;
 
 mod common;
 
-use rand::prng::XorShiftRng;
+use rand_xorshift::XorShiftRng;
 use rand::{RngCore, SeedableRng};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::{Arc, RwLock};

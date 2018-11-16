@@ -41,29 +41,30 @@ storage-redis = ["redis"]
 storage-zbox = ["reqwest"]
 
 [dependencies]
-bytes = "0.4.9"
-env_logger = "0.5.9"
-log = "0.4.4"
-lz4 = "1.22.0"
+bytes = "0.4.10"
+env_logger = "0.6.0"
+log = "0.4.6"
+lz4 = "1.23.0"
 rmp-serde = "0.13.7"
-serde = "1.0.43"
-serde_derive = "1.0.43"
-lazy_static = { version = "1.1.0", optional = true }
-libsqlite3-sys = { version = "0.9.3", optional = true }
-redis = { version = "0.9.0", optional = true }
-reqwest  = { version = "0.9.0", optional = true }
+serde = "1.0.80"
+serde_derive = "1.0.80"
+lazy_static = { version = "1.2.0", optional = true }
+libsqlite3-sys = { version = "0.10.0", optional = true }
+redis = { version = "0.9.1", optional = true }
+reqwest  = { version = "0.9.5", optional = true }
 
 [dependencies.linked-hash-map]
 version = "0.5.1"
 features = ["serde_impl"]
 
 [target.'cfg(target_os = "android")'.dependencies]
-jni = "0.10.1"
+jni = "0.10.2"
 android_log = "0.1.3"
 
 [dev-dependencies]
 tempdir = "0.3.7"
-rand = "0.5"
+rand = "0.6"
+rand_xorshift = "0.1.0"
 
 [build-dependencies]
 pkg-config = "0.3.14"
