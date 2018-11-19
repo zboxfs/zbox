@@ -269,9 +269,7 @@ impl Finish for Writer {
                 result.map_err(|err| Error::from(err))?;
                 wtr.finish()
             }
-            InnerWriter::NoCompress(inner) => {
-                inner.finish()
-            }
+            InnerWriter::NoCompress(inner) => inner.finish(),
         }
     }
 
@@ -282,9 +280,7 @@ impl Finish for Writer {
                 result.map_err(|err| Error::from(err))?;
                 wtr.finish_and_flush()
             }
-            InnerWriter::NoCompress(inner) => {
-                inner.finish_and_flush()
-            }
+            InnerWriter::NoCompress(inner) => inner.finish_and_flush(),
         }
     }
 }

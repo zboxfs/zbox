@@ -5,8 +5,8 @@ extern crate zbox;
 
 mod common;
 
-use rand_xorshift::XorShiftRng;
 use rand::{RngCore, SeedableRng};
+use rand_xorshift::XorShiftRng;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::{Arc, RwLock};
 use std::thread;

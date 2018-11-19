@@ -410,8 +410,7 @@ pub extern "C" fn zbox_repo_read_dir(
                             file_name: name.into_raw(),
                             metadata: CMetadata::from(ent.metadata()),
                         }
-                    })
-                    .collect();
+                    }).collect();
 
                 entries.shrink_to_fit();
                 (*entry_list).entries = entries.as_mut_ptr();
@@ -484,8 +483,7 @@ impl From<Vec<Version>> for VersionList {
                     len: ver.len(),
                     created_at: to_time_t(ver.created_at()),
                 }
-            })
-            .collect();
+            }).collect();
         versions.shrink_to_fit();
 
         let vl = VersionList {

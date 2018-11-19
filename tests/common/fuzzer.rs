@@ -237,9 +237,10 @@ impl ControlGroup {
 
     // get immediate children
     pub fn get_children(&self, path: &Path) -> Vec<&PathBuf> {
-        let mut dirs: Vec<&PathBuf> = self.0
+        let mut dirs: Vec<&PathBuf> = self
+            .0
             .iter()
-            .skip(1)    // skip root
+            .skip(1) // skip root
             .map(|n| &n.path)
             .filter(|p| p.parent().unwrap() == path)
             .collect();
@@ -250,7 +251,7 @@ impl ControlGroup {
     pub fn has_child(&self, path: &Path) -> bool {
         self.0
             .iter()
-            .skip(1)    // skip root
+            .skip(1) // skip root
             .any(|n| n.path.parent().unwrap() == path)
     }
 
@@ -706,8 +707,7 @@ impl Fuzzer {
                             }
                         }
                         println!("[{}]: Finished.", worker);
-                    })
-                    .unwrap(),
+                    }).unwrap(),
             );
         }
         for w in workers {
@@ -788,10 +788,9 @@ impl Fuzzer {
             while let Some(nd) = ctlgrp.0.get(pos) {
                 match nd.path.strip_prefix(&node.path) {
                     Ok(p) => {
-                        if p.components().count() == 1
-                            && children
-                                .binary_search_by(|c| c.path.cmp(&nd.path))
-                                .is_err()
+                        if p.components().count() == 1 && children
+                            .binary_search_by(|c| c.path.cmp(&nd.path))
+                            .is_err()
                         {
                             children.push(nd.clone());
                         }

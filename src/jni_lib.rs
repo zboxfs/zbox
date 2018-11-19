@@ -301,8 +301,8 @@ pub extern "system" fn Java_io_zbox_Repo_jniInfo<'a>(
 
     let ops_str = format!("{:?}", info.ops_limit()).to_uppercase();
     let ops_limit = env.new_string(ops_str).unwrap();
-    let ops_obj =
-        env.call_static_method(
+    let ops_obj = env
+        .call_static_method(
             "io/zbox/OpsLimit",
             "valueOf",
             "(Ljava/lang/String;)Lio/zbox/OpsLimit;",
@@ -311,8 +311,8 @@ pub extern "system" fn Java_io_zbox_Repo_jniInfo<'a>(
 
     let mem_str = format!("{:?}", info.mem_limit()).to_uppercase();
     let mem_limit = env.new_string(mem_str).unwrap();
-    let mem_obj =
-        env.call_static_method(
+    let mem_obj = env
+        .call_static_method(
             "io/zbox/MemLimit",
             "valueOf",
             "(Ljava/lang/String;)Lio/zbox/MemLimit;",
@@ -321,8 +321,8 @@ pub extern "system" fn Java_io_zbox_Repo_jniInfo<'a>(
 
     let cipher_str = format!("{:?}", info.cipher()).to_uppercase();
     let cipher = env.new_string(cipher_str).unwrap();
-    let cipher_obj =
-        env.call_static_method(
+    let cipher_obj = env
+        .call_static_method(
             "io/zbox/Cipher",
             "valueOf",
             "(Ljava/lang/String;)Lio/zbox/Cipher;",
@@ -544,8 +544,8 @@ fn metadata_to_jobject<'a>(env: &JNIEnv<'a>, meta: Metadata) -> JObject<'a> {
 
     let ftype_str = format!("{:?}", meta.file_type()).to_uppercase();
     let ftype = env.new_string(ftype_str).unwrap();
-    let ftype_obj =
-        env.call_static_method(
+    let ftype_obj = env
+        .call_static_method(
             "io/zbox/FileType",
             "valueOf",
             "(Ljava/lang/String;)Lio/zbox/FileType;",
@@ -591,8 +591,8 @@ pub extern "system" fn Java_io_zbox_Repo_jniReadDir(
     let path: String = env.get_string(path).unwrap().into();
     match repo.read_dir(&path) {
         Ok(ents) => {
-            let objs =
-                env.new_object_array(
+            let objs = env
+                .new_object_array(
                     ents.len() as i32,
                     "io/zbox/DirEntry",
                     JObject::null(),
@@ -665,8 +665,8 @@ fn versions_to_jobjects(
 ) -> jobjectArray {
     match history {
         Ok(vers) => {
-            let objs =
-                env.new_object_array(
+            let objs = env
+                .new_object_array(
                     vers.len() as i32,
                     "io/zbox/Version",
                     JObject::null(),

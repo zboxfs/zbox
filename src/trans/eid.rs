@@ -8,8 +8,9 @@ use base::crypto::Crypto;
 ///
 /// This represents a 32-byte randomly generated unique ID.
 #[repr(C)]
-#[derive(PartialEq, PartialOrd, Ord, Eq, Hash, Default, Clone, Deserialize,
-         Serialize)]
+#[derive(
+    PartialEq, PartialOrd, Ord, Eq, Hash, Default, Clone, Deserialize, Serialize,
+)]
 pub struct Eid([u8; Eid::EID_SIZE]);
 
 impl Eid {

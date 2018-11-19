@@ -370,8 +370,7 @@ impl Fnode {
             .ok_or(Error::NotFound)
             .and_then(|child| {
                 cache.get(&child.id, vol).map_err(|e| Error::from(e))
-            })
-            .and_then(|child| {
+            }).and_then(|child| {
                 // set parent, store and volume for the child
                 {
                     let mut child_cow = child.write().unwrap();
@@ -445,7 +444,8 @@ impl Fnode {
         let child_names = par.children_names();
 
         for name in child_names.iter() {
-            let child_ref = par.load_child(&name, parent.clone(), cache, vol)?;
+            let child_ref =
+                par.load_child(&name, parent.clone(), cache, vol)?;
             let child = child_ref.read().unwrap();
             ret.push(DirEntry {
                 path: parent_path.join(name),

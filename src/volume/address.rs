@@ -1,4 +1,3 @@
-use std::cmp::{max, min};
 use std::iter::IntoIterator;
 use std::ops::Index;
 use std::slice::Iter;
@@ -44,20 +43,13 @@ impl Span {
         ret
     }
 
-    #[allow(dead_code)]
-    pub fn advance(&mut self, cnt: usize) {
-        assert!(cnt <= self.cnt);
-        self.begin += cnt;
-        self.cnt -= cnt;
-    }
-
-    #[allow(dead_code)]
-    pub fn union(&self, other: Span) -> Option<Span> {
+    #[cfg(feature = "storage-zbox")]
+    pub fn intersect(&self, other: Span) -> Option<Span> {
         if self.end() < other.begin || other.end() < self.begin {
             return None;
         }
-        let begin = min(self.begin, other.begin);
-        let end = max(self.end(), other.end());
+        let begin = std::cmp::max(self.begin, other.begin);
+        let end = std::cmp::min(self.end(), other.end());
         Some(Span::new(begin, end - begin))
     }
 

@@ -86,8 +86,7 @@ impl RecycleMap {
                     }
                 }
                 false
-            })
-            .unwrap_or(false)
+            }).unwrap_or(false)
     }
 
     fn remove_deleted(&mut self, sec_idx: usize, mut span: Span) {
@@ -196,6 +195,24 @@ impl SectorMgr {
                 return Err(Error::NotFound);
             }
 
+            // if any blocks are still in head sector buffer
+            if self.head_len > 0 && sec_idx == self.head_sec_idx {
+                let head_span = Span::new(
+                    self.head_sec_idx * BLKS_PER_SECTOR,
+                    BLKS_PER_SECTOR,
+                );
+                if let Some(intersect) = head_span.intersect(sec_span) {
+                    assert!(span.end() <= head_span.end());
+                    let offset = (intersect.begin % BLKS_PER_SECTOR) * BLK_SIZE;
+                    let copy_len = intersect.bytes_len();
+                    dst[read..read + copy_len]
+                        .copy_from_slice(&self.head[offset..offset + copy_len]);
+                    read += copy_len;
+                    continue;
+                }
+            }
+
+            // otherwise get it from local cache
             let rel_path = sector_rel_path(sec_idx, &self.hash_key);
             let offset = (sec_span.begin % BLKS_PER_SECTOR) * BLK_SIZE;
             let len = sec_span.bytes_len();
@@ -313,6 +330,11 @@ mod tests {
         cache.init().unwrap();
 
         sec_mgr.put_blocks(span, &blks, &mut cache).unwrap();
+
+        let mut dst = vec![0u8; blks.len()];
+        sec_mgr.get_blocks(&mut dst, span, &mut cache).unwrap();
+        assert_eq!(&dst, &blks);
+
         sec_mgr.put_blocks(span2, &blks2, &mut cache).unwrap();
         sec_mgr.flush(&mut cache).unwrap();
 

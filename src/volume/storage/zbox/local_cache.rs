@@ -234,7 +234,8 @@ impl CacheArea {
             }
             CacheType::File => {
                 let path = self.base.join(rel_path);
-                let mut file = vio::OpenOptions::new().read(true).open(&path)?;
+                let mut file =
+                    vio::OpenOptions::new().read(true).open(&path)?;
                 file.seek(SeekFrom::Start(offset as u64))?;
                 file.read_exact(dst)?;
             }
@@ -255,7 +256,8 @@ impl CacheArea {
             CacheType::File => {
                 let path = self.base.join(rel_path);
                 let mut ret = Vec::new();
-                let mut file = vio::OpenOptions::new().read(true).open(&path)?;
+                let mut file =
+                    vio::OpenOptions::new().read(true).open(&path)?;
                 file.read_to_end(&mut ret)?;
                 Ok(ret)
             }
@@ -333,7 +335,8 @@ impl CacheArea {
                         file.write_all(obj)?;
                     } else {
                         // otherwise download and save from remote
-                        let saved_len = self.download_to_file(&path, rel_path)?;
+                        let saved_len =
+                            self.download_to_file(&path, rel_path)?;
                         assert_eq!(saved_len, offset + obj.len());
                     }
                 }

@@ -57,7 +57,8 @@ fn handle_rename(
         .0
         .iter()
         .filter(|n| n.path.starts_with(&new_path))
-        .count() > 1;
+        .count()
+        > 1;
 
     let result = repo.rename(&node.path, &new_path);
     if is_faulty_err!(result) {

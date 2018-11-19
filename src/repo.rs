@@ -753,8 +753,11 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn create_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        self.fs
-            .create_fnode(path.as_ref(), FileType::Dir, Options::default())?;
+        self.fs.create_fnode(
+            path.as_ref(),
+            FileType::Dir,
+            Options::default(),
+        )?;
         Ok(())
     }
 

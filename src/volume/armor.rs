@@ -157,7 +157,11 @@ pub trait Armor<'de> {
     }
 
     // save item
-    fn save_and_finish(&self, item: &mut Self::Item, need_flush: bool) -> Result<()> {
+    fn save_and_finish(
+        &self,
+        item: &mut Self::Item,
+        need_flush: bool,
+    ) -> Result<()> {
         // increase sequence and toggle arm
         item.inc_seq();
         item.arm_mut().toggle();

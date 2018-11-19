@@ -52,9 +52,9 @@ impl HttpClient {
         // default headers applied to all requests
         let mut headers = HeaderMap::new();
         let version_header = HeaderName::from_static("zbox-version");
-        let version_value = HeaderValue::from_str(
-            &Version::current_lib_version().to_string(),
-        ).unwrap();
+        let version_value =
+            HeaderValue::from_str(&Version::current_lib_version().to_string())
+                .unwrap();
         headers.insert(version_header, version_value);
 
         // create http client
@@ -224,7 +224,12 @@ impl HttpClient {
         offset: usize,
         body: &[u8],
     ) -> Result<()> {
-        debug!("put {:?}", rel_path);
+        debug!(
+            "put {:?}, offset: {}, body_len: {}",
+            rel_path,
+            offset,
+            body.len()
+        );
 
         let url = self.base_url.clone() + rel_path.to_str().unwrap();
 

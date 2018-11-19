@@ -531,7 +531,8 @@ mod tests {
         for i in 1..20 {
             let len = PIECE_SIZE * i + Crypto::random_u32(6u32) as usize - 3;
             let len2 = PIECE_SIZE * (Crypto::random_u32(i as u32) as usize + 1)
-                + Crypto::random_u32(6u32) as usize - 3;
+                + Crypto::random_u32(6u32) as usize
+                - 3;
             let offset = Crypto::random_u32(len as u32) as usize;
             test_merge(len, len2, 0);
             test_merge(len, len2, offset);

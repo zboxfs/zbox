@@ -363,8 +363,7 @@ impl Read for Reader {
                     .get_blocks(
                         &mut self.frame[read..read + read_len],
                         loc_span.span,
-                    )
-                    .map_err(|err| {
+                    ).map_err(|err| {
                         if err == Error::NotFound {
                             IoError::new(
                                 ErrorKind::NotFound,
@@ -672,7 +671,7 @@ mod tests {
         *buf.last_mut().unwrap() = 43;
         let mut wtr = Writer::new(&id, storage);
         wtr.write_all(&buf).unwrap();
-        wtr.finish().unwrap();
+        wtr.finish_and_flush().unwrap();
 
         // read
         let mut rdr = Reader::new(&id, storage).unwrap();
@@ -753,7 +752,9 @@ mod tests {
     #[test]
     fn zbox_depot() {
         init_env();
-        let mut storage = Storage::new("zbox://accessKey456@repo456?cache_type=mem&cache_size=1").unwrap();
+        let mut storage = Storage::new(
+            "zbox://accessKey456@repo456?cache_type=mem&cache_size=1",
+        ).unwrap();
         storage.init(Cost::default(), Cipher::default()).unwrap();
         test_depot(storage.into_ref());
     }
@@ -853,8 +854,7 @@ mod tests {
                 .get_blocks(
                     &mut buf,
                     Span::new(frm_idx * BLKS_PER_FRAME, BLKS_PER_FRAME),
-                )
-                .unwrap();
+                ).unwrap();
             crypto.decrypt_to(&mut dst, &buf, &key).unwrap();
         }
         let read_time = now.elapsed();
