@@ -7,7 +7,7 @@ use fs::fnode::{
     Fnode, Metadata, Reader as FnodeReader, Version, Writer as FnodeWriter,
 };
 use fs::Handle;
-use trans::{Finish, TxHandle, TxMgr};
+use trans::{TxHandle, TxMgr};
 
 /// A reader for a specific vesion of file content.
 ///

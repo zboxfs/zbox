@@ -15,7 +15,7 @@ use base::IntoRef;
 use content::{Store, StoreRef};
 use error::{Error, Result};
 use trans::cow::IntoCow;
-use trans::{Eid, Finish, Id, TxMgr, TxMgrRef};
+use trans::{Eid, Id, TxMgr, TxMgrRef};
 use volume::{Info as VolumeInfo, Volume, VolumeRef};
 
 /// File system information

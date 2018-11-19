@@ -157,7 +157,7 @@ pub trait Armor<'de> {
     }
 
     // save item
-    fn save_item(&self, item: &mut Self::Item) -> Result<()> {
+    fn save_and_finish(&self, item: &mut Self::Item, need_flush: bool) -> Result<()> {
         // increase sequence and toggle arm
         item.inc_seq();
         item.arm_mut().toggle();
@@ -170,7 +170,11 @@ pub trait Armor<'de> {
             item.serialize(&mut Serializer::new(&mut buf))?;
             let mut wtr = self.get_item_writer(&arm_id)?;
             wtr.write_all(&buf[..])?;
-            wtr.finish()?;
+            if need_flush {
+                wtr.finish_and_flush()?;
+            } else {
+                wtr.finish()?;
+            }
             Ok(())
         })().or_else(|err| {
             // if save item failed, revert its arm back
@@ -179,21 +183,14 @@ pub trait Armor<'de> {
         })
     }
 
-    // save item and then flush
-    fn save_item_flush(&self, item: &mut Self::Item) -> Result<()> {
-        self.save_item(item)?;
+    #[inline]
+    fn save_item(&self, item: &mut Self::Item) -> Result<()> {
+        self.save_and_finish(item, false)
+    }
 
-        (|| {
-            let arm_id = item.arm().to_eid(item.id());
-            let mut wtr = self.get_item_writer(&arm_id)?;
-            wtr.flush()?;
-            Ok(())
-        })().or_else(|err| {
-            // item arm has been toggled in save_item(), if flush failed we
-            // need to revert it back
-            item.arm_mut().toggle();
-            Err(err)
-        })
+    #[inline]
+    fn save_item_flush(&self, item: &mut Self::Item) -> Result<()> {
+        self.save_and_finish(item, true)
     }
 
     // remove the other arm

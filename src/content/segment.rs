@@ -474,10 +474,17 @@ impl Write for Writer {
 }
 
 impl Finish for Writer {
-    fn finish(self) -> Result<usize> {
+    fn finish(self) -> Result<()> {
         match self.data_wtr {
             Some(data_wtr) => data_wtr.finish(),
-            None => Ok(0),
+            None => Ok(()),
+        }
+    }
+
+    fn finish_and_flush(self) -> Result<()> {
+        match self.data_wtr {
+            Some(data_wtr) => data_wtr.finish_and_flush(),
+            None => Ok(()),
         }
     }
 }

@@ -13,9 +13,12 @@ pub use self::txid::Txid;
 pub use self::txmgr::{TxHandle, TxMgr, TxMgrRef};
 pub use self::wal::EntityType;
 
+use std::io::Write;
+
 use error::Result;
 
 /// Finish trait, used with writer which implements std::io::Write trait
-pub trait Finish {
-    fn finish(self) -> Result<usize>;
+pub trait Finish: Write {
+    fn finish(self) -> Result<()>;
+    fn finish_and_flush(self) -> Result<()>;
 }

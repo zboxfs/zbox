@@ -14,7 +14,7 @@ use content::{
 };
 use error::{Error, Result};
 use trans::cow::{Cow, CowCache, CowRef, CowWeakRef, Cowable, IntoCow};
-use trans::{Eid, Finish, Id, TxMgrRef, Txid};
+use trans::{Eid, Id, TxMgrRef, Txid};
 use volume::VolumeRef;
 
 // maximum sub nodes for a fnode
@@ -726,22 +726,8 @@ impl Writer {
             StoreWriter::new(chk_map, &handle.txmgr, &handle.store, txid);
         Writer { inner, handle }
     }
-}
 
-impl Write for Writer {
-    #[inline]
-    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
-        self.inner.write(buf)
-    }
-
-    #[inline]
-    fn flush(&mut self) -> IoResult<()> {
-        self.inner.flush()
-    }
-}
-
-impl Finish for Writer {
-    fn finish(self) -> Result<usize> {
+    pub fn finish(self) -> Result<usize> {
         let (stg_ctn, chk_map) = self.inner.finish()?;
         let handle = &self.handle;
 
@@ -771,6 +757,18 @@ impl Finish for Writer {
         fnode.chk_map = chk_map;
 
         Ok(stg_ctn.end_offset())
+    }
+}
+
+impl Write for Writer {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
+        self.inner.write(buf)
+    }
+
+    #[inline]
+    fn flush(&mut self) -> IoResult<()> {
+        self.inner.flush()
     }
 }
 

@@ -262,14 +262,29 @@ impl Write for Writer {
 }
 
 impl Finish for Writer {
-    fn finish(self) -> Result<usize> {
+    fn finish(self) -> Result<()> {
         match self.inner {
             InnerWriter::Compress(inner) => {
-                let (wtr, result) = inner.finish();
+                let (mut wtr, result) = inner.finish();
                 result.map_err(|err| Error::from(err))?;
                 wtr.finish()
             }
-            InnerWriter::NoCompress(inner) => inner.finish(),
+            InnerWriter::NoCompress(inner) => {
+                inner.finish()
+            }
+        }
+    }
+
+    fn finish_and_flush(self) -> Result<()> {
+        match self.inner {
+            InnerWriter::Compress(inner) => {
+                let (mut wtr, result) = inner.finish();
+                result.map_err(|err| Error::from(err))?;
+                wtr.finish_and_flush()
+            }
+            InnerWriter::NoCompress(inner) => {
+                inner.finish_and_flush()
+            }
         }
     }
 }

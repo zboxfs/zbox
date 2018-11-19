@@ -221,6 +221,20 @@ impl Storage {
         Ok(())
     }
 
+    fn write_new_address(&mut self, id: &Eid, addr: &Addr) -> Result<()> {
+        // if the old address exists, remove all of its blocks
+        match self.get_address(id) {
+            Ok(old_addr) => {
+                self.remove_address_blocks(&old_addr)?;
+            }
+            Err(ref err) if *err == Error::NotFound => {}
+            Err(err) => return Err(err),
+        }
+
+        // write new address
+        self.put_address(id, addr)
+    }
+
     pub fn del(&mut self, id: &Eid) -> Result<()> {
         // get address first
         let addr = match self.get_address(id) {
@@ -489,31 +503,23 @@ impl Write for Writer {
     }
 
     fn flush(&mut self) -> IoResult<()> {
-        let mut storage = self.storage.write().unwrap();
-        map_io_err!(storage.depot.flush())
+        Ok(())
     }
 }
 
 impl Finish for Writer {
-    fn finish(mut self) -> Result<usize> {
-        // write frame to depot
+    fn finish(mut self) -> Result<()> {
         self.write_frame()?;
-
         let mut storage = self.storage.write().unwrap();
+        storage.write_new_address(&self.id, &self.addr)
+    }
 
-        // if the old address exists, remove all of its blocks
-        match storage.get_address(&self.id) {
-            Ok(old_addr) => {
-                storage.remove_address_blocks(&old_addr)?;
-            }
-            Err(ref err) if *err == Error::NotFound => {}
-            Err(err) => return Err(err),
-        }
-
-        // write new address
-        storage.put_address(&self.id, &self.addr)?;
-
-        Ok(self.addr.len)
+    fn finish_and_flush(mut self) -> Result<()> {
+        self.write_frame()?;
+        let mut storage = self.storage.write().unwrap();
+        storage.write_new_address(&self.id, &self.addr)?;
+        storage.depot.flush()?;
+        Ok(())
     }
 }
 
@@ -739,6 +745,15 @@ mod tests {
     fn redis_depot() {
         init_env();
         let mut storage = Storage::new("redis://127.0.0.1").unwrap();
+        storage.init(Cost::default(), Cipher::default()).unwrap();
+        test_depot(storage.into_ref());
+    }
+
+    #[cfg(feature = "storage-zbox")]
+    #[test]
+    fn zbox_depot() {
+        init_env();
+        let mut storage = Storage::new("zbox://accessKey456@repo456?cache_type=mem&cache_size=1").unwrap();
         storage.init(Cost::default(), Cipher::default()).unwrap();
         test_depot(storage.into_ref());
     }

@@ -163,10 +163,15 @@ impl Write for CryptoWriter {
 }
 
 impl Finish for CryptoWriter {
-    fn finish(mut self) -> Result<usize> {
-        // flush frame
+    fn finish(mut self) -> Result<()> {
         self.write_frame()?;
-        Ok(self.written)
+        Ok(())
+    }
+
+    fn finish_and_flush(mut self) -> Result<()> {
+        self.write_frame()?;
+        self.file.flush()?;
+        Ok(())
     }
 }
 
