@@ -43,16 +43,6 @@ impl Span {
         ret
     }
 
-    #[cfg(feature = "storage-zbox")]
-    pub fn intersect(&self, other: Span) -> Option<Span> {
-        if self.end() < other.begin || other.end() < self.begin {
-            return None;
-        }
-        let begin = std::cmp::max(self.begin, other.begin);
-        let end = std::cmp::min(self.end(), other.end());
-        Some(Span::new(begin, end - begin))
-    }
-
     pub fn divide_by(&self, size: usize) -> Vec<Span> {
         let mut ret = Vec::new();
 

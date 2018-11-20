@@ -34,6 +34,11 @@ impl Storable for MemStorage {
     }
 
     #[inline]
+    fn connect(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    #[inline]
     fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
         Ok(())
     }

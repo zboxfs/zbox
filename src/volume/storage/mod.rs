@@ -33,6 +33,9 @@ pub trait Storable: Debug + Send + Sync {
     // check if storage exists
     fn exists(&self) -> Result<bool>;
 
+    // make connection to storage
+    fn connect(&mut self) -> Result<()>;
+
     // initial a storage
     fn init(&mut self, crypto: Crypto, key: Key) -> Result<()>;
 
@@ -53,7 +56,7 @@ pub trait Storable: Debug + Send + Sync {
     fn put_blocks(&mut self, span: Span, blks: &[u8]) -> Result<()>;
     fn del_blocks(&mut self, span: Span) -> Result<()>;
 
-    // flush writting
+    // flush to storage
     fn flush(&mut self) -> Result<()> {
         Ok(())
     }

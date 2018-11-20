@@ -141,6 +141,11 @@ impl Storage {
         self.depot.exists()
     }
 
+    #[inline]
+    pub fn connect(&mut self) -> Result<()> {
+        self.depot.connect()
+    }
+
     pub fn init(&mut self, cost: Cost, cipher: Cipher) -> Result<()> {
         // create crypto and master key
         self.crypto = Crypto::new(cost, cipher)?;

@@ -528,22 +528,20 @@ impl LocalCache {
             .insert_local(Path::new(Self::CACHE_META_FILE), &buf)
     }
 
-    pub fn init(&mut self) -> Result<()> {
-        // open remote session
-        self.update_seq = {
-            let mut client = self.client.write().unwrap();
-            client.open_session()?
-        };
-
-        self.write_meta()?;
-
+    // connect to remote repo and open session
+    pub fn connect(&mut self) -> Result<()> {
+        let mut client = self.client.write().unwrap();
+        self.update_seq = client.open_session()?;
         Ok(())
+    }
+
+    #[inline]
+    pub fn init(&mut self) -> Result<()> {
+        self.write_meta()
     }
 
     pub fn open(&mut self) -> Result<()> {
         if self.cache_type == CacheType::Mem {
-            let mut client = self.client.write().unwrap();
-            self.update_seq = client.open_session()?;
             return Ok(());
         }
 
@@ -553,19 +551,12 @@ impl LocalCache {
         let mut de = Deserializer::new(&buf[..]);
         let mut local: Self = Deserialize::deserialize(&mut de)?;
 
-        // open remote session
-        let remote_update_seq = {
-            let mut client = self.client.write().unwrap();
-            client.open_session()?
-        };
-
         // if remote has been changed, only invalidate local addr cache
-        if local.update_seq != remote_update_seq {
+        if local.update_seq != self.update_seq {
             debug!("remote repo is changed, invalidate address cache");
             local.addr_cache.clear()?;
         }
 
-        self.update_seq = remote_update_seq;
         self.cache.used = local.cache.used;
         self.cache.lru = local.cache.lru;
         self.addr_cache.used = local.addr_cache.used;

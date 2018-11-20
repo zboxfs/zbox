@@ -34,7 +34,7 @@ fn reset_stmt(stmt: *mut ffi::sqlite3_stmt) -> Result<()> {
 fn bind_int(
     stmt: *mut ffi::sqlite3_stmt,
     col_idx: c_int,
-    n: u64,
+    n: usize,
 ) -> Result<()> {
     let result = unsafe { ffi::sqlite3_bind_int(stmt, col_idx, n as c_int) };
     check_result(result)
@@ -137,27 +137,6 @@ impl SqliteStorage {
         }
     }
 
-    fn connect(&mut self, flags: c_int) -> Result<()> {
-        let result = unsafe {
-            ffi::sqlite3_open_v2(
-                self.filename.as_ptr(),
-                &mut self.db,
-                flags,
-                ptr::null(),
-            )
-        };
-        if result != ffi::SQLITE_OK {
-            let err = ffi::Error::new(result);
-            if !self.db.is_null() {
-                unsafe { ffi::sqlite3_close(self.db) };
-                self.db = ptr::null_mut();
-            }
-            return Err(Error::from(err));
-        }
-
-        Ok(())
-    }
-
     // prepare one sql statement
     fn prepare_sql(&mut self, sql: String) -> Result<()> {
         let mut stmt = ptr::null_mut();
@@ -253,14 +232,30 @@ impl Storable for SqliteStorage {
         Ok(result == ffi::SQLITE_OK)
     }
 
-    fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
-        // open or create db
-        self.connect(
-            ffi::SQLITE_OPEN_READWRITE
-                | ffi::SQLITE_OPEN_CREATE
-                | ffi::SQLITE_OPEN_FULLMUTEX,
-        )?;
+    fn connect(&mut self) -> Result<()> {
+        let result = unsafe {
+            ffi::sqlite3_open_v2(
+                self.filename.as_ptr(),
+                &mut self.db,
+                ffi::SQLITE_OPEN_READWRITE
+                    | ffi::SQLITE_OPEN_CREATE
+                    | ffi::SQLITE_OPEN_FULLMUTEX,
+                ptr::null(),
+            )
+        };
+        if result != ffi::SQLITE_OK {
+            let err = ffi::Error::new(result);
+            if !self.db.is_null() {
+                unsafe { ffi::sqlite3_close(self.db) };
+                self.db = ptr::null_mut();
+            }
+            return Err(Error::from(err));
+        }
 
+        Ok(())
+    }
+
+    fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
         // create tables
         let sql = format!(
             "
@@ -299,11 +294,8 @@ impl Storable for SqliteStorage {
         Ok(())
     }
 
+    #[inline]
     fn open(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
-        // open db
-        self.connect(ffi::SQLITE_OPEN_READWRITE | ffi::SQLITE_OPEN_FULLMUTEX)?;
-
-        // prepare statements
         self.prepare_stmts()
     }
 
@@ -312,7 +304,7 @@ impl Storable for SqliteStorage {
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
-        bind_int(stmt, 1, suffix)?;
+        bind_int(stmt, 1, suffix as usize)?;
         run_select_blob(stmt)
     }
 
@@ -321,7 +313,7 @@ impl Storable for SqliteStorage {
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
-        bind_int(stmt, 1, suffix)?;
+        bind_int(stmt, 1, suffix as usize)?;
         bind_blob(stmt, 2, super_blk)?;
         run_dml(stmt)
     }
@@ -373,7 +365,7 @@ impl Storable for SqliteStorage {
         Ok(())
     }
 
-    fn put_blocks(&mut self, span: Span, blks: &[u8]) -> Result<()> {
+    fn put_blocks(&mut self, span: Span, mut blks: &[u8]) -> Result<()> {
         let stmt = self.stmts[6];
 
         for blk_idx in span {

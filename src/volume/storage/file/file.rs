@@ -75,6 +75,11 @@ impl Storable for FileStorage {
         }
     }
 
+    #[inline]
+    fn connect(&mut self) -> Result<()> {
+        Ok(())
+    }
+
     fn init(&mut self, crypto: Crypto, key: Key) -> Result<()> {
         // create dir structure
         vio::create_dir_all(self.index_dir())?;

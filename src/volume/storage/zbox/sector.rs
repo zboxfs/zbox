@@ -13,11 +13,8 @@ use error::{Error, Result};
 use volume::address::Span;
 use volume::BLK_SIZE;
 
-// number of blocks in a sector
+// number of blocks in a sector, sector size is 128KB
 const BLKS_PER_SECTOR: usize = 16;
-
-// sector size in bytes, 128KB
-const SECTOR_SIZE: usize = BLKS_PER_SECTOR * BLK_SIZE;
 
 const BASE_DIR: &'static str = "data";
 const RECYCLE_FILE: &'static str = "recycle";
@@ -139,12 +136,6 @@ impl RecycleMap {
 
 /// Sector manager
 pub struct SectorMgr {
-    // head sector
-    head: Vec<u8>,
-    head_offset: usize,
-    head_len: usize,
-    head_sec_idx: usize,
-
     // sector recycle map
     rmap: RecycleMap,
 
@@ -156,10 +147,6 @@ pub struct SectorMgr {
 impl SectorMgr {
     pub fn new() -> Self {
         SectorMgr {
-            head: vec![0u8; SECTOR_SIZE],
-            head_offset: 0,
-            head_len: 0,
-            head_sec_idx: 0,
             rmap: RecycleMap::default(),
             crypto: Crypto::default(),
             key: Key::new_empty(),
@@ -171,6 +158,11 @@ impl SectorMgr {
         self.crypto = crypto;
         self.key = key.derive(0);
         self.rmap.hash_key = self.hash_key.clone()
+    }
+
+    #[inline]
+    pub fn init(&mut self, local_cache: &mut LocalCache) -> Result<()> {
+        self.rmap.save(&self.crypto, &self.key, local_cache)
     }
 
     #[inline]
@@ -195,29 +187,12 @@ impl SectorMgr {
                 return Err(Error::NotFound);
             }
 
-            // if any blocks are still in head sector buffer
-            if self.head_len > 0 && sec_idx == self.head_sec_idx {
-                let head_span = Span::new(
-                    self.head_sec_idx * BLKS_PER_SECTOR,
-                    BLKS_PER_SECTOR,
-                );
-                if let Some(intersect) = head_span.intersect(sec_span) {
-                    assert!(span.end() <= head_span.end());
-                    let offset = (intersect.begin % BLKS_PER_SECTOR) * BLK_SIZE;
-                    let copy_len = intersect.bytes_len();
-                    dst[read..read + copy_len]
-                        .copy_from_slice(&self.head[offset..offset + copy_len]);
-                    read += copy_len;
-                    continue;
-                }
-            }
-
             // otherwise get it from local cache
             let rel_path = sector_rel_path(sec_idx, &self.hash_key);
             let offset = (sec_span.begin % BLKS_PER_SECTOR) * BLK_SIZE;
             let len = sec_span.bytes_len();
-
             local_cache.get(&rel_path, offset, &mut dst[read..read + len])?;
+
             read += len;
         }
 
@@ -235,15 +210,10 @@ impl SectorMgr {
             let offset = (sec_span.begin % BLKS_PER_SECTOR) * BLK_SIZE;
             let len = sec_span.bytes_len();
 
-            self.head[offset..offset + len].copy_from_slice(&blks[..len]);
+            // save to local cache
+            let rel_path = sector_rel_path(sec_idx, &self.hash_key);
+            local_cache.put(&rel_path, offset, &blks[..len])?;
             blks = &blks[len..];
-            self.head_len += len;
-            self.head_sec_idx = sec_idx;
-
-            // write to local cache if sector buffer is full
-            if self.head_len >= SECTOR_SIZE {
-                self.flush(local_cache)?;
-            }
 
             // ensure blocks are not in deleted map
             self.rmap.remove_deleted(sec_idx, sec_span);
@@ -261,40 +231,15 @@ impl SectorMgr {
         self.rmap.del_blocks(span, local_cache)
     }
 
+    #[inline]
     pub fn flush(&mut self, local_cache: &mut LocalCache) -> Result<()> {
-        // save recyle map
-        self.rmap.save(&self.crypto, &self.key, local_cache)?;
-
-        if self.head_offset == self.head_len {
-            return Ok(());
-        }
-
-        // write sector to local cache
-        let rel_path = sector_rel_path(self.head_sec_idx, &self.hash_key);
-        local_cache.put(
-            &rel_path,
-            self.head_offset,
-            &self.head[self.head_offset..self.head_len],
-        )?;
-
-        // if head sector is full, reset head sector
-        if self.head_len >= SECTOR_SIZE {
-            self.head_len = 0;
-        }
-
-        // advance head sector
-        self.head_offset = self.head_len;
-
-        Ok(())
+        self.rmap.save(&self.crypto, &self.key, local_cache)
     }
 }
 
 impl Debug for SectorMgr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("SectorMgr")
-            .field("head_offset", &self.head_offset)
-            .field("head_len", &self.head_len)
-            .field("head_sec_idx", &self.head_sec_idx)
             .field("rmap", &self.rmap)
             .finish()
     }
@@ -327,6 +272,7 @@ mod tests {
         let span2 = Span::new(2, 14);
         let span3 = Span::new(16, 18);
 
+        cache.connect().unwrap();
         cache.init().unwrap();
 
         sec_mgr.put_blocks(span, &blks, &mut cache).unwrap();

@@ -116,6 +116,11 @@ impl Storable for FaultyStorage {
         Ok(inner.contains_key(&self.loc))
     }
 
+    #[inline]
+    fn connect(&mut self) -> Result<()> {
+        Ok(())
+    }
+
     fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
         let mut inner = self.inner.write().unwrap();
         assert!(!inner.contains_key(&self.loc));

@@ -124,9 +124,15 @@ impl Storable for ZboxStorage {
         self.local_cache.repo_exists()
     }
 
+    #[inline]
+    fn connect(&mut self) -> Result<()> {
+        self.local_cache.connect()
+    }
+
     fn init(&mut self, crypto: Crypto, key: Key) -> Result<()> {
         self.set_crypto_ctx(crypto, key);
         self.local_cache.init()?;
+        self.sec_mgr.init(&mut self.local_cache)?;
         Ok(())
     }
 
@@ -198,6 +204,7 @@ mod tests {
     fn do_test(uri: &str) {
         init_env();
         let mut zs = ZboxStorage::new(uri).unwrap();
+        zs.connect().unwrap();
         zs.init(Crypto::default(), Key::new_empty()).unwrap();
 
         let id = Eid::new();
@@ -239,6 +246,7 @@ mod tests {
         // re-open
         drop(zs);
         let mut zs = ZboxStorage::new(uri).unwrap();
+        zs.connect().unwrap();
         zs.open(Crypto::default(), Key::new_empty()).unwrap();
 
         zs.get_blocks(&mut dst[..BLK_SIZE], Span::new(0, 1))

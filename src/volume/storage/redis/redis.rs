@@ -50,12 +50,6 @@ impl RedisStorage {
         Ok(RedisStorage { client, conn: None })
     }
 
-    fn connect(&mut self) -> Result<()> {
-        let conn = self.client.get_connection()?;
-        self.conn = Some(Mutex::new(conn));
-        Ok(())
-    }
-
     fn get_bytes(&self, key: &str) -> Result<Vec<u8>> {
         match self.conn {
             Some(ref conn) => {
@@ -101,13 +95,19 @@ impl Storable for RedisStorage {
             .map_err(|err| Error::from(err))
     }
 
-    fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
-        self.connect()?;
+    fn connect(&mut self) -> Result<()> {
+        let conn = self.client.get_connection()?;
+        self.conn = Some(Mutex::new(conn));
         Ok(())
     }
 
+    #[inline]
+    fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
+        Ok(())
+    }
+
+    #[inline]
     fn open(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
-        self.connect()?;
         Ok(())
     }
 
@@ -149,7 +149,7 @@ impl Storable for RedisStorage {
         Ok(())
     }
 
-    fn put_blocks(&mut self, span: Span, blks: &[u8]) -> Result<()> {
+    fn put_blocks(&mut self, span: Span, mut blks: &[u8]) -> Result<()> {
         for blk_idx in span {
             let key = blk_key(blk_idx);
             self.set_bytes(&key, &blks[..BLK_SIZE])?;

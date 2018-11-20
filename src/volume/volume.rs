@@ -54,8 +54,10 @@ impl Volume {
         cfg: &Config,
         payload: &[u8],
     ) -> Result<()> {
-        // initialise storage
         let mut storage = self.storage.write().unwrap();
+        storage.connect()?;
+
+        // initialise storage
         storage.init(cfg.cost, cfg.cipher)?;
 
         // initialise info
@@ -92,6 +94,7 @@ impl Volume {
     /// Open volume, return super block payload and meta payload
     pub fn open(&mut self, pwd: &str) -> Result<Vec<u8>> {
         let mut storage = self.storage.write().unwrap();
+        storage.connect()?;
 
         // load super block from storage
         let super_blk = SuperBlk::load(pwd, storage.depot_mut())?;
@@ -330,7 +333,7 @@ mod tests {
     fn write_to_entity(id: &Eid, buf: &[u8], vol: &VolumeRef) {
         let mut wtr = Writer::new(&id, &vol).unwrap();
         wtr.write_all(&buf).unwrap();
-        wtr.finish().unwrap();
+        wtr.finish_and_flush().unwrap();
     }
 
     fn verify_entity(id: &Eid, buf: &[u8], vol: &VolumeRef) {
@@ -361,23 +364,11 @@ mod tests {
         assert_eq!(Reader::new(&id, &vol).unwrap_err(), Error::NotFound);
     }
 
-    #[test]
-    fn mem_volume() {
-        let vol = setup_mem_vol();
-        read_write_test(&vol);
-    }
-
-    #[test]
-    fn file_volume() {
-        let pwd = "pwd";
-        let payload = [1, 2, 3];
-        let (vol, _tmpdir) = setup_file_vol(&pwd, &payload);
-
+    fn reopen_test(pwd: &str, payload: &[u8], vol: VolumeRef) {
         let id = Eid::new();
         let buf = [1, 2, 3];
 
         read_write_test(&vol);
-
         write_to_entity(&id, &buf, &vol);
 
         let (info, wmark) = {
@@ -402,8 +393,35 @@ mod tests {
         let vol = vol.into_ref();
 
         read_write_test(&vol);
-
         verify_entity(&id, &buf, &vol);
+    }
+
+    #[test]
+    fn mem_volume() {
+        let vol = setup_mem_vol();
+        read_write_test(&vol);
+    }
+
+    #[test]
+    fn file_volume() {
+        let pwd = "pwd";
+        let payload = [1, 2, 3];
+        let (vol, _tmpdir) = setup_file_vol(&pwd, &payload);
+        reopen_test(&pwd, &payload, vol);
+    }
+
+    #[cfg(feature = "storage-zbox")]
+    #[test]
+    fn zbox_volume() {
+        init_env();
+        let pwd = "pwd";
+        let payload = [1, 2, 3];
+        let uri = "zbox://accessKey456@repo456?cache_type=mem&cache_size=1";
+        let mut vol = Volume::new(&uri).unwrap();
+        vol.init(&pwd, &Config::default(), &payload).unwrap();
+        let vol = vol.into_ref();
+
+        reopen_test(&pwd, &payload, vol);
     }
 
     fn perf_test(vol: VolumeRef, prefix: &str) {
