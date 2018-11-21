@@ -34,6 +34,7 @@ pub struct HttpClient {
     session_token: String,
     is_updated: bool,
     update_seq: u64,
+    retry_cnt: u64,
     client: Client,
 }
 
@@ -69,6 +70,7 @@ impl HttpClient {
             session_token: String::new(),
             is_updated: false,
             update_seq: 0,
+            retry_cnt: 0,
             client,
         })
     }
@@ -93,6 +95,8 @@ impl HttpClient {
 
     // open remote session
     pub fn open_session(&mut self) -> Result<u64> {
+        debug!("open session retry {}, local update seq {}", self.retry_cnt, self.update_seq);
+
         let url = self.base_url.clone() + "open";
         let mut resp = self
             .client
@@ -120,8 +124,9 @@ impl HttpClient {
         // save session status
         self.session_token = result.session_token;
         self.update_seq = result.update_seq;
+        self.retry_cnt += 1;
 
-        debug!("session opened, update seq {}", result.update_seq);
+        debug!("session opened, update seq {}", self.update_seq);
 
         Ok(self.update_seq)
     }
@@ -298,6 +303,7 @@ impl Debug for HttpClient {
             .field("session_token", &self.session_token)
             .field("is_updated", &self.is_updated)
             .field("update_seq", &self.update_seq)
+            .field("retry_cnt", &self.retry_cnt)
             .finish()
     }
 }
@@ -310,6 +316,7 @@ impl Default for HttpClient {
             session_token: String::new(),
             is_updated: false,
             update_seq: 0,
+            retry_cnt: 0,
             client: Client::builder().build().unwrap(),
         }
     }

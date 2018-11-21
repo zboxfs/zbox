@@ -676,7 +676,7 @@ mod tests {
         *buf.last_mut().unwrap() = 43;
         let mut wtr = Writer::new(&id, storage);
         wtr.write_all(&buf).unwrap();
-        wtr.finish_and_flush().unwrap();
+        wtr.finish().unwrap();
 
         // read
         let mut rdr = Reader::new(&id, storage).unwrap();
@@ -692,7 +692,7 @@ mod tests {
         // write #1
         let mut wtr = Writer::new(&id, storage);
         wtr.write_all(&buf).unwrap();
-        wtr.finish().unwrap();
+        wtr.finish_and_flush().unwrap();
 
         // read
         let mut rdr = Reader::new(&id, storage).unwrap();
@@ -740,6 +740,7 @@ mod tests {
     fn sqlite_depot() {
         init_env();
         let mut storage = Storage::new("sqlite://:memory:").unwrap();
+        storage.connect().unwrap();
         storage.init(Cost::default(), Cipher::default()).unwrap();
         test_depot(storage.into_ref());
     }
@@ -749,6 +750,7 @@ mod tests {
     fn redis_depot() {
         init_env();
         let mut storage = Storage::new("redis://127.0.0.1").unwrap();
+        storage.connect().unwrap();
         storage.init(Cost::default(), Cipher::default()).unwrap();
         test_depot(storage.into_ref());
     }
@@ -760,6 +762,7 @@ mod tests {
         let mut storage = Storage::new(
             "zbox://accessKey456@repo456?cache_type=mem&cache_size=1",
         ).unwrap();
+        storage.connect().unwrap();
         storage.init(Cost::default(), Cipher::default()).unwrap();
         test_depot(storage.into_ref());
     }

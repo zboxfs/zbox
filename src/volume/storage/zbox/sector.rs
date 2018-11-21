@@ -16,6 +16,9 @@ use volume::BLK_SIZE;
 // number of blocks in a sector, sector size is 128KB
 const BLKS_PER_SECTOR: usize = 16;
 
+// sector size
+const SECTOR_SIZE: usize = BLKS_PER_SECTOR * BLK_SIZE;
+
 const BASE_DIR: &'static str = "data";
 const RECYCLE_FILE: &'static str = "recycle";
 
@@ -136,6 +139,12 @@ impl RecycleMap {
 
 /// Sector manager
 pub struct SectorMgr {
+    // sector write buffer
+    sec: Vec<u8>,
+    sec_base: usize,
+    sec_top: usize,
+    sec_idx: usize,
+
     // sector recycle map
     rmap: RecycleMap,
 
@@ -147,6 +156,10 @@ pub struct SectorMgr {
 impl SectorMgr {
     pub fn new() -> Self {
         SectorMgr {
+            sec: vec![0u8; SECTOR_SIZE],
+            sec_base: 0,
+            sec_top: 0,
+            sec_idx: 0,
             rmap: RecycleMap::default(),
             crypto: Crypto::default(),
             key: Key::new_empty(),
@@ -182,15 +195,25 @@ impl SectorMgr {
         for sec_span in span.divide_by(BLKS_PER_SECTOR) {
             let sec_idx = sec_span.begin / BLKS_PER_SECTOR;
 
-            // if any bloks are deleted
+            // if any blocks are deleted
             if self.rmap.has_deleted(sec_idx, sec_span) {
                 return Err(Error::NotFound);
             }
 
-            // otherwise get it from local cache
-            let rel_path = sector_rel_path(sec_idx, &self.hash_key);
             let offset = (sec_span.begin % BLKS_PER_SECTOR) * BLK_SIZE;
             let len = sec_span.bytes_len();
+
+            // if the blocks are still in the sector buffer
+            if sec_idx == self.sec_idx && offset < self.sec_top {
+                let end = offset + len;
+                assert!(end <= self.sec_top);
+                dst[read..read + len].copy_from_slice(&self.sec[offset..end]);
+                read += len;
+                continue;
+            }
+
+            // otherwise get it from local cache
+            let rel_path = sector_rel_path(sec_idx, &self.hash_key);
             local_cache.get(&rel_path, offset, &mut dst[read..read + len])?;
 
             read += len;
@@ -210,13 +233,28 @@ impl SectorMgr {
             let offset = (sec_span.begin % BLKS_PER_SECTOR) * BLK_SIZE;
             let len = sec_span.bytes_len();
 
-            // save to local cache
-            let rel_path = sector_rel_path(sec_idx, &self.hash_key);
-            local_cache.put(&rel_path, offset, &blks[..len])?;
+            // If there is a sector buffer gap, fill it by reading data
+            // from local cache. This only happend during first-time call.
+            if offset > self.sec_top {
+                assert_eq!(self.sec_idx, 0);
+                let rel_path = sector_rel_path(sec_idx, &self.hash_key);
+                local_cache.get(&rel_path, self.sec_top, &mut self.sec[self.sec_top..offset])?;
+                self.sec_top = offset;
+            }
+
+            // copy data to sector buffer
+            self.sec[self.sec_top..self.sec_top + len].copy_from_slice(&blks[..len]);
             blks = &blks[len..];
+            self.sec_top += len;
+            self.sec_idx = sec_idx;
 
             // ensure blocks are not in deleted map
             self.rmap.remove_deleted(sec_idx, sec_span);
+
+            // if sector buffer is full, flush it to local cache
+            if self.sec_top >= SECTOR_SIZE {
+                self.flush(local_cache)?;
+            }
         }
 
         Ok(())
@@ -231,15 +269,32 @@ impl SectorMgr {
         self.rmap.del_blocks(span, local_cache)
     }
 
-    #[inline]
     pub fn flush(&mut self, local_cache: &mut LocalCache) -> Result<()> {
-        self.rmap.save(&self.crypto, &self.key, local_cache)
+        // save recycle map
+        self.rmap.save(&self.crypto, &self.key, local_cache)?;
+
+        if self.sec_base == self.sec_top {
+            return Ok(());
+        }
+
+        // save sector buffer to local cache
+        let rel_path = sector_rel_path(self.sec_idx, &self.hash_key);
+        local_cache.put(&rel_path, self.sec_base, &self.sec[self.sec_base..self.sec_top])?;
+        if self.sec_top >= SECTOR_SIZE {
+            self.sec_top = 0;
+        }
+        self.sec_base = self.sec_top;
+
+        Ok(())
     }
 }
 
 impl Debug for SectorMgr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("SectorMgr")
+            .field("sec_base", &self.sec_base)
+            .field("sec_top", &self.sec_top)
+            .field("sec_idx", &self.sec_idx)
             .field("rmap", &self.rmap)
             .finish()
     }

@@ -244,7 +244,6 @@ mod tests {
     use trans::TxMgr;
     use volume::{ArmAccess, Volume};
 
-    #[allow(dead_code)]
     fn setup_mem_vol() -> VolumeRef {
         init_env();
         let uri = "mem://foo".to_string();
@@ -260,6 +259,15 @@ mod tests {
         let mut vol = Volume::new(&uri).unwrap();
         vol.init("pwd", &Config::default(), &Vec::new()).unwrap();
         (vol.into_ref(), tmpdir)
+    }
+
+    #[cfg(feature = "storage-zbox")]
+    fn setup_zbox_vol() -> VolumeRef {
+        init_env();
+        let uri = "zbox://accessKey456@repo456?cache_type=mem&cache_size=1".to_string();
+        let mut vol = Volume::new(&uri).unwrap();
+        vol.init("pwd", &Config::default(), &Vec::new()).unwrap();
+        vol.into_ref()
     }
 
     #[derive(Debug, Default, Clone, Deserialize, Serialize)]
@@ -282,10 +290,7 @@ mod tests {
     impl Cowable for Obj {}
     impl<'d> IntoCow<'d> for Obj {}
 
-    #[test]
-    fn trans_oper() {
-        //let vol = setup_mem_vol();
-        let (vol, _tmpdir) = setup_file_vol();
+    fn trans_oper(vol: VolumeRef) {
         let tm = TxMgr::new(&Eid::new(), &vol).into_ref();
         let val = 42;
         let val2 = 43;
@@ -362,10 +367,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn trans_abort() {
-        //let vol = setup_mem_vol();
-        let (vol, _tmpdir) = setup_file_vol();
+    fn trans_abort(vol: VolumeRef) {
         let tm = TxMgr::new(&Eid::new(), &vol).into_ref();
         let val = 42;
         let mut a = Arc::default();
@@ -399,6 +401,43 @@ mod tests {
         {
             let tm = tm.read().unwrap();
             assert!(tm.txs.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_trans_mem() {
+        {
+            let vol = setup_mem_vol();
+            trans_oper(vol);
+        }
+        {
+            let vol = setup_mem_vol();
+            trans_abort(vol);
+        }
+    }
+
+    #[test]
+    fn test_trans_file() {
+        {
+            let (vol, _tmpdir) = setup_file_vol();
+            trans_oper(vol);
+        }
+        {
+            let (vol, _tmpdir) = setup_file_vol();
+            trans_abort(vol);
+        }
+    }
+
+    #[cfg(feature = "storage-zbox")]
+    #[test]
+    fn test_trans_zbox() {
+        {
+            let vol = setup_zbox_vol();
+            trans_oper(vol);
+        }
+        {
+            let vol = setup_zbox_vol();
+            trans_abort(vol);
         }
     }
 }
