@@ -112,8 +112,6 @@ impl Fs {
 
     /// Create new fs
     pub fn create(uri: &str, pwd: &str, cfg: &Config) -> Result<Fs> {
-        debug!("create repo: {}", uri);
-
         let root_id = Eid::new();
         let walq_id = Eid::new();
         let store_id = Eid::new();
@@ -121,6 +119,8 @@ impl Fs {
 
         // create and initialise volume
         let mut vol = Volume::new(uri)?;
+        debug!("create repo: {}", vol.info().uri);
+
         vol.init(pwd, cfg, &payload.seri()?)?;
 
         let vol = vol.into_ref();
@@ -161,7 +161,7 @@ impl Fs {
     pub fn open(uri: &str, pwd: &str, read_only: bool) -> Result<Fs> {
         let mut vol = Volume::new(uri)?;
 
-        debug!("open repo: {}, read_only: {}", uri, read_only);
+        debug!("open repo: {}, read_only: {}", vol.info().uri, read_only);
 
         // open volume
         let payload = vol.open(pwd)?;

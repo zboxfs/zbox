@@ -97,7 +97,7 @@ For reference documentation, please visit [documentation](https://docs.rs/zbox).
 
 ## Requirements
 
-- [Rust] stable >= 1.21
+- [Rust] stable >= 1.27
 - [libsodium] >= 1.0.16
 
 ## Supported Platforms

@@ -24,7 +24,7 @@ struct SessionOpenResp {
     _status: String,
     session_token: String,
     update_seq: u64,
-    _ttl: u64,
+    ttl: u64,
 }
 
 /// HTTP client
@@ -34,6 +34,7 @@ pub struct HttpClient {
     session_token: String,
     is_updated: bool,
     update_seq: u64,
+    ttl: u64,
     retry_cnt: u64,
     client: Client,
 }
@@ -70,6 +71,7 @@ impl HttpClient {
             session_token: String::new(),
             is_updated: false,
             update_seq: 0,
+            ttl: 0,
             retry_cnt: 0,
             client,
         })
@@ -82,6 +84,8 @@ impl HttpClient {
 
     // check if repo exists
     pub fn repo_exists(&self) -> Result<bool> {
+        debug!("check repo exists");
+
         let url = self.base_url.clone() + "exists";
         let mut resp = self
             .client
@@ -95,7 +99,11 @@ impl HttpClient {
 
     // open remote session
     pub fn open_session(&mut self) -> Result<u64> {
-        debug!("open session retry {}, local update seq {}", self.retry_cnt, self.update_seq);
+        if self.retry_cnt == 0 {
+            debug!("open session first time");
+        } else {
+            debug!("open session, retry {}", self.retry_cnt);
+        }
 
         let url = self.base_url.clone() + "open";
         let mut resp = self
@@ -124,9 +132,13 @@ impl HttpClient {
         // save session status
         self.session_token = result.session_token;
         self.update_seq = result.update_seq;
+        self.ttl = result.ttl;
         self.retry_cnt += 1;
 
-        debug!("session opened, update seq {}", self.update_seq);
+        debug!(
+            "session opened, update seq {}, ttl {}",
+            self.update_seq, self.ttl
+        );
 
         Ok(self.update_seq)
     }
@@ -229,12 +241,7 @@ impl HttpClient {
         offset: usize,
         body: &[u8],
     ) -> Result<()> {
-        debug!(
-            "put {:?}, offset: {}, body_len: {}",
-            rel_path,
-            offset,
-            body.len()
-        );
+        debug!("put {:?}, offset {}, len {}", rel_path, offset, body.len());
 
         let url = self.base_url.clone() + rel_path.to_str().unwrap();
 
@@ -303,6 +310,7 @@ impl Debug for HttpClient {
             .field("session_token", &self.session_token)
             .field("is_updated", &self.is_updated)
             .field("update_seq", &self.update_seq)
+            .field("ttl", &self.ttl)
             .field("retry_cnt", &self.retry_cnt)
             .finish()
     }
@@ -316,6 +324,7 @@ impl Default for HttpClient {
             session_token: String::new(),
             is_updated: false,
             update_seq: 0,
+            ttl: 0,
             retry_cnt: 0,
             client: Client::builder().build().unwrap(),
         }
@@ -351,6 +360,8 @@ pub type HttpClientRef = Arc<RwLock<HttpClient>>;
 
 #[cfg(test)]
 mod tests {
+
+    use std::{thread, time};
 
     use super::*;
     use base::init_env;
@@ -391,5 +402,26 @@ mod tests {
         let mut client = HttpClient::new(&repo_id, &access_key).unwrap();
         let new_update_seq = client.open_session().unwrap();
         assert_eq!(new_update_seq, update_seq + 1);
+    }
+
+    #[test]
+    #[ignore]
+    fn retry_test() {
+        init_env();
+
+        let repo_id = "repo456";
+        let access_key = "accessKey456";
+        let mut client = HttpClient::new(&repo_id, &access_key).unwrap();
+        let blks = vec![42u8; BLK_SIZE];
+        let delay = time::Duration::from_secs(180);
+
+        client.open_session().unwrap();
+        let rel_path = Path::new("test");
+        client.put(&rel_path, 0, &blks[..]).unwrap();
+
+        for _ in 0..3 {
+            client.put(&rel_path, 0, &blks[..]).unwrap();
+            thread::sleep(delay);
+        }
     }
 }

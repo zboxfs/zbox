@@ -36,7 +36,7 @@ fn verify_content(f: &mut File, buf: &[u8]) {
 }
 
 #[test]
-fn file_read_write() {
+fn file_read_write_st() {
     let mut env = common::TestEnv::new();
     let mut repo = &mut env.repo;
 

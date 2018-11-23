@@ -128,11 +128,14 @@ impl RecycleMap {
         if self.is_saved {
             return Ok(());
         }
+
         let mut buf = Vec::new();
         self.serialize(&mut Serializer::new(&mut buf)).unwrap();
         let buf = crypto.encrypt(&buf, key)?;
         local_cache.put_pinned(Path::new(RECYCLE_FILE), &buf)?;
+
         self.is_saved = true;
+
         Ok(())
     }
 }
@@ -169,8 +172,9 @@ impl SectorMgr {
 
     pub fn set_crypto_ctx(&mut self, crypto: Crypto, key: Key) {
         self.crypto = crypto;
-        self.key = key.derive(0);
-        self.rmap.hash_key = self.hash_key.clone()
+        self.hash_key = key.derive(0);
+        self.rmap.hash_key = key.derive(1);
+        self.key = key;
     }
 
     #[inline]
@@ -238,12 +242,17 @@ impl SectorMgr {
             if offset > self.sec_top {
                 assert_eq!(self.sec_idx, 0);
                 let rel_path = sector_rel_path(sec_idx, &self.hash_key);
-                local_cache.get(&rel_path, self.sec_top, &mut self.sec[self.sec_top..offset])?;
+                local_cache.get(
+                    &rel_path,
+                    self.sec_top,
+                    &mut self.sec[self.sec_top..offset],
+                )?;
                 self.sec_top = offset;
             }
 
             // copy data to sector buffer
-            self.sec[self.sec_top..self.sec_top + len].copy_from_slice(&blks[..len]);
+            self.sec[self.sec_top..self.sec_top + len]
+                .copy_from_slice(&blks[..len]);
             blks = &blks[len..];
             self.sec_top += len;
             self.sec_idx = sec_idx;
@@ -279,7 +288,11 @@ impl SectorMgr {
 
         // save sector buffer to local cache
         let rel_path = sector_rel_path(self.sec_idx, &self.hash_key);
-        local_cache.put(&rel_path, self.sec_base, &self.sec[self.sec_base..self.sec_top])?;
+        local_cache.put(
+            &rel_path,
+            self.sec_base,
+            &self.sec[self.sec_base..self.sec_top],
+        )?;
         if self.sec_top >= SECTOR_SIZE {
             self.sec_top = 0;
         }

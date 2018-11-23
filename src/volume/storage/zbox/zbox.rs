@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use super::index::IndexMgr;
 use super::local_cache::{CacheType, LocalCache};
 use super::sector::SectorMgr;
 use base::crypto::{Crypto, Key};
@@ -78,12 +79,14 @@ fn parse_uri(mut uri: &str) -> Result<(&str, &str, CacheType, usize, PathBuf)> {
 pub struct ZboxStorage {
     local_cache: LocalCache,
     sec_mgr: SectorMgr,
+    idx_mgr: IndexMgr,
 }
 
 impl ZboxStorage {
     // subkey ids
     const SUBKEY_ID_LOCAL_CACHE: u64 = 42;
     const SUBKEY_ID_SEC_MGR: u64 = 43;
+    const SUBKEY_ID_IDX_MGR: u64 = 44;
 
     // super block file name stem
     const SUPER_BLK_STEM: &'static str = "super_blk";
@@ -99,12 +102,14 @@ impl ZboxStorage {
             cache_type, cache_size, &base, repo_id, access_key,
         )?;
 
-        // create sector manager
+        // create sector manager and index manager
         let sec_mgr = SectorMgr::new();
+        let idx_mgr = IndexMgr::new();
 
         Ok(ZboxStorage {
             local_cache,
             sec_mgr,
+            idx_mgr,
         })
     }
 
@@ -115,6 +120,9 @@ impl ZboxStorage {
 
         let subkey = key.derive(Self::SUBKEY_ID_SEC_MGR);
         self.sec_mgr.set_crypto_ctx(crypto.clone(), subkey);
+
+        let subkey = key.derive(Self::SUBKEY_ID_IDX_MGR);
+        self.idx_mgr.set_crypto_ctx(crypto.clone(), subkey);
     }
 }
 
@@ -156,17 +164,17 @@ impl Storable for ZboxStorage {
 
     #[inline]
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
-        self.local_cache.get_address(id)
+        self.idx_mgr.get_address(id, &mut self.local_cache)
     }
 
     #[inline]
     fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
-        self.local_cache.put_address(id, addr)
+        self.idx_mgr.put_address(id, addr, &mut self.local_cache)
     }
 
     #[inline]
     fn del_address(&mut self, id: &Eid) -> Result<()> {
-        self.local_cache.del_address(id)
+        self.idx_mgr.del_address(id, &mut self.local_cache)
     }
 
     #[inline]
@@ -188,6 +196,7 @@ impl Storable for ZboxStorage {
 
     fn flush(&mut self) -> Result<()> {
         self.sec_mgr.flush(&mut self.local_cache)?;
+        self.idx_mgr.flush(&mut self.local_cache)?;
         self.local_cache.flush()
     }
 }

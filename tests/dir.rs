@@ -9,7 +9,7 @@ use std::{thread, time};
 use zbox::Error;
 
 #[test]
-fn dir_create() {
+fn dir_create_st() {
     let mut env = common::TestEnv::new();
     let repo = &mut env.repo;
 

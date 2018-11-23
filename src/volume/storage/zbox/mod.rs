@@ -1,4 +1,5 @@
 mod http_client;
+mod index;
 mod local_cache;
 mod sector;
 mod vio;

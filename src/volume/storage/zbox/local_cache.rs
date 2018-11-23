@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::collections::HashMap;
 use std::fmt::{self, Debug};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -14,7 +15,6 @@ use base::crypto::{Crypto, Key};
 use base::utils;
 use base::IntoRef;
 use error::{Error, Result};
-use trans::Eid;
 
 // local cache type
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize, Serialize)]
@@ -447,8 +447,8 @@ pub struct LocalCache {
     // main cache area
     cache: CacheArea,
 
-    // address cache area
-    addr_cache: CacheArea,
+    // index cache area
+    idx_cache: CacheArea,
 
     #[serde(skip_serializing, skip_deserializing, default)]
     client: HttpClientRef,
@@ -464,11 +464,9 @@ impl LocalCache {
     // local cache persistent file name
     const CACHE_META_FILE: &'static str = "cache_meta";
 
-    // address cache dir
-    const ADDR_CACHE_DIR: &'static str = "index";
-
-    // fixed reserved address cache sizes
-    const ADDR_CACHE_SIZE: usize = 16 * 1024;
+    // index cache capacity range, in bytes
+    const MIN_IDX_CACHE_CAP: usize = 256 * 1024;
+    const MAX_IDX_CACHE_CAP: usize = 16 * 1024 * 1024;
 
     pub fn new(
         cache_type: CacheType,
@@ -478,16 +476,17 @@ impl LocalCache {
         access_key: &str,
     ) -> Result<Self> {
         let capacity = capacity_in_mb * 1024 * 1024; // capacity is in MB
-        let cache_cap = capacity - Self::ADDR_CACHE_SIZE;
-        let addr_base = base.join(Self::ADDR_CACHE_DIR);
+
+        let idx_cache_cap = min(
+            (capacity_in_mb / 4 + 1) * Self::MIN_IDX_CACHE_CAP,
+            Self::MAX_IDX_CACHE_CAP,
+        );
+        let cache_cap = capacity - idx_cache_cap;
+
         let client = HttpClient::new(repo_id, access_key)?.into_ref();
         let cache = CacheArea::new(cache_type, cache_cap, base, &client);
-        let addr_cache = CacheArea::new(
-            cache_type,
-            Self::ADDR_CACHE_SIZE,
-            &addr_base,
-            &client,
-        );
+        let idx_cache =
+            CacheArea::new(cache_type, idx_cache_cap, &base, &client);
 
         Ok(LocalCache {
             cache_type,
@@ -495,7 +494,7 @@ impl LocalCache {
             update_seq: 0,
             is_saved: false,
             cache,
-            addr_cache,
+            idx_cache,
             client,
             crypto: Crypto::default(),
             key: Key::new_empty(),
@@ -551,24 +550,27 @@ impl LocalCache {
         let mut de = Deserializer::new(&buf[..]);
         let mut local: Self = Deserialize::deserialize(&mut de)?;
 
-        // if remote has been changed, only invalidate local addr cache
+        // if remote has been changed, invalidate local index cache
         if local.update_seq != self.update_seq {
-            debug!("remote repo is changed, invalidate address cache");
-            local.addr_cache.clear()?;
+            warn!(
+                "remote repo is changed, local: {}, remote: {}, \
+                 invalidate index cache",
+                local.update_seq, self.update_seq
+            );
+            local.idx_cache.clear()?;
         }
 
         self.cache.used = local.cache.used;
         self.cache.lru = local.cache.lru;
-        self.addr_cache.used = local.addr_cache.used;
-        self.addr_cache.lru = local.addr_cache.lru;
+        self.idx_cache.used = local.idx_cache.used;
+        self.idx_cache.lru = local.idx_cache.lru;
 
         Ok(())
     }
 
     #[inline]
-    pub fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
-        let rel_path = Path::new(Self::ADDR_CACHE_DIR).join(id.to_rel_path());
-        self.addr_cache.get_all(&rel_path, false)
+    pub fn get_index(&mut self, rel_path: &Path) -> Result<Vec<u8>> {
+        self.idx_cache.get_all(&rel_path, false)
     }
 
     #[inline]
@@ -586,9 +588,8 @@ impl LocalCache {
         self.cache.get_all(rel_path, true)
     }
 
-    pub fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
-        let rel_path = Path::new(Self::ADDR_CACHE_DIR).join(id.to_rel_path());
-        self.addr_cache.insert(&rel_path, 0, addr, false)?;
+    pub fn put_index(&mut self, rel_path: &Path, index: &[u8]) -> Result<()> {
+        self.idx_cache.insert(&rel_path, 0, index, false)?;
         self.is_saved = false;
         Ok(())
     }
@@ -606,13 +607,6 @@ impl LocalCache {
 
     pub fn put_pinned(&mut self, rel_path: &Path, obj: &[u8]) -> Result<()> {
         self.cache.insert(rel_path, 0, obj, true)?;
-        self.is_saved = false;
-        Ok(())
-    }
-
-    pub fn del_address(&mut self, id: &Eid) -> Result<()> {
-        let rel_path = Path::new(Self::ADDR_CACHE_DIR).join(id.to_rel_path());
-        self.addr_cache.del(&rel_path)?;
         self.is_saved = false;
         Ok(())
     }
@@ -640,7 +634,7 @@ impl Debug for LocalCache {
             .field("update_seq", &self.update_seq)
             .field("is_saved", &self.is_saved)
             .field("cache", &self.cache)
-            .field("addr_cache", &self.addr_cache)
+            .field("idx_cache", &self.idx_cache)
             .finish()
     }
 }
@@ -662,17 +656,17 @@ mod tests {
         let k300 = 300 * 1000;
         let k400 = 400 * 1000;
         let k500 = 500 * 1000;
-        let rel_path = Path::new("data/aa/bb/aabb111");
+        let rel_path = Path::new("k300");
         let mut obj = vec![1u8; k300];
         obj[0] = 0;
         obj[1] = 1;
         obj[2] = 2;
-        let rel_path2 = Path::new("data/aa/bb/aabb222");
+        let rel_path2 = Path::new("k400");
         let mut obj2 = vec![2u8; k400];
         obj2[0] = 0;
         obj2[1] = 1;
         obj2[2] = 2;
-        let rel_path3 = Path::new("data/aa/bb/aabb333");
+        let rel_path3 = Path::new("k500");
         let mut obj3 = vec![3u8; k500];
         obj3[0] = 0;
         obj3[1] = 1;
@@ -680,35 +674,42 @@ mod tests {
         let not_exists = Path::new("not_exists");
 
         // check if repo exists
-        assert!(cache.repo_exists().unwrap());
+        assert!(!cache.repo_exists().unwrap());
 
         // test init
+        cache.connect().unwrap();
         cache.init().unwrap();
         assert_eq!(cache.cache.lru.len(), 1);
         let meta_len = cache.cache.used;
 
         cache.put(&rel_path, 0, &obj).unwrap();
         cache.put(&rel_path2, 0, &obj2).unwrap();
-        cache.put(&rel_path3, 0, &obj3).unwrap();
-        cache.put(&rel_path3, 0, &obj3).unwrap();
         assert_eq!(cache.cache.lru.len(), 3);
-        assert_eq!(cache.cache.used, meta_len + k400 + k500);
+        assert_eq!(cache.cache.used, meta_len + k300 + k400);
+
+        cache.put(&rel_path3, 0, &obj3).unwrap();
+        assert_eq!(cache.cache.lru.len(), 2);
+        assert_eq!(cache.cache.used, meta_len + k500);
+
+        cache.put(&rel_path3, 0, &obj3).unwrap();
+        assert_eq!(cache.cache.lru.len(), 2);
+        assert_eq!(cache.cache.used, meta_len + k500);
 
         // should get from remote
         let mut tgt = vec![0u8; obj.len()];
         cache.get(&rel_path, 0, &mut tgt).unwrap();
         assert_eq!(&tgt.len(), &obj.len());
         assert_eq!(&tgt[..5], &obj[..5]);
-        assert_eq!(cache.cache.lru.len(), 3);
-        assert_eq!(cache.cache.used, meta_len + k500 + k300);
+        assert_eq!(cache.cache.lru.len(), 2);
+        assert_eq!(cache.cache.used, meta_len + k300);
 
         // should get from local
-        let mut tgt = vec![0u8; obj3.len()];
-        cache.get(&rel_path3, 0, &mut tgt).unwrap();
-        assert_eq!(tgt.len(), obj3.len());
-        assert_eq!(&tgt[..5], &obj3[..5]);
-        assert_eq!(cache.cache.lru.len(), 3);
-        assert_eq!(cache.cache.used, meta_len + k500 + k300);
+        let mut tgt = vec![0u8; obj.len()];
+        cache.get(&rel_path, 0, &mut tgt).unwrap();
+        assert_eq!(tgt.len(), obj.len());
+        assert_eq!(&tgt[..5], &obj[..5]);
+        assert_eq!(cache.cache.lru.len(), 2);
+        assert_eq!(cache.cache.used, meta_len + k300);
 
         // get object not exists should fail
         let result = cache.get(&not_exists, 0, &mut tgt).unwrap_err();
@@ -716,31 +717,28 @@ mod tests {
 
         // delete object in local cache
         cache.del(&rel_path).unwrap();
-        assert_eq!(cache.cache.lru.len(), 2);
-        assert_eq!(cache.cache.used, meta_len + k500);
+        assert_eq!(cache.cache.lru.len(), 1);
+        assert_eq!(cache.cache.used, meta_len);
 
         // delete object again should succeed
         cache.del(&rel_path).unwrap();
 
         // delete object not in local cache
         cache.del(&rel_path2).unwrap();
-        assert_eq!(cache.cache.lru.len(), 2);
-        assert_eq!(cache.cache.used, meta_len + k500);
+        assert_eq!(cache.cache.lru.len(), 1);
+        assert_eq!(cache.cache.used, meta_len);
 
         // test flush
         cache.flush().unwrap();
-        assert_eq!(cache.cache.lru.len(), 2);
-        assert!(cache.cache.used > k500);
+        assert_eq!(cache.cache.lru.len(), 1);
 
         // re-open local cache with bigger capacity
         drop(cache);
         let mut cache =
             LocalCache::new(cache_type, 2, base, &repo_id, &access_key)
                 .unwrap();
+        cache.connect().unwrap();
         cache.open().unwrap();
-
-        // delete last object in local cache
-        cache.del(&rel_path3).unwrap();
 
         // delete object not exists should succeed
         cache.del(&not_exists).unwrap();
@@ -759,15 +757,17 @@ mod tests {
         let mut cache =
             LocalCache::new(cache_type, 1, base, &repo_id, &access_key)
                 .unwrap();
+        cache.connect().unwrap();
         cache.open().unwrap();
         if cache_type == CacheType::File {
-            assert_eq!(cache.cache.lru.len(), 4);
+            assert_eq!(cache.cache.lru.len(), 3);
         }
 
         // put partial object
         cache.put(&rel_path, 50, &obj).unwrap();
+        println!("{:#?}", cache);
         if cache_type == CacheType::File {
-            assert_eq!(cache.cache.lru.len(), 3);
+            assert_eq!(cache.cache.lru.len(), 1);
         }
     }
 

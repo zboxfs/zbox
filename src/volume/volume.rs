@@ -151,10 +151,17 @@ impl Volume {
         Ok(())
     }
 
-    /// Get volume info
-    #[inline]
+    // get volume info
     pub fn info(&self) -> Info {
-        self.info.clone()
+        let mut ret = self.info.clone();
+
+        // mask secrets in uri
+        if let Some(end) = ret.uri.find("@") {
+            let begin = ret.uri.find("://").unwrap() + 3;
+            ret.uri.replace_range(begin..end, "***");
+        }
+
+        ret
     }
 
     // get allocator from storage
@@ -371,17 +378,17 @@ mod tests {
         read_write_test(&vol);
         write_to_entity(&id, &buf, &vol);
 
-        let (info, wmark) = {
+        let (uri, _info, wmark) = {
             let vol = vol.read().unwrap();
             let storage = vol.storage.read().unwrap();
             let allocator_ref = storage.allocator();
             let allocator = allocator_ref.read().unwrap();
-            (vol.info(), allocator.block_wmark())
+            (vol.info.uri.clone(), vol.info(), allocator.block_wmark())
         };
 
         // re-open volume
         drop(vol);
-        let mut vol = Volume::new(&info.uri).unwrap();
+        let mut vol = Volume::new(&uri).unwrap();
         let buf = vol.open(&pwd).unwrap();
         assert_eq!(&buf[..], &payload[..]);
         {
