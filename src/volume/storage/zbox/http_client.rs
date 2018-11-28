@@ -1,4 +1,4 @@
-use std::fmt::{self, Debug};
+use std::fmt::{self, Debug, Display};
 use std::io::Write;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
@@ -9,6 +9,33 @@ use reqwest::{self, Client, Response, StatusCode};
 
 use base::{IntoRef, Version};
 use error::{Error, Result};
+
+// remote object cache control
+#[derive(Clone, Copy)]
+pub enum CacheControl {
+    Long,       // cache for 1 year
+    NoCache,
+}
+
+impl CacheControl {
+    // cache object max age, pushed to S3 object's Cache-Control header
+    // 1 year, 31536000 seconds
+    const MAX_AGE: u64 = 31_536_000;
+
+    #[inline]
+    fn header_value(&self) -> HeaderValue {
+        HeaderValue::from_str(&self.to_string()).unwrap()
+    }
+}
+
+impl Display for CacheControl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            CacheControl::Long => write!(f, "max-age={}", Self::MAX_AGE),
+            CacheControl::NoCache => write!(f, "no-cache"),
+        }
+    }
+}
 
 // check repo existsresponse
 #[derive(Deserialize)]
@@ -45,10 +72,6 @@ impl HttpClient {
 
     // default timeout, in secnods
     const DEFAULT_TIMEOUT: u64 = 30;
-
-    // cache object max age, pushed to S3 object's Cache-Control header
-    // 1 year, 31536000 seconds
-    const MAX_AGE: &'static str = "max-age=31536000";
 
     pub fn new(repo_id: &str, access_key: &str) -> Result<Self> {
         // default headers applied to all requests
@@ -100,7 +123,7 @@ impl HttpClient {
     // open remote session
     pub fn open_session(&mut self) -> Result<u64> {
         if self.retry_cnt == 0 {
-            debug!("open session first time");
+            debug!("open session 1st time");
         } else {
             debug!("open session, retry {}", self.retry_cnt);
         }
@@ -145,15 +168,16 @@ impl HttpClient {
 
     // send get request
     #[inline]
-    fn send_get_req(&self, url: &str) -> reqwest::Result<Response> {
+    fn send_get_req(&self, url: &str, cache_ctl: CacheControl) -> reqwest::Result<Response> {
         self.client
             .get(url)
             .bearer_auth(&self.session_token)
+            .header(header::CACHE_CONTROL, cache_ctl.header_value())
             .send()?
             .error_for_status()
     }
 
-    fn get_response(&mut self, rel_path: &Path) -> Result<Response> {
+    fn get_response(&mut self, rel_path: &Path, cache_ctl: CacheControl) -> Result<Response> {
         debug!("get {:?}", rel_path);
 
         let url = self.base_url.clone() + rel_path.to_str().unwrap();
@@ -167,7 +191,7 @@ impl HttpClient {
             }
         };
 
-        match self.send_get_req(&url) {
+        match self.send_get_req(&url, cache_ctl) {
             Ok(resp) => Ok(resp),
             Err(err) => {
                 // this could happen if remote time and local time isn't in
@@ -177,7 +201,7 @@ impl HttpClient {
                 if err.status() == Some(StatusCode::UNAUTHORIZED) {
                     self.open_session()?;
                     let mut resp =
-                        self.send_get_req(&url).map_err(translate_err)?;
+                        self.send_get_req(&url, cache_ctl).map_err(translate_err)?;
                     Ok(resp)
                 } else {
                     Err(translate_err(err))
@@ -186,8 +210,8 @@ impl HttpClient {
         }
     }
 
-    pub fn get(&mut self, rel_path: &Path) -> Result<Vec<u8>> {
-        let mut resp = self.get_response(rel_path)?;
+    pub fn get(&mut self, rel_path: &Path, cache_ctl: CacheControl) -> Result<Vec<u8>> {
+        let mut resp = self.get_response(rel_path, cache_ctl)?;
         let mut buf: Vec<u8> = Vec::new();
         resp.copy_to(&mut buf)?;
         Ok(buf)
@@ -197,8 +221,9 @@ impl HttpClient {
         &mut self,
         rel_path: &Path,
         w: &mut W,
+        cache_ctl: CacheControl,
     ) -> Result<usize> {
-        let mut resp = self.get_response(rel_path)?;
+        let mut resp = self.get_response(rel_path, cache_ctl)?;
         let copied = resp.copy_to(w)?;
         Ok(copied as usize)
     }
@@ -217,18 +242,18 @@ impl HttpClient {
         &self,
         url: &str,
         offset: usize,
+        cache_ctl: CacheControl,
         body: &[u8],
     ) -> reqwest::Result<()> {
         let offset_header = HeaderName::from_static("zbox-offset");
         let offset_value =
             HeaderValue::from_str(&format!("{}", offset)).unwrap();
-        let max_age_value = HeaderValue::from_str(Self::MAX_AGE).unwrap();
 
         self.client
             .put(url)
             .bearer_auth(&self.session_token)
             .header(offset_header, offset_value)
-            .header(header::CACHE_CONTROL, max_age_value)
+            .header(header::CACHE_CONTROL, cache_ctl.header_value())
             .body(body.to_owned())
             .send()?
             .error_for_status()
@@ -239,17 +264,18 @@ impl HttpClient {
         &mut self,
         rel_path: &Path,
         offset: usize,
+        cache_ctl: CacheControl,
         body: &[u8],
     ) -> Result<()> {
         debug!("put {:?}, offset {}, len {}", rel_path, offset, body.len());
 
         let url = self.base_url.clone() + rel_path.to_str().unwrap();
 
-        self.send_put_req(&url, offset, body).or_else(|err| {
+        self.send_put_req(&url, offset, cache_ctl, body).or_else(|err| {
             // try reopen remote session once if it is expired
             if err.status() == Some(StatusCode::UNAUTHORIZED) {
                 self.open_session()?;
-                self.send_put_req(&url, offset, body)?;
+                self.send_put_req(&url, offset, cache_ctl, body)?;
                 Ok(())
             } else {
                 Err(Error::from(err))
@@ -263,16 +289,17 @@ impl HttpClient {
 
     // send del request
     #[inline]
-    fn send_del_req(&self, url: &str) -> reqwest::Result<()> {
+    fn send_del_req(&self, url: &str, cache_ctl: CacheControl) -> reqwest::Result<()> {
         self.client
             .delete(url)
             .bearer_auth(&self.session_token)
+            .header(header::CACHE_CONTROL, cache_ctl.header_value())
             .send()?
             .error_for_status()
             .map(|_| ())
     }
 
-    pub fn del(&mut self, rel_path: &Path) -> Result<()> {
+    pub fn del(&mut self, rel_path: &Path, cache_ctl: CacheControl) -> Result<()> {
         debug!("del {:?}", rel_path);
 
         let url = self.base_url.clone() + rel_path.to_str().unwrap();
@@ -286,11 +313,11 @@ impl HttpClient {
             }
         };
 
-        self.send_del_req(&url).or_else(|err| {
+        self.send_del_req(&url, cache_ctl).or_else(|err| {
             // try reopen remote session once if it is expired
             if err.status() == Some(StatusCode::UNAUTHORIZED) {
                 self.open_session()?;
-                self.send_del_req(&url).or_else(ignore_not_found)
+                self.send_del_req(&url, cache_ctl).or_else(ignore_not_found)
             } else {
                 ignore_not_found(err)
             }
@@ -381,21 +408,23 @@ mod tests {
 
         // test put/get
         let rel_path = Path::new("data/xx/yy/test");
-        client.put(&rel_path, 0, &blks[..]).unwrap();
-        let dst = client.get(&rel_path).unwrap();
+        client.put(&rel_path, 0, CacheControl::NoCache, &blks[..]).unwrap();
+        let dst = client.get(&rel_path, CacheControl::NoCache).unwrap();
         assert_eq!(dst.len(), blks.len());
         assert_eq!(&dst[..], &blks[..]);
 
         // test partial put
-        client.put(&rel_path, 3, &blks[..]).unwrap();
-        let dst = client.get(&rel_path).unwrap();
+        let rel_path2 = Path::new("data/xx/yy/test2");
+        client.put(&rel_path2, 0, CacheControl::Long, &blks[..]).unwrap();
+        client.put(&rel_path2, 3, CacheControl::Long, &blks[..]).unwrap();
+        let dst = client.get(&rel_path2, CacheControl::Long).unwrap();
         assert_eq!(dst.len(), blks.len() + 3);
 
         // open session again should fail
         assert_eq!(client.open_session().unwrap_err(), Error::Opened);
 
         // test delete
-        client.del(&rel_path).unwrap();
+        client.del(&rel_path, CacheControl::NoCache).unwrap();
 
         // close session and open it again
         drop(client);
@@ -417,10 +446,10 @@ mod tests {
 
         client.open_session().unwrap();
         let rel_path = Path::new("test");
-        client.put(&rel_path, 0, &blks[..]).unwrap();
+        client.put(&rel_path, 0, CacheControl::NoCache, &blks[..]).unwrap();
 
         for _ in 0..3 {
-            client.put(&rel_path, 0, &blks[..]).unwrap();
+            client.put(&rel_path, 0, CacheControl::NoCache, &blks[..]).unwrap();
             thread::sleep(delay);
         }
     }

@@ -10,11 +10,9 @@ use base::crypto::{Crypto, HashKey, Key};
 use error::{Error, Result};
 use trans::Eid;
 
-const BASE_DIR: &'static str = "index";
-
 #[inline]
 fn bucket_rel_path(bucket_id: u8) -> PathBuf {
-    Path::new(BASE_DIR).join(format!("{:02x}", bucket_id))
+    PathBuf::from(format!("index/{:02x}", bucket_id))
 }
 
 #[derive(Clone, Deserialize, Serialize)]
