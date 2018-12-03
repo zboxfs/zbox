@@ -14,6 +14,12 @@ use libsqlite3_sys::Error as SqliteError;
 use redis::RedisError;
 
 #[cfg(feature = "storage-zbox")]
+use http::{Error as HttpError, StatusCode};
+
+#[cfg(feature = "storage-zbox")]
+use serde_json::Error as JsonError;
+
+#[cfg(feature = "storage-zbox-native")]
 use reqwest::Error as ReqwestError;
 
 /// The error type for operations with [`Repo`] and [`File`].
@@ -39,6 +45,7 @@ pub enum Error {
     Opened,
     WrongVersion,
     NoEntity,
+    NotInSync,
 
     InTrans,
     NotInTrans,
@@ -79,9 +86,13 @@ pub enum Error {
     Redis(RedisError),
 
     #[cfg(feature = "storage-zbox")]
-    Reqwest(ReqwestError),
+    Http(HttpError),
     #[cfg(feature = "storage-zbox")]
-    NotInSync,
+    HttpStatus(StatusCode),
+    #[cfg(feature = "storage-zbox")]
+    Json(JsonError),
+    #[cfg(feature = "storage-zbox-native")]
+    Reqwest(ReqwestError),
 }
 
 impl Display for Error {
@@ -104,6 +115,7 @@ impl Display for Error {
             Error::Opened => write!(f, "Volume is opened"),
             Error::WrongVersion => write!(f, "Version not match"),
             Error::NoEntity => write!(f, "Entity not found"),
+            Error::NotInSync => write!(f, "Repo is not in sync"),
 
             Error::InTrans => write!(f, "Already in transaction"),
             Error::NotInTrans => write!(f, "Not in transaction"),
@@ -144,9 +156,15 @@ impl Display for Error {
             Error::Redis(ref err) => err.fmt(f),
 
             #[cfg(feature = "storage-zbox")]
-            Error::Reqwest(ref err) => err.fmt(f),
+            Error::Http(ref err) => err.fmt(f),
             #[cfg(feature = "storage-zbox")]
-            Error::NotInSync => write!(f, "Repo is not in sync"),
+            Error::HttpStatus(status_code) => {
+                write!(f, "Http status {}", status_code)
+            }
+            #[cfg(feature = "storage-zbox")]
+            Error::Json(ref err) => err.fmt(f),
+            #[cfg(feature = "storage-zbox-native")]
+            Error::Reqwest(ref err) => err.fmt(f),
         }
     }
 }
@@ -171,6 +189,7 @@ impl StdError for Error {
             Error::Opened => "Volume is opened",
             Error::WrongVersion => "Version not match",
             Error::NoEntity => "Entity not found",
+            Error::NotInSync => "Repo is not in sync",
 
             Error::InTrans => "Already in transaction",
             Error::NotInTrans => "Not in transaction",
@@ -211,9 +230,13 @@ impl StdError for Error {
             Error::Redis(ref err) => err.description(),
 
             #[cfg(feature = "storage-zbox")]
-            Error::Reqwest(ref err) => err.description(),
+            Error::Http(ref err) => err.description(),
             #[cfg(feature = "storage-zbox")]
-            Error::NotInSync => "Repo is not in sync",
+            Error::HttpStatus(_) => "Http status error",
+            #[cfg(feature = "storage-zbox")]
+            Error::Json(ref err) => err.description(),
+            #[cfg(feature = "storage-zbox-native")]
+            Error::Reqwest(ref err) => err.description(),
         }
     }
 
@@ -231,6 +254,10 @@ impl StdError for Error {
             Error::Redis(ref err) => Some(err),
 
             #[cfg(feature = "storage-zbox")]
+            Error::Http(ref err) => Some(err),
+            #[cfg(feature = "storage-zbox")]
+            Error::Json(ref err) => Some(err),
+            #[cfg(feature = "storage-zbox-native")]
             Error::Reqwest(ref err) => Some(err),
 
             _ => None,
@@ -277,6 +304,20 @@ impl From<RedisError> for Error {
 }
 
 #[cfg(feature = "storage-zbox")]
+impl From<HttpError> for Error {
+    fn from(err: HttpError) -> Error {
+        Error::Http(err)
+    }
+}
+
+#[cfg(feature = "storage-zbox")]
+impl From<JsonError> for Error {
+    fn from(err: JsonError) -> Error {
+        Error::Json(err)
+    }
+}
+
+#[cfg(feature = "storage-zbox-native")]
 impl From<ReqwestError> for Error {
     fn from(err: ReqwestError) -> Error {
         Error::Reqwest(err)
@@ -303,6 +344,7 @@ impl Into<i32> for Error {
             Error::Opened => -1023,
             Error::WrongVersion => -1024,
             Error::NoEntity => -1025,
+            Error::NotInSync => -1026,
 
             Error::InTrans => -1030,
             Error::NotInTrans => -1031,
@@ -343,9 +385,13 @@ impl Into<i32> for Error {
             Error::Redis(_) => -2050,
 
             #[cfg(feature = "storage-zbox")]
-            Error::Reqwest(_) => -2060,
+            Error::Http(_) => -2060,
             #[cfg(feature = "storage-zbox")]
-            Error::NotInSync => -2061,
+            Error::HttpStatus(_) => -2061,
+            #[cfg(feature = "storage-zbox")]
+            Error::Json(_) => -2062,
+            #[cfg(feature = "storage-zbox-native")]
+            Error::Reqwest(_) => -2063,
         }
     }
 }
@@ -370,6 +416,7 @@ impl PartialEq for Error {
             (&Error::Opened, &Error::Opened) => true,
             (&Error::WrongVersion, &Error::WrongVersion) => true,
             (&Error::NoEntity, &Error::NoEntity) => true,
+            (&Error::NotInSync, &Error::NotInSync) => true,
 
             (&Error::InTrans, &Error::InTrans) => true,
             (&Error::NotInTrans, &Error::NotInTrans) => true,
@@ -412,11 +459,11 @@ impl PartialEq for Error {
             }
 
             #[cfg(feature = "storage-zbox")]
+            (&Error::HttpStatus(a), &Error::HttpStatus(b)) => a == b,
+            #[cfg(feature = "storage-zbox-native")]
             (&Error::Reqwest(ref a), &Error::Reqwest(ref b)) => {
                 a.status() == b.status()
             }
-            #[cfg(feature = "storage-zbox")]
-            (&Error::NotInSync, &Error::NotInSync) => true,
 
             (_, _) => false,
         }

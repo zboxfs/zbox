@@ -1,19 +1,22 @@
+use std::convert::AsRef;
 use std::fmt::{self, Debug, Display};
 use std::io::Write;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
-use std::time::Duration;
 
-use reqwest::header::{self, HeaderMap, HeaderName, HeaderValue};
-use reqwest::{self, Client, Response, StatusCode};
+use http::header::{
+    HeaderMap, HeaderName, HeaderValue, AUTHORIZATION, CACHE_CONTROL,
+};
+use http::{Error as HttpError, HttpTryFrom, StatusCode, Uri};
 
+use super::transport::{DummyTransport, Response, Transport};
 use base::{IntoRef, Version};
 use error::{Error, Result};
 
 // remote object cache control
 #[derive(Clone, Copy)]
 pub enum CacheControl {
-    Long,       // cache for 1 year
+    Long, // cache for 1 year
     NoCache,
 }
 
@@ -23,7 +26,7 @@ impl CacheControl {
     const MAX_AGE: u64 = 31_536_000;
 
     #[inline]
-    fn header_value(&self) -> HeaderValue {
+    fn to_header_value(&self) -> HeaderValue {
         HeaderValue::from_str(&self.to_string()).unwrap()
     }
 }
@@ -54,7 +57,58 @@ struct SessionOpenResp {
     ttl: u64,
 }
 
-/// HTTP client
+// http headers
+#[derive(Clone)]
+struct Headers {
+    map: HeaderMap,
+}
+
+impl Headers {
+    fn new() -> Self {
+        let mut map = HeaderMap::new();
+        let version_header = HeaderName::from_static("zbox-version");
+        let version_value =
+            HeaderValue::from_str(&Version::current_lib_version().to_string())
+                .unwrap();
+        map.insert(version_header, version_value);
+        Headers { map }
+    }
+
+    #[inline]
+    fn build(&self) -> Self {
+        self.clone()
+    }
+
+    #[inline]
+    fn bearer_auth(mut self, auth_key: &str) -> Self {
+        self.map
+            .insert(AUTHORIZATION, HeaderValue::from_str(auth_key).unwrap());
+        self
+    }
+
+    #[inline]
+    fn cache_control(mut self, cache_ctl: CacheControl) -> Self {
+        self.map.insert(CACHE_CONTROL, cache_ctl.to_header_value());
+        self
+    }
+
+    fn put_offset(mut self, offset: usize) -> Self {
+        let offset_header = HeaderName::from_static("zbox-offset");
+        let offset_value =
+            HeaderValue::from_str(&format!("{}", offset)).unwrap();
+        self.map.insert(offset_header, offset_value);
+        self
+    }
+}
+
+impl AsRef<HeaderMap> for Headers {
+    #[inline]
+    fn as_ref(&self) -> &HeaderMap {
+        &self.map
+    }
+}
+
+/// Zbox storage HTTP client
 pub struct HttpClient {
     base_url: String,
     access_key: String,
@@ -63,7 +117,8 @@ pub struct HttpClient {
     update_seq: u64,
     ttl: u64,
     retry_cnt: u64,
-    client: Client,
+    headers: Headers,
+    transport: Box<Transport>,
 }
 
 impl HttpClient {
@@ -74,19 +129,22 @@ impl HttpClient {
     const DEFAULT_TIMEOUT: u64 = 30;
 
     pub fn new(repo_id: &str, access_key: &str) -> Result<Self> {
-        // default headers applied to all requests
-        let mut headers = HeaderMap::new();
-        let version_header = HeaderName::from_static("zbox-version");
-        let version_value =
-            HeaderValue::from_str(&Version::current_lib_version().to_string())
-                .unwrap();
-        headers.insert(version_header, version_value);
+        // create transport
+        let transport: Box<Transport> = {
+            #[cfg(feature = "storage-zbox-native")]
+            {
+                Box::new(super::transport::native::NativeTransport::new(
+                    Self::DEFAULT_TIMEOUT,
+                )?)
+            }
 
-        // create http client
-        let client = Client::builder()
-            .default_headers(headers)
-            .timeout(Duration::from_secs(Self::DEFAULT_TIMEOUT))
-            .build()?;
+            #[cfg(feature = "storage-zbox-jni")]
+            {
+                Box::new(super::transport::jni::JniTransport::new(
+                    Self::DEFAULT_TIMEOUT,
+                )?)
+            }
+        };
 
         Ok(HttpClient {
             base_url: Self::ROOT_URL.to_owned() + repo_id + "/",
@@ -96,7 +154,8 @@ impl HttpClient {
             update_seq: 0,
             ttl: 0,
             retry_cnt: 0,
-            client,
+            headers: Headers::new(),
+            transport,
         })
     }
 
@@ -105,18 +164,34 @@ impl HttpClient {
         self.update_seq
     }
 
+    // set session is updated
+    #[inline]
+    fn set_updated(&mut self) {
+        if !self.is_updated {
+            self.is_updated = true;
+            self.update_seq += 1;
+        }
+    }
+
+    #[inline]
+    fn make_uri<P: AsRef<Path>>(&self, rel_path: P) -> Result<Uri> {
+        let s = self.base_url.clone() + rel_path.as_ref().to_str().unwrap();
+        HttpTryFrom::try_from(s)
+            .map_err(HttpError::from)
+            .map_err(Error::from)
+    }
+
     // check if repo exists
     pub fn repo_exists(&self) -> Result<bool> {
         debug!("check repo exists");
 
-        let url = self.base_url.clone() + "exists";
+        let uri = self.make_uri("exists")?;
+        let headers = self.headers.build().bearer_auth(&self.access_key);
         let mut resp = self
-            .client
-            .get(&url)
-            .bearer_auth(&self.access_key)
-            .send()?
+            .transport
+            .get(&uri, headers.as_ref())?
             .error_for_status()?;
-        let result: RepoExistsResp = resp.json()?;
+        let result: RepoExistsResp = resp.to_json()?;
         Ok(result.result)
     }
 
@@ -128,22 +203,25 @@ impl HttpClient {
             debug!("open session, retry {}", self.retry_cnt);
         }
 
-        let url = self.base_url.clone() + "open";
-        let mut resp = self
-            .client
-            .get(&url)
+        let uri = self.make_uri("open")?;
+        let headers = self
+            .headers
+            .build()
             .bearer_auth(&self.access_key)
-            .send()?
+            .cache_control(CacheControl::NoCache);
+        let mut resp = self
+            .transport
+            .get(&uri, headers.as_ref())?
             .error_for_status()
             .map_err(|err| {
                 // 409 conflict error means remote session is already opened
-                if err.status() == Some(StatusCode::CONFLICT) {
+                if err == Error::HttpStatus(StatusCode::CONFLICT) {
                     Error::Opened
                 } else {
-                    Error::from(err)
+                    err
                 }
             })?;
-        let result: SessionOpenResp = resp.json()?;
+        let result: SessionOpenResp = resp.to_json()?;
 
         // if we're re-opening session, but the local update sequence is not
         // equal to remote update sequence, this could happen when remote
@@ -153,7 +231,7 @@ impl HttpClient {
         }
 
         // save session status
-        self.session_token = result.session_token;
+        self.session_token = result.session_token.clone();
         self.update_seq = result.update_seq;
         self.ttl = result.ttl;
         self.retry_cnt += 1;
@@ -167,50 +245,59 @@ impl HttpClient {
     }
 
     // send get request
-    #[inline]
-    fn send_get_req(&self, url: &str, cache_ctl: CacheControl) -> reqwest::Result<Response> {
-        self.client
-            .get(url)
+    fn send_get_req(
+        &mut self,
+        uri: &Uri,
+        cache_ctl: CacheControl,
+    ) -> Result<Response> {
+        let headers = self
+            .headers
+            .build()
             .bearer_auth(&self.session_token)
-            .header(header::CACHE_CONTROL, cache_ctl.header_value())
-            .send()?
+            .cache_control(cache_ctl);
+        self.transport
+            .get(uri, headers.as_ref())?
             .error_for_status()
+            .map_err(|err| {
+                if err == Error::HttpStatus(StatusCode::NOT_FOUND) {
+                    Error::NotFound
+                } else {
+                    err
+                }
+            })
     }
 
-    fn get_response(&mut self, rel_path: &Path, cache_ctl: CacheControl) -> Result<Response> {
+    fn get_response(
+        &mut self,
+        rel_path: &Path,
+        cache_ctl: CacheControl,
+    ) -> Result<Response> {
         debug!("get {:?}", rel_path);
 
-        let url = self.base_url.clone() + rel_path.to_str().unwrap();
+        let uri = self.make_uri(rel_path)?;
 
-        // translate 404 error to NotFound error
-        let translate_err = |err: reqwest::Error| -> Error {
-            if err.status() == Some(StatusCode::NOT_FOUND) {
-                Error::NotFound
-            } else {
-                Error::from(err)
-            }
-        };
-
-        match self.send_get_req(&url, cache_ctl) {
+        match self.send_get_req(&uri, cache_ctl) {
             Ok(resp) => Ok(resp),
             Err(err) => {
                 // this could happen if remote time and local time isn't in
                 // sync, so if we got 401 unauthorized error, that means
                 // it is not expired locally but expired remotely, in this case
                 // we need to reopen the session, but just try once only
-                if err.status() == Some(StatusCode::UNAUTHORIZED) {
+                if err == Error::HttpStatus(StatusCode::UNAUTHORIZED) {
                     self.open_session()?;
-                    let mut resp =
-                        self.send_get_req(&url, cache_ctl).map_err(translate_err)?;
-                    Ok(resp)
+                    self.send_get_req(&uri, cache_ctl)
                 } else {
-                    Err(translate_err(err))
+                    Err(err)
                 }
             }
         }
     }
 
-    pub fn get(&mut self, rel_path: &Path, cache_ctl: CacheControl) -> Result<Vec<u8>> {
+    pub fn get(
+        &mut self,
+        rel_path: &Path,
+        cache_ctl: CacheControl,
+    ) -> Result<Vec<u8>> {
         let mut resp = self.get_response(rel_path, cache_ctl)?;
         let mut buf: Vec<u8> = Vec::new();
         resp.copy_to(&mut buf)?;
@@ -224,38 +311,25 @@ impl HttpClient {
         cache_ctl: CacheControl,
     ) -> Result<usize> {
         let mut resp = self.get_response(rel_path, cache_ctl)?;
-        let copied = resp.copy_to(w)?;
-        Ok(copied as usize)
-    }
-
-    // set session is updated
-    #[inline]
-    fn set_updated(&mut self) {
-        if !self.is_updated {
-            self.is_updated = true;
-            self.update_seq += 1;
-        }
+        resp.copy_to(w).map(|copied| copied as usize)
     }
 
     // send put request
     fn send_put_req(
         &self,
-        url: &str,
+        uri: &Uri,
         offset: usize,
         cache_ctl: CacheControl,
         body: &[u8],
-    ) -> reqwest::Result<()> {
-        let offset_header = HeaderName::from_static("zbox-offset");
-        let offset_value =
-            HeaderValue::from_str(&format!("{}", offset)).unwrap();
-
-        self.client
-            .put(url)
+    ) -> Result<()> {
+        let headers = self
+            .headers
+            .build()
             .bearer_auth(&self.session_token)
-            .header(offset_header, offset_value)
-            .header(header::CACHE_CONTROL, cache_ctl.header_value())
-            .body(body.to_owned())
-            .send()?
+            .cache_control(cache_ctl)
+            .put_offset(offset);
+        self.transport
+            .put(uri, headers.as_ref(), body)?
             .error_for_status()
             .map(|_| ())
     }
@@ -269,18 +343,18 @@ impl HttpClient {
     ) -> Result<()> {
         debug!("put {:?}, offset {}, len {}", rel_path, offset, body.len());
 
-        let url = self.base_url.clone() + rel_path.to_str().unwrap();
+        let uri = self.make_uri(rel_path)?;
 
-        self.send_put_req(&url, offset, cache_ctl, body).or_else(|err| {
-            // try reopen remote session once if it is expired
-            if err.status() == Some(StatusCode::UNAUTHORIZED) {
-                self.open_session()?;
-                self.send_put_req(&url, offset, cache_ctl, body)?;
-                Ok(())
-            } else {
-                Err(Error::from(err))
-            }
-        })?;
+        self.send_put_req(&uri, offset, cache_ctl, body)
+            .or_else(|err| {
+                // try reopen remote session once if it is expired
+                if err == Error::HttpStatus(StatusCode::UNAUTHORIZED) {
+                    self.open_session()?;
+                    self.send_put_req(&uri, offset, cache_ctl, body)
+                } else {
+                    Err(err)
+                }
+            })?;
 
         self.set_updated();
 
@@ -288,38 +362,42 @@ impl HttpClient {
     }
 
     // send del request
-    #[inline]
-    fn send_del_req(&self, url: &str, cache_ctl: CacheControl) -> reqwest::Result<()> {
-        self.client
-            .delete(url)
+    fn send_del_req(&self, uri: &Uri, cache_ctl: CacheControl) -> Result<()> {
+        let headers = self
+            .headers
+            .build()
             .bearer_auth(&self.session_token)
-            .header(header::CACHE_CONTROL, cache_ctl.header_value())
-            .send()?
+            .cache_control(cache_ctl);
+        self.transport
+            .delete(uri, headers.as_ref())?
             .error_for_status()
             .map(|_| ())
+            .or_else(|err| {
+                // ignore not found error
+                if err == Error::HttpStatus(StatusCode::NOT_FOUND) {
+                    Ok(())
+                } else {
+                    Err(err)
+                }
+            })
     }
 
-    pub fn del(&mut self, rel_path: &Path, cache_ctl: CacheControl) -> Result<()> {
+    pub fn del(
+        &mut self,
+        rel_path: &Path,
+        cache_ctl: CacheControl,
+    ) -> Result<()> {
         debug!("del {:?}", rel_path);
 
-        let url = self.base_url.clone() + rel_path.to_str().unwrap();
+        let uri = self.make_uri(rel_path)?;
 
-        // ignore not found error
-        let ignore_not_found = |err: reqwest::Error| -> Result<()> {
-            if err.status() == Some(StatusCode::NOT_FOUND) {
-                Ok(())
-            } else {
-                Err(Error::from(err))
-            }
-        };
-
-        self.send_del_req(&url, cache_ctl).or_else(|err| {
+        self.send_del_req(&uri, cache_ctl).or_else(|err| {
             // try reopen remote session once if it is expired
-            if err.status() == Some(StatusCode::UNAUTHORIZED) {
+            if err == Error::HttpStatus(StatusCode::UNAUTHORIZED) {
                 self.open_session()?;
-                self.send_del_req(&url, cache_ctl).or_else(ignore_not_found)
+                self.send_del_req(&uri, cache_ctl)
             } else {
-                ignore_not_found(err)
+                Err(err)
             }
         })?;
 
@@ -353,7 +431,8 @@ impl Default for HttpClient {
             update_seq: 0,
             ttl: 0,
             retry_cnt: 0,
-            client: Client::builder().build().unwrap(),
+            headers: Headers::new(),
+            transport: Box::new(DummyTransport),
         }
     }
 }
@@ -365,14 +444,10 @@ impl Drop for HttpClient {
         }
 
         // send close requests and ignore result
-        let url = self.base_url.clone() + "close";
-        match self
-            .client
-            .get(&url)
-            .bearer_auth(&self.session_token)
-            .send()
-        {
-            Ok(result) => match result.error_for_status() {
+        let uri = self.make_uri("close").unwrap();
+        let headers = self.headers.build().bearer_auth(&self.session_token);
+        match self.transport.get(&uri, headers.as_ref()) {
+            Ok(resp) => match resp.error_for_status() {
                 Ok(_) => debug!("session closed"),
                 Err(_) => warn!("close session failed"),
             },
@@ -408,15 +483,21 @@ mod tests {
 
         // test put/get
         let rel_path = Path::new("data/xx/yy/test");
-        client.put(&rel_path, 0, CacheControl::NoCache, &blks[..]).unwrap();
+        client
+            .put(&rel_path, 0, CacheControl::NoCache, &blks[..])
+            .unwrap();
         let dst = client.get(&rel_path, CacheControl::NoCache).unwrap();
         assert_eq!(dst.len(), blks.len());
         assert_eq!(&dst[..], &blks[..]);
 
         // test partial put
         let rel_path2 = Path::new("data/xx/yy/test2");
-        client.put(&rel_path2, 0, CacheControl::Long, &blks[..]).unwrap();
-        client.put(&rel_path2, 3, CacheControl::Long, &blks[..]).unwrap();
+        client
+            .put(&rel_path2, 0, CacheControl::Long, &blks[..])
+            .unwrap();
+        client
+            .put(&rel_path2, 3, CacheControl::Long, &blks[..])
+            .unwrap();
         let dst = client.get(&rel_path2, CacheControl::Long).unwrap();
         assert_eq!(dst.len(), blks.len() + 3);
 
@@ -446,10 +527,14 @@ mod tests {
 
         client.open_session().unwrap();
         let rel_path = Path::new("test");
-        client.put(&rel_path, 0, CacheControl::NoCache, &blks[..]).unwrap();
+        client
+            .put(&rel_path, 0, CacheControl::NoCache, &blks[..])
+            .unwrap();
 
         for _ in 0..3 {
-            client.put(&rel_path, 0, CacheControl::NoCache, &blks[..]).unwrap();
+            client
+                .put(&rel_path, 0, CacheControl::NoCache, &blks[..])
+                .unwrap();
             thread::sleep(delay);
         }
     }

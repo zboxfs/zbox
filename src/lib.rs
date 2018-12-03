@@ -147,6 +147,12 @@ extern crate libsqlite3_sys;
 extern crate redis;
 
 #[cfg(feature = "storage-zbox")]
+extern crate http;
+
+#[cfg(feature = "storage-zbox")]
+extern crate serde_json;
+
+#[cfg(feature = "storage-zbox-native")]
 extern crate reqwest;
 
 #[cfg(target_os = "android")]

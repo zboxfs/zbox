@@ -9,7 +9,7 @@ use linked_hash_map::LinkedHashMap;
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
-use super::http_client::{HttpClient, HttpClientRef, CacheControl};
+use super::http_client::{CacheControl, HttpClient, HttpClientRef};
 use super::vio;
 use base::crypto::{Crypto, Key};
 use base::utils;
@@ -163,18 +163,20 @@ impl CacheArea {
             .open(local_path)?;
         let mut client = self.client.write().unwrap();
 
-        client.get_to(rel_path, &mut file, cache_ctl).or_else(|err| {
-            // clean the download if it is failed
-            drop(file);
-            if vio::remove_file(local_path)
-                .map_err(|err| Error::from(err))
-                .and_then(|_| utils::remove_empty_parent_dir(local_path))
-                .is_err()
-            {
-                warn!("clean uncompleted download failed");
-            }
-            Err(err)
-        })
+        client
+            .get_to(rel_path, &mut file, cache_ctl)
+            .or_else(|err| {
+                // clean the download if it is failed
+                drop(file);
+                if vio::remove_file(local_path)
+                    .map_err(|err| Error::from(err))
+                    .and_then(|_| utils::remove_empty_parent_dir(local_path))
+                    .is_err()
+                {
+                    warn!("clean uncompleted download failed");
+                }
+                Err(err)
+            })
     }
 
     fn ensure_in_local(
@@ -210,8 +212,11 @@ impl CacheArea {
                 } else {
                     // object is not in cache, get it from remote and then add
                     // it to cache
-                    let saved_len =
-                        self.download_to_file(&local_path, rel_path, cache_ctl)?;
+                    let saved_len = self.download_to_file(
+                        &local_path,
+                        rel_path,
+                        cache_ctl,
+                    )?;
                     self.evict(rel_path, saved_len, is_pinned)
                 }
             }
@@ -247,7 +252,12 @@ impl CacheArea {
         Ok(())
     }
 
-    fn get_all(&mut self, rel_path: &Path, is_pinned: bool, cache_ctl: CacheControl) -> Result<Vec<u8>> {
+    fn get_all(
+        &mut self,
+        rel_path: &Path,
+        is_pinned: bool,
+        cache_ctl: CacheControl,
+    ) -> Result<Vec<u8>> {
         // make sure data is already in local cache
         self.ensure_in_local(rel_path, is_pinned, cache_ctl)?;
 
@@ -341,8 +351,11 @@ impl CacheArea {
                         file.write_all(obj)?;
                     } else {
                         // otherwise download and save from remote
-                        let saved_len =
-                            self.download_to_file(&local_path, rel_path, cache_ctl)?;
+                        let saved_len = self.download_to_file(
+                            &local_path,
+                            rel_path,
+                            cache_ctl,
+                        )?;
                         assert_eq!(saved_len, offset + obj.len());
                     }
                 }
@@ -487,12 +500,8 @@ impl LocalCache {
 
         let client = HttpClient::new(repo_id, access_key)?.into_ref();
         let cache = CacheArea::new(cache_type, cache_cap, base, &client);
-        let idx_cache = CacheArea::new(
-            cache_type,
-            idx_cache_cap,
-            base,
-            &client,
-        );
+        let idx_cache =
+            CacheArea::new(cache_type, idx_cache_cap, base, &client);
 
         Ok(LocalCache {
             cache_type,
@@ -589,7 +598,8 @@ impl LocalCache {
 
     #[inline]
     pub fn get_index(&mut self, rel_path: &Path) -> Result<Vec<u8>> {
-        self.idx_cache.get_all(&rel_path, false, CacheControl::NoCache)
+        self.idx_cache
+            .get_all(&rel_path, false, CacheControl::NoCache)
     }
 
     #[inline]
@@ -599,7 +609,8 @@ impl LocalCache {
         offset: usize,
         dst: &mut [u8],
     ) -> Result<()> {
-        self.cache.get_exact(rel_path, offset, dst, false, CacheControl::Long)
+        self.cache
+            .get_exact(rel_path, offset, dst, false, CacheControl::Long)
     }
 
     #[inline]
@@ -608,7 +619,13 @@ impl LocalCache {
     }
 
     pub fn put_index(&mut self, rel_path: &Path, index: &[u8]) -> Result<()> {
-        self.idx_cache.insert(&rel_path, 0, index, false, CacheControl::NoCache)?;
+        self.idx_cache.insert(
+            &rel_path,
+            0,
+            index,
+            false,
+            CacheControl::NoCache,
+        )?;
         self.is_saved = false;
         Ok(())
     }
@@ -619,13 +636,15 @@ impl LocalCache {
         offset: usize,
         obj: &[u8],
     ) -> Result<()> {
-        self.cache.insert(rel_path, offset, obj, false, CacheControl::Long)?;
+        self.cache
+            .insert(rel_path, offset, obj, false, CacheControl::Long)?;
         self.is_saved = false;
         Ok(())
     }
 
     pub fn put_pinned(&mut self, rel_path: &Path, obj: &[u8]) -> Result<()> {
-        self.cache.insert(rel_path, 0, obj, true, CacheControl::NoCache)?;
+        self.cache
+            .insert(rel_path, 0, obj, true, CacheControl::NoCache)?;
         self.is_saved = false;
         Ok(())
     }
