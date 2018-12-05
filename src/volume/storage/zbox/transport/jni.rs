@@ -80,7 +80,7 @@ fn do_request<'a>(
         Ok(resp_obj) => Ok(resp_obj.l().unwrap()),
         Err(err) => {
             // clear exception to prevent it from being thrown in Java side
-            //env.exception_clear().unwrap();
+            env.exception_clear().unwrap();
             Err(Error::from(err))
         }
     };
