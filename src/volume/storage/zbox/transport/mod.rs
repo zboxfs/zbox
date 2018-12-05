@@ -8,6 +8,7 @@ use std::io::{copy, Read, Write};
 
 use http::{HeaderMap, Response as HttpResponse, Uri};
 use serde::de::DeserializeOwned;
+use serde_json::from_slice;
 
 use error::{Error, Result};
 
@@ -35,7 +36,7 @@ impl Response {
         let body = self.inner.body_mut();
         let mut buf = Vec::new();
         body.read_to_end(&mut buf)?;
-        serde_json::from_slice(&buf).map_err(Error::from)
+        from_slice(&buf).map_err(Error::from)
     }
 
     #[inline]

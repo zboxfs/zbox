@@ -8,7 +8,7 @@ use super::{Response, Transport};
 use error::Result;
 
 // convert reqwest response to response
-fn into_response(resp: NativeResponse) -> Result<Response> {
+fn create_response(resp: NativeResponse) -> Result<Response> {
     let mut builder = HttpResponse::builder();
     builder.status(resp.status()).version(resp.version());
     for (name, value) in resp.headers() {
@@ -40,7 +40,7 @@ impl Transport for NativeTransport {
             .get(&uri.to_string())
             .headers(headers.clone())
             .send()?;
-        into_response(resp)
+        create_response(resp)
     }
 
     fn put(
@@ -55,7 +55,7 @@ impl Transport for NativeTransport {
             .headers(headers.clone())
             .body(body.to_owned())
             .send()?;
-        into_response(resp)
+        create_response(resp)
     }
 
     fn delete(&self, uri: &Uri, headers: &HeaderMap) -> Result<Response> {
@@ -64,6 +64,6 @@ impl Transport for NativeTransport {
             .delete(&uri.to_string())
             .headers(headers.clone())
             .send()?;
-        into_response(resp)
+        create_response(resp)
     }
 }

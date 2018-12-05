@@ -22,6 +22,9 @@ use serde_json::Error as JsonError;
 #[cfg(feature = "storage-zbox-native")]
 use reqwest::Error as ReqwestError;
 
+#[cfg(feature = "storage-zbox-jni")]
+use jni::errors::Error as JniError;
+
 /// The error type for operations with [`Repo`] and [`File`].
 ///
 /// [`Repo`]: struct.Repo.html
@@ -91,8 +94,12 @@ pub enum Error {
     HttpStatus(StatusCode),
     #[cfg(feature = "storage-zbox")]
     Json(JsonError),
+
     #[cfg(feature = "storage-zbox-native")]
     Reqwest(ReqwestError),
+
+    #[cfg(feature = "storage-zbox-jni")]
+    Jni(JniError),
 }
 
 impl Display for Error {
@@ -163,8 +170,12 @@ impl Display for Error {
             }
             #[cfg(feature = "storage-zbox")]
             Error::Json(ref err) => err.fmt(f),
+
             #[cfg(feature = "storage-zbox-native")]
             Error::Reqwest(ref err) => err.fmt(f),
+
+            #[cfg(feature = "storage-zbox-jni")]
+            Error::Jni(ref err) => err.fmt(f),
         }
     }
 }
@@ -235,8 +246,12 @@ impl StdError for Error {
             Error::HttpStatus(_) => "Http status error",
             #[cfg(feature = "storage-zbox")]
             Error::Json(ref err) => err.description(),
+
             #[cfg(feature = "storage-zbox-native")]
             Error::Reqwest(ref err) => err.description(),
+
+            #[cfg(feature = "storage-zbox-jni")]
+            Error::Jni(ref err) => err.description(),
         }
     }
 
@@ -257,8 +272,12 @@ impl StdError for Error {
             Error::Http(ref err) => Some(err),
             #[cfg(feature = "storage-zbox")]
             Error::Json(ref err) => Some(err),
+
             #[cfg(feature = "storage-zbox-native")]
             Error::Reqwest(ref err) => Some(err),
+
+            #[cfg(feature = "storage-zbox-jni")]
+            Error::Jni(ref err) => Some(err),
 
             _ => None,
         }
@@ -321,6 +340,13 @@ impl From<JsonError> for Error {
 impl From<ReqwestError> for Error {
     fn from(err: ReqwestError) -> Error {
         Error::Reqwest(err)
+    }
+}
+
+#[cfg(feature = "storage-zbox-jni")]
+impl From<JniError> for Error {
+    fn from(err: JniError) -> Error {
+        Error::Jni(err)
     }
 }
 
@@ -390,8 +416,12 @@ impl Into<i32> for Error {
             Error::HttpStatus(_) => -2061,
             #[cfg(feature = "storage-zbox")]
             Error::Json(_) => -2062,
+
             #[cfg(feature = "storage-zbox-native")]
             Error::Reqwest(_) => -2063,
+
+            #[cfg(feature = "storage-zbox-jni")]
+            Error::Jni(_) => -2064,
         }
     }
 }
@@ -460,9 +490,15 @@ impl PartialEq for Error {
 
             #[cfg(feature = "storage-zbox")]
             (&Error::HttpStatus(a), &Error::HttpStatus(b)) => a == b,
+
             #[cfg(feature = "storage-zbox-native")]
             (&Error::Reqwest(ref a), &Error::Reqwest(ref b)) => {
                 a.status() == b.status()
+            }
+
+            #[cfg(feature = "storage-zbox-jni")]
+            (&Error::Jni(ref a), &Error::Jni(ref b)) => {
+                a.kind().description() == b.kind().description()
             }
 
             (_, _) => false,

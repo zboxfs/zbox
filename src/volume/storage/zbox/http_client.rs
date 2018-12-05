@@ -79,10 +79,10 @@ impl Headers {
         self.clone()
     }
 
-    #[inline]
     fn bearer_auth(mut self, auth_key: &str) -> Self {
-        self.map
-            .insert(AUTHORIZATION, HeaderValue::from_str(auth_key).unwrap());
+        let value_str = format!("Bearer {}", auth_key);
+        let value = HeaderValue::from_str(&value_str).unwrap();
+        self.map.insert(AUTHORIZATION, value);
         self
     }
 
@@ -93,10 +93,9 @@ impl Headers {
     }
 
     fn put_offset(mut self, offset: usize) -> Self {
-        let offset_header = HeaderName::from_static("zbox-offset");
-        let offset_value =
-            HeaderValue::from_str(&format!("{}", offset)).unwrap();
-        self.map.insert(offset_header, offset_value);
+        let header = HeaderName::from_static("zbox-offset");
+        let value = HeaderValue::from_str(&format!("{}", offset)).unwrap();
+        self.map.insert(header, value);
         self
     }
 }

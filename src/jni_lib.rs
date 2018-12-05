@@ -2,11 +2,13 @@
 
 use std::error::Error as StdError;
 use std::io::{Read, Seek, SeekFrom, Write};
+use std::ptr::NonNull;
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use jni::objects::{JByteBuffer, JClass, JObject, JString, JValue};
 use jni::sys::{jboolean, jint, jlong, jobjectArray, JNI_FALSE};
-use jni::JNIEnv;
+use jni::{JNIEnv, JavaVM};
 
 use base::crypto::{Cipher, MemLimit, OpsLimit};
 use base::init_env;
@@ -25,6 +27,14 @@ const RUST_OBJ_FIELD: &'static str = "rustObj";
 // 103 - File
 // 104 - VersionReader
 const RUST_OBJID_FIELD: &'static str = "rustObjId";
+
+lazy_static! {
+    // global JVM pointer
+    pub static ref JVM: Mutex<JavaVM> = unsafe {
+        let p = NonNull::dangling();
+        Mutex::new(JavaVM::from_raw(p.as_ptr()).unwrap())
+    };
+}
 
 #[inline]
 fn u8_to_bool(a: u8) -> bool {
@@ -56,10 +66,16 @@ fn throw(env: &JNIEnv, err: &StdError) {
 
 #[no_mangle]
 pub extern "system" fn Java_io_zbox_Env_init(
-    _env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
 ) -> jint {
     init_env();
+
+    // save global JVM pointer
+    let jvm = env.get_java_vm().unwrap();
+    let mut jvm_ptr = JVM.lock().unwrap();
+    *jvm_ptr = jvm;
+
     0
 }
 
@@ -69,7 +85,9 @@ pub extern "system" fn Java_io_zbox_RustObject_jniSetRustObj(
     obj: JObject,
 ) {
     let cls = env.get_object_class(obj).unwrap();
-    let rust_obj_id = env.get_static_field(cls, RUST_OBJID_FIELD, "I").unwrap();
+    let cls = env.auto_local(*cls);
+    let rust_obj_id =
+        env.get_static_field(&cls, RUST_OBJID_FIELD, "I").unwrap();
     match rust_obj_id.i().unwrap() {
         100 => {
             let rust_obj = RepoOpener::new();
@@ -93,7 +111,9 @@ pub extern "system" fn Java_io_zbox_RustObject_jniTakeRustObj(
     obj: JObject,
 ) {
     let cls = env.get_object_class(obj).unwrap();
-    let rust_obj_id = env.get_static_field(cls, RUST_OBJID_FIELD, "I").unwrap();
+    let cls = env.auto_local(*cls);
+    let rust_obj_id =
+        env.get_static_field(&cls, RUST_OBJID_FIELD, "I").unwrap();
     match rust_obj_id.i().unwrap() {
         100 => unsafe {
             env.take_rust_field::<&str, RepoOpener>(obj, RUST_OBJ_FIELD)
@@ -575,6 +595,9 @@ fn metadata_to_jobject<'a>(env: &JNIEnv<'a>, meta: Metadata) -> JObject<'a> {
         JValue::Long(time_to_secs(meta.modified_at())),
     ).unwrap();
 
+    env.delete_local_ref(*ftype).unwrap();
+    env.delete_local_ref(ftype_obj.l().unwrap()).unwrap();
+
     meta_obj
 }
 
@@ -627,6 +650,11 @@ pub extern "system" fn Java_io_zbox_Repo_jniReadDir(
 
                 env.set_object_array_element(objs, i as i32, ent_obj)
                     .unwrap();
+
+                env.delete_local_ref(ent_obj).unwrap();
+                env.delete_local_ref(*path_str).unwrap();
+                env.delete_local_ref(*name_str).unwrap();
+                env.delete_local_ref(meta_obj).unwrap();
             }
 
             objs
@@ -697,6 +725,8 @@ fn versions_to_jobjects(
 
                 env.set_object_array_element(objs, i as i32, ver_obj)
                     .unwrap();
+
+                env.delete_local_ref(ver_obj).unwrap();
             }
 
             objs
