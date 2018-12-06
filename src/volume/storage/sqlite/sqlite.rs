@@ -299,6 +299,12 @@ impl Storable for SqliteStorage {
         self.prepare_stmts()
     }
 
+    #[inline]
+    fn close(&mut self) -> Result<()> {
+        self.db = ptr::null_mut();
+        Ok(())
+    }
+
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
         let stmt = self.stmts[0];
         reset_stmt(stmt)?;

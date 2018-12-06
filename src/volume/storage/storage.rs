@@ -164,6 +164,11 @@ impl Storage {
     }
 
     #[inline]
+    pub fn close(&mut self) -> Result<()> {
+        self.depot.close()
+    }
+
+    #[inline]
     pub fn allocator(&self) -> AllocatorRef {
         self.allocator.clone()
     }

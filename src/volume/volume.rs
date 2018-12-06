@@ -124,6 +124,13 @@ impl Volume {
         Ok(super_blk.body.payload.clone())
     }
 
+    /// Close volume
+    #[inline]
+    pub fn close(&mut self) -> Result<()> {
+        let mut storage = self.storage.write().unwrap();
+        storage.close()
+    }
+
     /// Check specified volume if it exists
     pub fn exists(&self) -> Result<bool> {
         let storage = self.storage.read().unwrap();

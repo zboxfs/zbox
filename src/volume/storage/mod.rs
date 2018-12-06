@@ -42,6 +42,9 @@ pub trait Storable: Debug + Send + Sync {
     // open a storage
     fn open(&mut self, crypto: Crypto, key: Key) -> Result<()>;
 
+    // close a storage
+    fn close(&mut self) -> Result<()>;
+
     // super block operations
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>>;
     fn put_super_block(&mut self, super_blk: &[u8], suffix: u64) -> Result<()>;

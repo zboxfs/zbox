@@ -136,6 +136,11 @@ impl Storable for FaultyStorage {
         Ok(())
     }
 
+    #[inline]
+    fn close(&mut self) -> Result<()> {
+        Ok(())
+    }
+
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
         self.ctlr.make_random_error()?;
 

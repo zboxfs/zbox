@@ -19,9 +19,9 @@ fn dir_create_st() {
     assert!(repo.create_dir("/xxx/yyy").is_err());
     repo.create_dir("/dir2").unwrap();
     repo.create_dir("/dir3").unwrap();
-    assert!(repo.is_dir("/dir"));
-    assert!(repo.is_dir("/dir2"));
-    assert!(repo.is_dir("/dir3"));
+    assert!(repo.is_dir("/dir").unwrap());
+    assert!(repo.is_dir("/dir2").unwrap());
+    assert!(repo.is_dir("/dir3").unwrap());
 
     // #2: test create_dir_all
     repo.create_dir_all("/xxx/yyy").unwrap();
@@ -135,9 +135,9 @@ fn dir_rename() {
     repo.create_dir_all("/0/4").unwrap();
     repo.create_dir("/17").unwrap();
     repo.rename("/17", "/0/4").unwrap();
-    assert!(!repo.path_exists("/17"));
-    assert!(repo.path_exists("/0/3"));
-    assert!(repo.path_exists("/0/4"));
+    assert!(!repo.path_exists("/17").unwrap());
+    assert!(repo.path_exists("/0/3").unwrap());
+    assert!(repo.path_exists("/0/4").unwrap());
 
     // rename dir to non-empty dir
     repo.create_dir_all("/1/2").unwrap();
@@ -150,9 +150,9 @@ fn dir_rename() {
     repo.create_dir_all("/2/3").unwrap();
     repo.create_dir("/19").unwrap();
     repo.rename("/2", "/19").unwrap();
-    assert!(!repo.path_exists("/2"));
-    assert!(repo.path_exists("/19/2"));
-    assert!(repo.path_exists("/19/3"));
+    assert!(!repo.path_exists("/2").unwrap());
+    assert!(repo.path_exists("/19/2").unwrap());
+    assert!(repo.path_exists("/19/3").unwrap());
 
     // rename dir to root
     repo.create_dir("/4").unwrap();

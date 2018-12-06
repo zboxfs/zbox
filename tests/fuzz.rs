@@ -141,7 +141,7 @@ impl Testable for Tester {
                             // check the file if is created in repo by
                             // turnining off random error temporarily
                             fuzzer.ctlr.turn_off();
-                            if fuzzer.repo_handle.repo.path_exists(&path) {
+                            if fuzzer.repo_handle.repo.path_exists(&path).unwrap() {
                                 // if the file is created, do the same to
                                 // control group by adding an empty file
                                 ctlgrp.add_file(&path, &fuzzer.data[..0]);
@@ -413,7 +413,7 @@ impl Testable for Tester {
             }
 
             Action::Reopen => {
-                let info = fuzzer.repo_handle.repo.info();
+                let info = fuzzer.repo_handle.repo.info().unwrap();
                 let result = skip_faulty!(
                     RepoOpener::new().open(info.uri(), Fuzzer::PWD)
                 );

@@ -97,6 +97,11 @@ impl Storable for FileStorage {
         Ok(())
     }
 
+    #[inline]
+    fn close(&mut self) -> Result<()> {
+        Ok(())
+    }
+
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
         let path = self.super_block_path(suffix);
         let mut buf = Vec::new();

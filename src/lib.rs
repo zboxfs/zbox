@@ -81,7 +81,7 @@
 //!
 //! let path = Path::new("/foo/bar");
 //! repo.create_dir_all(&path).unwrap();
-//! assert!(repo.is_dir(path.parent().unwrap()));
+//! assert!(repo.is_dir(path.parent().unwrap()).is_ok());
 //! ```
 //!
 //! [`std::fs`]: https://doc.rust-lang.org/std/fs/index.html

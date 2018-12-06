@@ -111,6 +111,12 @@ impl Storable for RedisStorage {
         Ok(())
     }
 
+    #[inline]
+    fn close(&mut self) -> Result<()> {
+        self.conn.take();
+        Ok(())
+    }
+
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
         let key = super_blk_key(suffix);
         self.get_bytes(&key)

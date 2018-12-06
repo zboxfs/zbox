@@ -192,6 +192,23 @@ impl Fs {
         })
     }
 
+    /// Close file system
+    pub fn close(&mut self) -> Result<()> {
+        let mut shutter = self.shutter.write().unwrap();
+        if shutter.is_closed() {
+            return Ok(());
+        }
+
+        // close volume
+        let mut vol = self.vol.write().unwrap();
+        vol.close()?;
+
+        shutter.close();
+        debug!("repo closed");
+
+        Ok(())
+    }
+
     #[inline]
     pub fn is_read_only(&self) -> bool {
         self.read_only
@@ -541,9 +558,6 @@ impl Fs {
 
 impl Drop for Fs {
     fn drop(&mut self) {
-        let mut shutter = self.shutter.write().unwrap();
-        shutter.close();
-
-        debug!("repo closed");
+        let _ = self.close();
     }
 }

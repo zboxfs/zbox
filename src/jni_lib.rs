@@ -302,6 +302,24 @@ pub extern "system" fn Java_io_zbox_Repo_jniExists(
 }
 
 #[no_mangle]
+pub extern "system" fn Java_io_zbox_Repo_jniClose(
+    env: JNIEnv,
+    obj: JObject,
+) {
+    let mut repo = unsafe {
+        env.get_rust_field::<&str, Repo>(obj, RUST_OBJ_FIELD)
+            .unwrap()
+    };
+
+    match repo.close() {
+        Ok(_) => {},
+        Err(ref err) => {
+            throw(&env, err);
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_io_zbox_Repo_jniInfo<'a>(
     env: JNIEnv<'a>,
     obj: JObject,
@@ -310,7 +328,14 @@ pub extern "system" fn Java_io_zbox_Repo_jniInfo<'a>(
         env.get_rust_field::<&str, Repo>(obj, RUST_OBJ_FIELD)
             .unwrap()
     };
+
     let info = repo.info();
+    if let Err(ref err) = info {
+        throw(&env, err);
+        return JObject::null();
+    }
+    let info = info.unwrap();
+
     let info_obj = env.new_object("io/zbox/RepoInfo", "()V", &[]).unwrap();
 
     let vol_id = env
@@ -443,7 +468,13 @@ pub extern "system" fn Java_io_zbox_Repo_jniPathExists(
             .unwrap()
     };
     let path: String = env.get_string(path).unwrap().into();
-    repo.path_exists(&path) as u8
+    match repo.path_exists(&path) {
+        Ok(result) => result as u8,
+        Err(ref err) => {
+            throw(&env, err);
+            0
+        }
+    }
 }
 
 #[no_mangle]
@@ -457,7 +488,13 @@ pub extern "system" fn Java_io_zbox_Repo_jniIsFile(
             .unwrap()
     };
     let path: String = env.get_string(path).unwrap().into();
-    repo.is_file(&path) as u8
+    match repo.is_file(&path) {
+        Ok(result) => result as u8,
+        Err(ref err) => {
+            throw(&env, err);
+            0
+        }
+    }
 }
 
 #[no_mangle]
@@ -471,7 +508,13 @@ pub extern "system" fn Java_io_zbox_Repo_jniIsDir(
             .unwrap()
     };
     let path: String = env.get_string(path).unwrap().into();
-    repo.is_dir(&path) as u8
+    match repo.is_dir(&path) {
+        Ok(result) => result as u8,
+        Err(ref err) => {
+            throw(&env, err);
+            0
+        }
+    }
 }
 
 #[no_mangle]

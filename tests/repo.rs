@@ -38,7 +38,7 @@ fn repo_oper() {
         .open(&path, &pwd)
         .unwrap();
     let repo = RepoOpener::new().open(&path, &pwd).unwrap();
-    let info = repo.info();
+    let info = repo.info().unwrap();
     assert_eq!(info.ops_limit(), OpsLimit::Moderate);
     assert_eq!(info.mem_limit(), MemLimit::Moderate);
     assert_eq!(info.cipher(), Cipher::Aes);
@@ -58,7 +58,7 @@ fn repo_oper() {
         RepoOpener::new().create(true).open(&path, &pwd).unwrap();
     }
     let mut repo = RepoOpener::new().read_only(true).open(&path, &pwd).unwrap();
-    let info = repo.info();
+    let info = repo.info().unwrap();
     assert!(info.is_read_only());
     assert_eq!(repo.create_dir("/dir"), Err(Error::ReadOnly));
 
@@ -76,13 +76,13 @@ fn repo_oper() {
             OpsLimit::Moderate,
             MemLimit::Interactive,
         ).unwrap();
-        let info = repo.info();
+        let info = repo.info().unwrap();
         assert_eq!(info.ops_limit(), OpsLimit::Moderate);
         assert_eq!(info.mem_limit(), MemLimit::Interactive);
     }
     RepoOpener::new().open(&path, &pwd).is_err();
     let repo = RepoOpener::new().open(&path, &new_pwd).unwrap();
-    let info = repo.info();
+    let info = repo.info().unwrap();
     assert_eq!(info.ops_limit(), OpsLimit::Moderate);
     assert_eq!(info.mem_limit(), MemLimit::Interactive);
 
@@ -153,6 +153,31 @@ fn repo_oper() {
     // case #8: test file read/write after repo is closed
     {
         let path = base.clone() + "/repo8";
+        let mut repo = RepoOpener::new()
+            .create_new(true)
+            .version_limit(1)
+            .open(&path, &pwd)
+            .unwrap();
+
+        let mut f = OpenOptions::new()
+            .create(true)
+            .open(&mut repo, "/file")
+            .unwrap();
+
+        // close twice should be same
+        repo.close().unwrap();
+        repo.close().unwrap();
+
+        let buf = [1u8, 2u8, 3u8];
+        assert_eq!(f.write_once(&buf[..]).unwrap_err(), Error::Closed);
+        assert_eq!(f.metadata().unwrap_err(), Error::Closed);
+        assert_eq!(f.history().unwrap_err(), Error::Closed);
+        assert_eq!(f.curr_version().unwrap_err(), Error::Closed);
+    }
+
+    // case #9: test file read/write after repo is dropped
+    {
+        let path = base.clone() + "/repo9";
         let mut repo = RepoOpener::new()
             .create_new(true)
             .version_limit(1)
