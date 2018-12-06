@@ -660,7 +660,7 @@ impl Repo {
     pub fn close(&mut self) -> Result<()> {
         match self.fs.take() {
             Some(mut fs) => fs.close(),
-            None => Ok(())
+            None => Ok(()),
         }
     }
 
@@ -698,7 +698,7 @@ impl Repo {
             Some(ref mut fs) => {
                 let cost = Cost::new(ops_limit, mem_limit);
                 fs.reset_password(old_pwd, new_pwd, cost)
-            },
+            }
             None => Err(Error::Closed),
         }
     }
@@ -708,7 +708,9 @@ impl Repo {
     /// `path` must be an absolute path.
     pub fn path_exists<P: AsRef<Path>>(&self, path: P) -> Result<bool> {
         match self.fs {
-            Some(ref fs) => Ok(fs.resolve(path.as_ref()).map(|_| true).unwrap_or(false)),
+            Some(ref fs) => {
+                Ok(fs.resolve(path.as_ref()).map(|_| true).unwrap_or(false))
+            }
             None => Err(Error::Closed),
         }
     }
@@ -719,14 +721,12 @@ impl Repo {
     /// `path` must be an absolute path.
     pub fn is_file<P: AsRef<Path>>(&self, path: P) -> Result<bool> {
         match self.fs {
-            Some(ref fs) => {
-                match fs.resolve(path.as_ref()) {
-                    Ok(fnode_ref) => {
-                        let fnode = fnode_ref.read().unwrap();
-                        Ok(fnode.is_file())
-                    }
-                    Err(_) => Ok(false),
+            Some(ref fs) => match fs.resolve(path.as_ref()) {
+                Ok(fnode_ref) => {
+                    let fnode = fnode_ref.read().unwrap();
+                    Ok(fnode.is_file())
                 }
+                Err(_) => Ok(false),
             },
             None => Err(Error::Closed),
         }
@@ -738,14 +738,12 @@ impl Repo {
     /// `path` must be an absolute path.
     pub fn is_dir<P: AsRef<Path>>(&self, path: P) -> Result<bool> {
         match self.fs {
-            Some(ref fs) => {
-                match fs.resolve(path.as_ref()) {
-                    Ok(fnode_ref) => {
-                        let fnode = fnode_ref.read().unwrap();
-                        Ok(fnode.is_dir())
-                    }
-                    Err(_) => Ok(false),
+            Some(ref fs) => match fs.resolve(path.as_ref()) {
+                Ok(fnode_ref) => {
+                    let fnode = fnode_ref.read().unwrap();
+                    Ok(fnode.is_dir())
                 }
+                Err(_) => Ok(false),
             },
             None => Err(Error::Closed),
         }
@@ -763,7 +761,10 @@ impl Repo {
         if self.fs.is_none() {
             return Err(Error::Closed);
         }
-        OpenOptions::new().create(true).truncate(true).open(self, path)
+        OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .open(self, path)
     }
 
     /// Attempts to open a file in read-only mode.
@@ -806,11 +807,9 @@ impl Repo {
     #[inline]
     pub fn create_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         match self.fs {
-            Some(ref mut fs) => fs.create_fnode(
-                    path.as_ref(),
-                    FileType::Dir,
-                    Options::default(),
-                ).map(|_| ()),
+            Some(ref mut fs) => fs
+                .create_fnode(path.as_ref(), FileType::Dir, Options::default())
+                .map(|_| ()),
             None => Err(Error::Closed),
         }
     }

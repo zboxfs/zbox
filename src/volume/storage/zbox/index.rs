@@ -10,8 +10,10 @@ use base::crypto::{Crypto, HashKey, Key};
 use error::{Error, Result};
 use trans::Eid;
 
+// get bucket relative path from bucket id, 8 buckets in total
 #[inline]
-fn bucket_rel_path(bucket_id: u8) -> PathBuf {
+fn bucket_rel_path(mut bucket_id: u8) -> PathBuf {
+    bucket_id %= 8;
     PathBuf::from(format!("index/{:02x}", bucket_id))
 }
 
