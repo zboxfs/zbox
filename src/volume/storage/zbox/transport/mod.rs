@@ -1,3 +1,6 @@
+#[cfg(feature = "storage-zbox-faulty")]
+pub(super) mod faulty;
+
 #[cfg(feature = "storage-zbox-native")]
 pub(super) mod native;
 
@@ -52,14 +55,14 @@ pub trait Transport: Send + Sync {
 
     // HTTP PUT request
     fn put(
-        &self,
+        &mut self,
         uri: &Uri,
         headers: &HeaderMap,
         body: &[u8],
     ) -> Result<Response>;
 
     // HTTP DELETE request
-    fn delete(&self, url: &Uri, headers: &HeaderMap) -> Result<Response>;
+    fn delete(&mut self, url: &Uri, headers: &HeaderMap) -> Result<Response>;
 }
 
 /// Dummy transport
@@ -71,7 +74,7 @@ impl Transport for DummyTransport {
     }
 
     fn put(
-        &self,
+        &mut self,
         _uri: &Uri,
         _headers: &HeaderMap,
         _body: &[u8],
@@ -79,7 +82,7 @@ impl Transport for DummyTransport {
         unimplemented!()
     }
 
-    fn delete(&self, _url: &Uri, _headers: &HeaderMap) -> Result<Response> {
+    fn delete(&mut self, _url: &Uri, _headers: &HeaderMap) -> Result<Response> {
         unimplemented!()
     }
 }

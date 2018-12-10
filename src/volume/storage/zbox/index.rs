@@ -12,8 +12,7 @@ use trans::Eid;
 
 // get bucket relative path from bucket id, 8 buckets in total
 #[inline]
-fn bucket_rel_path(mut bucket_id: u8) -> PathBuf {
-    bucket_id %= 8;
+fn bucket_rel_path(bucket_id: u8) -> PathBuf {
     PathBuf::from(format!("index/{:02x}", bucket_id))
 }
 
@@ -129,7 +128,7 @@ impl IndexMgr {
         id: &Eid,
         local_cache: &mut LocalCache,
     ) -> Result<&mut Bucket> {
-        let bucket_id = id[0];
+        let bucket_id = id[0] % 8;
 
         // if bucket is not loaded, load it from local cache
         if !self.buckets.contains_key(&bucket_id) {

@@ -44,7 +44,7 @@ impl Transport for NativeTransport {
     }
 
     fn put(
-        &self,
+        &mut self,
         uri: &Uri,
         headers: &HeaderMap,
         body: &[u8],
@@ -58,7 +58,7 @@ impl Transport for NativeTransport {
         create_response(resp)
     }
 
-    fn delete(&self, uri: &Uri, headers: &HeaderMap) -> Result<Response> {
+    fn delete(&mut self, uri: &Uri, headers: &HeaderMap) -> Result<Response> {
         let resp = self
             .client
             .delete(&uri.to_string())

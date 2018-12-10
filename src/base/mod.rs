@@ -15,7 +15,10 @@ pub use self::version::Version;
 use std::sync::{Arc, Once, RwLock, ONCE_INIT};
 
 #[cfg(target_os = "android")]
-use android_log;
+use log::Level;
+
+#[cfg(target_os = "android")]
+use android_logger::{self, Filter};
 
 #[cfg(not(target_os = "android"))]
 use env_logger;
@@ -31,7 +34,13 @@ pub fn init_env() {
     INIT.call_once(|| {
         #[cfg(target_os = "android")]
         {
-            android_log::init("ZboxFS").unwrap();
+            android_logger::init_once(
+                Filter::default()
+                    .with_min_level(Level::Trace)
+                    .with_allowed_module_path("zbox::fs::fs")
+                    .with_allowed_module_path("zbox::trans::txmgr"),
+                Some("zboxfs"),
+            );
         }
         #[cfg(not(target_os = "android"))]
         {

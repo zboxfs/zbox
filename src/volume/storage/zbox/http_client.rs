@@ -130,6 +130,12 @@ impl HttpClient {
     pub fn new(repo_id: &str, access_key: &str) -> Result<Self> {
         // create transport
         let transport: Box<Transport> = {
+            #[cfg(feature = "storage-zbox-faulty")]
+            {
+                Box::new(super::transport::faulty::FaultyTransport::new(
+                    Self::DEFAULT_TIMEOUT,
+                )?)
+            }
             #[cfg(feature = "storage-zbox-native")]
             {
                 Box::new(super::transport::native::NativeTransport::new(
@@ -328,7 +334,7 @@ impl HttpClient {
 
     // send put request
     fn send_put_req(
-        &self,
+        &mut self,
         uri: &Uri,
         offset: usize,
         cache_ctl: CacheControl,
@@ -374,7 +380,11 @@ impl HttpClient {
     }
 
     // send del request
-    fn send_del_req(&self, uri: &Uri, cache_ctl: CacheControl) -> Result<()> {
+    fn send_del_req(
+        &mut self,
+        uri: &Uri,
+        cache_ctl: CacheControl,
+    ) -> Result<()> {
         let headers = self
             .headers
             .build()

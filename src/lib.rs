@@ -152,6 +152,10 @@ extern crate http;
 #[cfg(feature = "storage-zbox")]
 extern crate serde_json;
 
+#[cfg(feature = "storage-zbox-faulty")]
+#[macro_use]
+extern crate lazy_static;
+
 #[cfg(feature = "storage-zbox-native")]
 extern crate reqwest;
 
@@ -166,4 +170,4 @@ extern crate lazy_static;
 pub mod jni_lib;
 
 #[cfg(target_os = "android")]
-extern crate android_log;
+extern crate android_logger;

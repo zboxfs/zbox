@@ -65,14 +65,14 @@ fn do_request<'a>(
 
     // request function signature
     let sig = if body.is_some() {
-        "(Ljava/net/URL;Ljava/util/HashMap;[B)Lio/zbox/transport/Response;"
+        "(Ljava/net/URL;Ljava/util/HashMap;[B)Lio/zbox/fs/transport/Response;"
     } else {
-        "(Ljava/net/URL;Ljava/util/HashMap;)Lio/zbox/transport/Response;"
+        "(Ljava/net/URL;Ljava/util/HashMap;)Lio/zbox/fs/transport/Response;"
     };
 
     // call request function on Java side
     let ret = match env.call_static_method(
-        "io/zbox/transport/HttpTransport",
+        "io/zbox/fs/transport/HttpTransport",
         method,
         sig,
         &params,
@@ -124,7 +124,7 @@ impl JniTransport {
         {
             let env = ret.get_jni_env()?;
             env.call_static_method(
-                "io/zbox/transport/HttpTransport",
+                "io/zbox/fs/transport/HttpTransport",
                 "init",
                 "(I)V",
                 &[JValue::Int(timeout as i32)],
@@ -180,7 +180,7 @@ impl Transport for JniTransport {
     }
 
     fn put(
-        &self,
+        &mut self,
         uri: &Uri,
         headers: &HeaderMap,
         body: &[u8],
@@ -210,7 +210,7 @@ impl Transport for JniTransport {
         create_response(status, Vec::new())
     }
 
-    fn delete(&self, uri: &Uri, headers: &HeaderMap) -> Result<Response> {
+    fn delete(&mut self, uri: &Uri, headers: &HeaderMap) -> Result<Response> {
         let env = self.get_jni_env()?;
 
         // call delete() on Java side

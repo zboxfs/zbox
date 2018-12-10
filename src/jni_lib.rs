@@ -61,11 +61,11 @@ fn check_version_limit(limit: jint) -> jint {
 
 #[inline]
 fn throw(env: &JNIEnv, err: &StdError) {
-    let _ = env.throw_new("io/zbox/ZboxException", err.description());
+    let _ = env.throw_new("io/zbox/fs/ZboxException", err.description());
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Env_init(
+pub extern "system" fn Java_io_zbox_fs_Env_init(
     env: JNIEnv,
     _class: JClass,
 ) -> jint {
@@ -80,7 +80,7 @@ pub extern "system" fn Java_io_zbox_Env_init(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_RustObject_jniSetRustObj(
+pub extern "system" fn Java_io_zbox_fs_RustObject_jniSetRustObj(
     env: JNIEnv,
     obj: JObject,
 ) {
@@ -106,7 +106,7 @@ pub extern "system" fn Java_io_zbox_RustObject_jniSetRustObj(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_RustObject_jniTakeRustObj(
+pub extern "system" fn Java_io_zbox_fs_RustObject_jniTakeRustObj(
     env: JNIEnv,
     obj: JObject,
 ) {
@@ -140,7 +140,7 @@ pub extern "system" fn Java_io_zbox_RustObject_jniTakeRustObj(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_RepoOpener_jniOpsLimit(
+pub extern "system" fn Java_io_zbox_fs_RepoOpener_jniOpsLimit(
     env: JNIEnv,
     obj: JObject,
     limit: jint,
@@ -153,7 +153,7 @@ pub extern "system" fn Java_io_zbox_RepoOpener_jniOpsLimit(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_RepoOpener_jniMemLimit(
+pub extern "system" fn Java_io_zbox_fs_RepoOpener_jniMemLimit(
     env: JNIEnv,
     obj: JObject,
     limit: jint,
@@ -166,7 +166,7 @@ pub extern "system" fn Java_io_zbox_RepoOpener_jniMemLimit(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_RepoOpener_jniCipher(
+pub extern "system" fn Java_io_zbox_fs_RepoOpener_jniCipher(
     env: JNIEnv,
     obj: JObject,
     cipher: jint,
@@ -179,7 +179,7 @@ pub extern "system" fn Java_io_zbox_RepoOpener_jniCipher(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_RepoOpener_jniCreate(
+pub extern "system" fn Java_io_zbox_fs_RepoOpener_jniCreate(
     env: JNIEnv,
     obj: JObject,
     create: jboolean,
@@ -192,7 +192,7 @@ pub extern "system" fn Java_io_zbox_RepoOpener_jniCreate(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_RepoOpener_jniCreateNew(
+pub extern "system" fn Java_io_zbox_fs_RepoOpener_jniCreateNew(
     env: JNIEnv,
     obj: JObject,
     create_new: jboolean,
@@ -205,7 +205,7 @@ pub extern "system" fn Java_io_zbox_RepoOpener_jniCreateNew(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_RepoOpener_jniCompress(
+pub extern "system" fn Java_io_zbox_fs_RepoOpener_jniCompress(
     env: JNIEnv,
     obj: JObject,
     compress: jboolean,
@@ -218,7 +218,7 @@ pub extern "system" fn Java_io_zbox_RepoOpener_jniCompress(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_RepoOpener_jniVersionLimit(
+pub extern "system" fn Java_io_zbox_fs_RepoOpener_jniVersionLimit(
     env: JNIEnv,
     obj: JObject,
     limit: jint,
@@ -232,7 +232,7 @@ pub extern "system" fn Java_io_zbox_RepoOpener_jniVersionLimit(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_RepoOpener_jniDedupChunk(
+pub extern "system" fn Java_io_zbox_fs_RepoOpener_jniDedupChunk(
     env: JNIEnv,
     obj: JObject,
     dedup: jboolean,
@@ -245,7 +245,7 @@ pub extern "system" fn Java_io_zbox_RepoOpener_jniDedupChunk(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_RepoOpener_jniReadOnly(
+pub extern "system" fn Java_io_zbox_fs_RepoOpener_jniReadOnly(
     env: JNIEnv,
     obj: JObject,
     read_only: jboolean,
@@ -258,7 +258,7 @@ pub extern "system" fn Java_io_zbox_RepoOpener_jniReadOnly(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_RepoOpener_jniOpen<'a>(
+pub extern "system" fn Java_io_zbox_fs_RepoOpener_jniOpen<'a>(
     env: JNIEnv<'a>,
     obj: JObject,
     uri: JString,
@@ -272,7 +272,8 @@ pub extern "system" fn Java_io_zbox_RepoOpener_jniOpen<'a>(
     let pwd: String = env.get_string(pwd).unwrap().into();
     match opener.open(&uri, &pwd) {
         Ok(repo) => {
-            let repo_obj = env.new_object("io/zbox/Repo", "()V", &[]).unwrap();
+            let repo_obj =
+                env.new_object("io/zbox/fs/Repo", "()V", &[]).unwrap();
             unsafe {
                 env.set_rust_field(repo_obj, RUST_OBJ_FIELD, repo).unwrap();
             }
@@ -286,7 +287,7 @@ pub extern "system" fn Java_io_zbox_RepoOpener_jniOpen<'a>(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniExists(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniExists(
     env: JNIEnv,
     _cls: JClass,
     uri: JString,
@@ -302,7 +303,10 @@ pub extern "system" fn Java_io_zbox_Repo_jniExists(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniClose(env: JNIEnv, obj: JObject) {
+pub extern "system" fn Java_io_zbox_fs_Repo_jniClose(
+    env: JNIEnv,
+    obj: JObject,
+) {
     let mut repo = unsafe {
         env.get_rust_field::<&str, Repo>(obj, RUST_OBJ_FIELD)
             .unwrap()
@@ -317,7 +321,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniClose(env: JNIEnv, obj: JObject) {
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniInfo<'a>(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniInfo<'a>(
     env: JNIEnv<'a>,
     obj: JObject,
 ) -> JObject<'a> {
@@ -333,7 +337,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniInfo<'a>(
     }
     let info = info.unwrap();
 
-    let info_obj = env.new_object("io/zbox/RepoInfo", "()V", &[]).unwrap();
+    let info_obj = env.new_object("io/zbox/fs/RepoInfo", "()V", &[]).unwrap();
 
     let vol_id = env
         .byte_array_from_slice(info.volume_id().as_ref())
@@ -345,9 +349,9 @@ pub extern "system" fn Java_io_zbox_Repo_jniInfo<'a>(
     let ops_limit = env.new_string(ops_str).unwrap();
     let ops_obj = env
         .call_static_method(
-            "io/zbox/OpsLimit",
+            "io/zbox/fs/OpsLimit",
             "valueOf",
-            "(Ljava/lang/String;)Lio/zbox/OpsLimit;",
+            "(Ljava/lang/String;)Lio/zbox/fs/OpsLimit;",
             &[JValue::Object(*ops_limit)],
         ).unwrap();
 
@@ -355,9 +359,9 @@ pub extern "system" fn Java_io_zbox_Repo_jniInfo<'a>(
     let mem_limit = env.new_string(mem_str).unwrap();
     let mem_obj = env
         .call_static_method(
-            "io/zbox/MemLimit",
+            "io/zbox/fs/MemLimit",
             "valueOf",
-            "(Ljava/lang/String;)Lio/zbox/MemLimit;",
+            "(Ljava/lang/String;)Lio/zbox/fs/MemLimit;",
             &[JValue::Object(*mem_limit)],
         ).unwrap();
 
@@ -365,9 +369,9 @@ pub extern "system" fn Java_io_zbox_Repo_jniInfo<'a>(
     let cipher = env.new_string(cipher_str).unwrap();
     let cipher_obj = env
         .call_static_method(
-            "io/zbox/Cipher",
+            "io/zbox/fs/Cipher",
             "valueOf",
-            "(Ljava/lang/String;)Lio/zbox/Cipher;",
+            "(Ljava/lang/String;)Lio/zbox/fs/Cipher;",
             &[JValue::Object(*cipher)],
         ).unwrap();
 
@@ -389,11 +393,11 @@ pub extern "system" fn Java_io_zbox_Repo_jniInfo<'a>(
         "Ljava/lang/String;",
         JValue::Object(JObject::from(uri)),
     ).unwrap();
-    env.set_field(info_obj, "opsLimit", "Lio/zbox/OpsLimit;", ops_obj)
+    env.set_field(info_obj, "opsLimit", "Lio/zbox/fs/OpsLimit;", ops_obj)
         .unwrap();
-    env.set_field(info_obj, "memLimit", "Lio/zbox/MemLimit;", mem_obj)
+    env.set_field(info_obj, "memLimit", "Lio/zbox/fs/MemLimit;", mem_obj)
         .unwrap();
-    env.set_field(info_obj, "cipher", "Lio/zbox/Cipher;", cipher_obj)
+    env.set_field(info_obj, "cipher", "Lio/zbox/fs/Cipher;", cipher_obj)
         .unwrap();
     env.set_field(
         info_obj,
@@ -430,7 +434,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniInfo<'a>(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniResetPassword(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniResetPassword(
     env: JNIEnv,
     obj: JObject,
     old_pwd: JString,
@@ -455,7 +459,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniResetPassword(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniPathExists(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniPathExists(
     env: JNIEnv,
     obj: JObject,
     path: JString,
@@ -475,7 +479,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniPathExists(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniIsFile(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniIsFile(
     env: JNIEnv,
     obj: JObject,
     path: JString,
@@ -495,7 +499,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniIsFile(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniIsDir(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniIsDir(
     env: JNIEnv,
     obj: JObject,
     path: JString,
@@ -515,7 +519,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniIsDir(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniCreateFile<'a>(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniCreateFile<'a>(
     env: JNIEnv<'a>,
     obj: JObject,
     path: JString,
@@ -528,7 +532,8 @@ pub extern "system" fn Java_io_zbox_Repo_jniCreateFile<'a>(
     let path: String = env.get_string(path).unwrap().into();
     match repo.create_file(&path) {
         Ok(file) => {
-            let file_obj = env.new_object("io/zbox/File", "()V", &[]).unwrap();
+            let file_obj =
+                env.new_object("io/zbox/fs/File", "()V", &[]).unwrap();
             unsafe {
                 env.set_rust_field(file_obj, RUST_OBJ_FIELD, file).unwrap();
             }
@@ -542,7 +547,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniCreateFile<'a>(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniOpenFile<'a>(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniOpenFile<'a>(
     env: JNIEnv<'a>,
     obj: JObject,
     path: JString,
@@ -554,7 +559,8 @@ pub extern "system" fn Java_io_zbox_Repo_jniOpenFile<'a>(
     let path: String = env.get_string(path).unwrap().into();
     match repo.open_file(&path) {
         Ok(file) => {
-            let file_obj = env.new_object("io/zbox/File", "()V", &[]).unwrap();
+            let file_obj =
+                env.new_object("io/zbox/fs/File", "()V", &[]).unwrap();
             unsafe {
                 env.set_rust_field(file_obj, RUST_OBJ_FIELD, file).unwrap();
             }
@@ -568,7 +574,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniOpenFile<'a>(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniCreateDir(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniCreateDir(
     env: JNIEnv,
     obj: JObject,
     path: JString,
@@ -584,7 +590,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniCreateDir(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniCreateDirAll(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniCreateDirAll(
     env: JNIEnv,
     obj: JObject,
     path: JString,
@@ -600,19 +606,19 @@ pub extern "system" fn Java_io_zbox_Repo_jniCreateDirAll(
 }
 
 fn metadata_to_jobject<'a>(env: &JNIEnv<'a>, meta: Metadata) -> JObject<'a> {
-    let meta_obj = env.new_object("io/zbox/Metadata", "()V", &[]).unwrap();
+    let meta_obj = env.new_object("io/zbox/fs/Metadata", "()V", &[]).unwrap();
 
     let ftype_str = format!("{:?}", meta.file_type()).to_uppercase();
     let ftype = env.new_string(ftype_str).unwrap();
     let ftype_obj = env
         .call_static_method(
-            "io/zbox/FileType",
+            "io/zbox/fs/FileType",
             "valueOf",
-            "(Ljava/lang/String;)Lio/zbox/FileType;",
+            "(Ljava/lang/String;)Lio/zbox/fs/FileType;",
             &[JValue::Object(*ftype)],
         ).unwrap();
 
-    env.set_field(meta_obj, "fileType", "Lio/zbox/FileType;", ftype_obj)
+    env.set_field(meta_obj, "fileType", "Lio/zbox/fs/FileType;", ftype_obj)
         .unwrap();
     env.set_field(meta_obj, "len", "J", JValue::Long(meta.len() as i64))
         .unwrap();
@@ -642,7 +648,7 @@ fn metadata_to_jobject<'a>(env: &JNIEnv<'a>, meta: Metadata) -> JObject<'a> {
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniReadDir(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniReadDir(
     env: JNIEnv,
     obj: JObject,
     path: JString,
@@ -657,13 +663,13 @@ pub extern "system" fn Java_io_zbox_Repo_jniReadDir(
             let objs = env
                 .new_object_array(
                     ents.len() as i32,
-                    "io/zbox/DirEntry",
+                    "io/zbox/fs/DirEntry",
                     JObject::null(),
                 ).unwrap();
 
             for (i, ent) in ents.iter().enumerate() {
                 let ent_obj =
-                    env.new_object("io/zbox/DirEntry", "()V", &[]).unwrap();
+                    env.new_object("io/zbox/fs/DirEntry", "()V", &[]).unwrap();
                 let path_str =
                     env.new_string(ent.path().to_str().unwrap()).unwrap();
                 let name_str = env.new_string(ent.file_name()).unwrap();
@@ -684,7 +690,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniReadDir(
                 env.set_field(
                     ent_obj,
                     "metadata",
-                    "Lio/zbox/Metadata;",
+                    "Lio/zbox/fs/Metadata;",
                     JValue::Object(JObject::from(meta_obj)),
                 ).unwrap();
 
@@ -701,14 +707,14 @@ pub extern "system" fn Java_io_zbox_Repo_jniReadDir(
         }
         Err(ref err) => {
             throw(&env, err);
-            env.new_object_array(0, "io/zbox/DirEntry", JObject::null())
+            env.new_object_array(0, "io/zbox/fs/DirEntry", JObject::null())
                 .unwrap()
         }
     }
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniMetadata<'a>(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniMetadata<'a>(
     env: JNIEnv<'a>,
     obj: JObject,
     path: JString,
@@ -736,13 +742,13 @@ fn versions_to_jobjects(
             let objs = env
                 .new_object_array(
                     vers.len() as i32,
-                    "io/zbox/Version",
+                    "io/zbox/fs/Version",
                     JObject::null(),
                 ).unwrap();
 
             for (i, ver) in vers.iter().enumerate() {
                 let ver_obj =
-                    env.new_object("io/zbox/Version", "()V", &[]).unwrap();
+                    env.new_object("io/zbox/fs/Version", "()V", &[]).unwrap();
 
                 env.set_field(
                     ver_obj,
@@ -773,14 +779,14 @@ fn versions_to_jobjects(
         }
         Err(ref err) => {
             throw(&env, err);
-            env.new_object_array(0, "io/zbox/Version", JObject::null())
+            env.new_object_array(0, "io/zbox/fs/Version", JObject::null())
                 .unwrap()
         }
     }
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniHistory(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniHistory(
     env: JNIEnv,
     obj: JObject,
     path: JString,
@@ -794,7 +800,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniHistory(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniCopy(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniCopy(
     env: JNIEnv,
     obj: JObject,
     from: JString,
@@ -812,7 +818,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniCopy(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniRemoveFile(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniRemoveFile(
     env: JNIEnv,
     obj: JObject,
     path: JString,
@@ -828,7 +834,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniRemoveFile(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniRemoveDir(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniRemoveDir(
     env: JNIEnv,
     obj: JObject,
     path: JString,
@@ -844,7 +850,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniRemoveDir(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniRemoveDirAll(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniRemoveDirAll(
     env: JNIEnv,
     obj: JObject,
     path: JString,
@@ -860,7 +866,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniRemoveDirAll(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_Repo_jniRename(
+pub extern "system" fn Java_io_zbox_fs_Repo_jniRename(
     env: JNIEnv,
     obj: JObject,
     from: JString,
@@ -878,7 +884,7 @@ pub extern "system" fn Java_io_zbox_Repo_jniRename(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_OpenOptions_jniRead(
+pub extern "system" fn Java_io_zbox_fs_OpenOptions_jniRead(
     env: JNIEnv,
     obj: JObject,
     read: jboolean,
@@ -891,7 +897,7 @@ pub extern "system" fn Java_io_zbox_OpenOptions_jniRead(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_OpenOptions_jniWrite(
+pub extern "system" fn Java_io_zbox_fs_OpenOptions_jniWrite(
     env: JNIEnv,
     obj: JObject,
     write: jboolean,
@@ -904,7 +910,7 @@ pub extern "system" fn Java_io_zbox_OpenOptions_jniWrite(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_OpenOptions_jniAppend(
+pub extern "system" fn Java_io_zbox_fs_OpenOptions_jniAppend(
     env: JNIEnv,
     obj: JObject,
     append: jboolean,
@@ -917,7 +923,7 @@ pub extern "system" fn Java_io_zbox_OpenOptions_jniAppend(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_OpenOptions_jniTruncate(
+pub extern "system" fn Java_io_zbox_fs_OpenOptions_jniTruncate(
     env: JNIEnv,
     obj: JObject,
     truncate: jboolean,
@@ -930,7 +936,7 @@ pub extern "system" fn Java_io_zbox_OpenOptions_jniTruncate(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_OpenOptions_jniCreate(
+pub extern "system" fn Java_io_zbox_fs_OpenOptions_jniCreate(
     env: JNIEnv,
     obj: JObject,
     create: jboolean,
@@ -943,7 +949,7 @@ pub extern "system" fn Java_io_zbox_OpenOptions_jniCreate(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_OpenOptions_jniCreateNew(
+pub extern "system" fn Java_io_zbox_fs_OpenOptions_jniCreateNew(
     env: JNIEnv,
     obj: JObject,
     create_new: jboolean,
@@ -956,7 +962,7 @@ pub extern "system" fn Java_io_zbox_OpenOptions_jniCreateNew(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_OpenOptions_jniVersionLimit(
+pub extern "system" fn Java_io_zbox_fs_OpenOptions_jniVersionLimit(
     env: JNIEnv,
     obj: JObject,
     limit: jint,
@@ -970,7 +976,7 @@ pub extern "system" fn Java_io_zbox_OpenOptions_jniVersionLimit(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_OpenOptions_jniDedupChunk(
+pub extern "system" fn Java_io_zbox_fs_OpenOptions_jniDedupChunk(
     env: JNIEnv,
     obj: JObject,
     dedup: jboolean,
@@ -983,7 +989,7 @@ pub extern "system" fn Java_io_zbox_OpenOptions_jniDedupChunk(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_OpenOptions_jniOpen<'a>(
+pub extern "system" fn Java_io_zbox_fs_OpenOptions_jniOpen<'a>(
     env: JNIEnv<'a>,
     obj: JObject,
     repo: JObject,
@@ -1000,7 +1006,8 @@ pub extern "system" fn Java_io_zbox_OpenOptions_jniOpen<'a>(
     let path: String = env.get_string(path).unwrap().into();
     match opts.open(&mut repo, &path) {
         Ok(file) => {
-            let file_obj = env.new_object("io/zbox/File", "()V", &[]).unwrap();
+            let file_obj =
+                env.new_object("io/zbox/fs/File", "()V", &[]).unwrap();
             unsafe {
                 env.set_rust_field(file_obj, RUST_OBJ_FIELD, file).unwrap();
             }
@@ -1014,7 +1021,7 @@ pub extern "system" fn Java_io_zbox_OpenOptions_jniOpen<'a>(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_File_jniMetadata<'a>(
+pub extern "system" fn Java_io_zbox_fs_File_jniMetadata<'a>(
     env: JNIEnv<'a>,
     obj: JObject,
 ) -> JObject<'a> {
@@ -1032,7 +1039,7 @@ pub extern "system" fn Java_io_zbox_File_jniMetadata<'a>(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_File_jniHistory(
+pub extern "system" fn Java_io_zbox_fs_File_jniHistory(
     env: JNIEnv,
     obj: JObject,
 ) -> jobjectArray {
@@ -1044,7 +1051,7 @@ pub extern "system" fn Java_io_zbox_File_jniHistory(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_File_jniCurrVersion(
+pub extern "system" fn Java_io_zbox_fs_File_jniCurrVersion(
     env: JNIEnv,
     obj: JObject,
 ) -> jlong {
@@ -1062,7 +1069,7 @@ pub extern "system" fn Java_io_zbox_File_jniCurrVersion(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_File_jniVersionReader<'a, 'b>(
+pub extern "system" fn Java_io_zbox_fs_File_jniVersionReader<'a, 'b>(
     env: JNIEnv<'a>,
     obj: JObject,
     ver_num: jlong,
@@ -1073,8 +1080,9 @@ pub extern "system" fn Java_io_zbox_File_jniVersionReader<'a, 'b>(
     };
     match file.version_reader(ver_num as usize) {
         Ok(rdr) => {
-            let rdr_obj =
-                env.new_object("io/zbox/VersionReader", "()V", &[]).unwrap();
+            let rdr_obj = env
+                .new_object("io/zbox/fs/VersionReader", "()V", &[])
+                .unwrap();
             unsafe {
                 env.set_rust_field(rdr_obj, RUST_OBJ_FIELD, rdr).unwrap();
             }
@@ -1088,7 +1096,10 @@ pub extern "system" fn Java_io_zbox_File_jniVersionReader<'a, 'b>(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_File_jniFinish(env: JNIEnv, obj: JObject) {
+pub extern "system" fn Java_io_zbox_fs_File_jniFinish(
+    env: JNIEnv,
+    obj: JObject,
+) {
     let mut file = unsafe {
         env.get_rust_field::<&str, File>(obj, RUST_OBJ_FIELD)
             .unwrap()
@@ -1099,7 +1110,7 @@ pub extern "system" fn Java_io_zbox_File_jniFinish(env: JNIEnv, obj: JObject) {
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_File_jniWriteOnce(
+pub extern "system" fn Java_io_zbox_fs_File_jniWriteOnce(
     env: JNIEnv,
     obj: JObject,
     buf: JByteBuffer,
@@ -1115,7 +1126,7 @@ pub extern "system" fn Java_io_zbox_File_jniWriteOnce(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_File_jniSetLen(
+pub extern "system" fn Java_io_zbox_fs_File_jniSetLen(
     env: JNIEnv,
     obj: JObject,
     len: jlong,
@@ -1130,7 +1141,7 @@ pub extern "system" fn Java_io_zbox_File_jniSetLen(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_File_jniRead(
+pub extern "system" fn Java_io_zbox_fs_File_jniRead(
     env: JNIEnv,
     obj: JObject,
     dst: JByteBuffer,
@@ -1150,7 +1161,7 @@ pub extern "system" fn Java_io_zbox_File_jniRead(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_File_jniWrite(
+pub extern "system" fn Java_io_zbox_fs_File_jniWrite(
     env: JNIEnv,
     obj: JObject,
     buf: JByteBuffer,
@@ -1180,7 +1191,7 @@ fn to_seek_from(offset: i64, whence: jint) -> SeekFrom {
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_File_jniSeek(
+pub extern "system" fn Java_io_zbox_fs_File_jniSeek(
     env: JNIEnv,
     obj: JObject,
     offset: jlong,
@@ -1201,7 +1212,7 @@ pub extern "system" fn Java_io_zbox_File_jniSeek(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_VersionReader_jniRead(
+pub extern "system" fn Java_io_zbox_fs_VersionReader_jniRead(
     env: JNIEnv,
     obj: JObject,
     dst: JByteBuffer,
@@ -1221,7 +1232,7 @@ pub extern "system" fn Java_io_zbox_VersionReader_jniRead(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_VersionReader_jniSeek(
+pub extern "system" fn Java_io_zbox_fs_VersionReader_jniSeek(
     env: JNIEnv,
     obj: JObject,
     offset: jlong,
