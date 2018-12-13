@@ -303,6 +303,7 @@ impl CacheArea {
         &mut self,
         rel_path: &Path,
         offset: usize,
+        wmark: &str,
         obj: &[u8],
         is_pinned: bool,
         cache_ctl: CacheControl,
@@ -310,7 +311,7 @@ impl CacheArea {
         // save to remote first
         {
             let mut client = self.client.write().unwrap();
-            client.put(rel_path, offset, cache_ctl, obj)?;
+            client.put(rel_path, offset, wmark, cache_ctl, obj)?;
         }
 
         // save object to local
@@ -628,6 +629,7 @@ impl LocalCache {
         self.idx_cache.insert(
             &rel_path,
             0,
+            "",
             index,
             false,
             CacheControl::NoCache,
@@ -640,17 +642,18 @@ impl LocalCache {
         &mut self,
         rel_path: &Path,
         offset: usize,
+        wmark: &str,
         obj: &[u8],
     ) -> Result<()> {
         self.cache
-            .insert(rel_path, offset, obj, false, CacheControl::Long)?;
+            .insert(rel_path, offset, wmark, obj, false, CacheControl::Long)?;
         self.is_saved = false;
         Ok(())
     }
 
     pub fn put_pinned(&mut self, rel_path: &Path, obj: &[u8]) -> Result<()> {
         self.cache
-            .insert(rel_path, 0, obj, true, CacheControl::NoCache)?;
+            .insert(rel_path, 0, "", obj, true, CacheControl::NoCache)?;
         self.is_saved = false;
         Ok(())
     }

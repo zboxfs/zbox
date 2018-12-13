@@ -157,6 +157,9 @@ pub struct SectorMgr {
 }
 
 impl SectorMgr {
+    // magic numbers for watermark AEAD encryption
+    const MAGIC: [u8; 4] = [179, 181, 191, 193];
+
     pub fn new() -> Self {
         SectorMgr {
             sec: vec![0u8; SECTOR_SIZE],
@@ -278,6 +281,19 @@ impl SectorMgr {
         self.rmap.del_blocks(span, local_cache)
     }
 
+    // calculate watermark and convert it to string
+    fn watermark_string(&self) -> Result<String> {
+        let wmark = self.sec_idx * BLKS_PER_SECTOR + self.sec_top / BLK_SIZE;
+        let mut buf = Vec::new();
+        buf.put_u64_le(wmark as u64);
+        let enc_buf = self.crypto.encrypt_with_ad(&buf, &self.key, &Self::MAGIC)?;
+        let ret = enc_buf.iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<String>>()
+            .join("");
+        Ok(ret)
+    }
+
     pub fn flush(&mut self, local_cache: &mut LocalCache) -> Result<()> {
         // save recycle map
         self.rmap.save(&self.crypto, &self.key, local_cache)?;
@@ -288,9 +304,11 @@ impl SectorMgr {
 
         // save sector buffer to local cache
         let rel_path = sector_rel_path(self.sec_idx, &self.hash_key);
+        let wmark = self.watermark_string()?;
         local_cache.put(
             &rel_path,
             self.sec_base,
+            &wmark,
             &self.sec[self.sec_base..self.sec_top],
         )?;
         if self.sec_top >= SECTOR_SIZE {
