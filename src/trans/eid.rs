@@ -42,9 +42,9 @@ impl Eid {
         ret
     }
 
-    pub(crate) fn to_path_buf(&self, base: &Path) -> PathBuf {
+    pub(crate) fn to_path_buf<P: AsRef<Path>>(&self, base: P) -> PathBuf {
         let s = self.to_string();
-        base.join(&s[0..2]).join(&s[2..4]).join(&s)
+        base.as_ref().join(&s[0..2]).join(&s[2..4]).join(&s)
     }
 
     #[allow(dead_code)]

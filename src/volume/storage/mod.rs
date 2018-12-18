@@ -56,9 +56,9 @@ pub trait Storable: Debug + Send + Sync {
     // wal read/write, must not buffered
     // update no need to be atomic, but must gurantee any successful
     // update is persistent
-    fn get_wal(&mut self, _id: &Eid) -> Result<Vec<u8>>;
-    fn put_wal(&mut self, _id: &Eid, _wal: &[u8]) -> Result<()>;
-    fn del_wal(&mut self, _id: &Eid) -> Result<()>;
+    fn get_wal(&mut self, id: &Eid) -> Result<Vec<u8>>;
+    fn put_wal(&mut self, id: &Eid, wal: &[u8]) -> Result<()>;
+    fn del_wal(&mut self, id: &Eid) -> Result<()>;
 
     // address read/write, can be buffered
     // storage doesn't need to gurantee update is persistent

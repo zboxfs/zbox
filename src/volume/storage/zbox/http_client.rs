@@ -99,13 +99,6 @@ impl Headers {
         self.map.insert(header, value);
         self
     }
-
-    fn put_watermark(mut self, wmark: &str) -> Self {
-        let header = HeaderName::from_static("zbox-watermark");
-        let value = HeaderValue::from_str(wmark).unwrap();
-        self.map.insert(header, value);
-        self
-    }
 }
 
 impl AsRef<HeaderMap> for Headers {
@@ -345,7 +338,6 @@ impl HttpClient {
         &mut self,
         uri: &Uri,
         offset: usize,
-        wmark: &str,
         cache_ctl: CacheControl,
         body: &[u8],
     ) -> Result<()> {
@@ -354,8 +346,7 @@ impl HttpClient {
             .build()
             .bearer_auth(&self.session_token)
             .cache_control(cache_ctl)
-            .put_range(offset, offset + body.len() - 1)
-            .put_watermark(wmark);
+            .put_range(offset, offset + body.len() - 1);
         self.transport
             .put(uri, headers.as_ref(), body)?
             .error_for_status()
@@ -366,7 +357,6 @@ impl HttpClient {
         &mut self,
         rel_path: &Path,
         offset: usize,
-        wmark: &str,
         cache_ctl: CacheControl,
         body: &[u8],
     ) -> Result<()> {
@@ -374,12 +364,12 @@ impl HttpClient {
 
         let uri = self.make_uri(rel_path)?;
 
-        self.send_put_req(&uri, offset, wmark, cache_ctl, body)
+        self.send_put_req(&uri, offset, cache_ctl, body)
             .or_else(|err| {
                 // try reopen remote session once if it is expired
                 if err == Error::HttpStatus(StatusCode::UNAUTHORIZED) {
                     self.open_session()?;
-                    self.send_put_req(&uri, offset, wmark, cache_ctl, body)
+                    self.send_put_req(&uri, offset, cache_ctl, body)
                 } else {
                     Err(err)
                 }

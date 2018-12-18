@@ -77,6 +77,7 @@ fn parse_uri(mut uri: &str) -> Result<(&str, &str, CacheType, usize, PathBuf)> {
 /// Zbox Storage
 #[derive(Debug)]
 pub struct ZboxStorage {
+    wal_base: PathBuf,
     local_cache: LocalCache,
     sec_mgr: SectorMgr,
     idx_mgr: IndexMgr,
@@ -90,6 +91,9 @@ impl ZboxStorage {
 
     // super block file name stem
     const SUPER_BLK_STEM: &'static str = "super_blk";
+
+    // wal file directory
+    const WAL_DIR: &'static str = "wal";
 
     // create zbox storage
     pub fn new(uri: &str) -> Result<Self> {
@@ -107,6 +111,7 @@ impl ZboxStorage {
         let idx_mgr = IndexMgr::new();
 
         Ok(ZboxStorage {
+            wal_base: PathBuf::from(Self::WAL_DIR),
             local_cache,
             sec_mgr,
             idx_mgr,
@@ -165,6 +170,24 @@ impl Storable for ZboxStorage {
         let rel_path =
             Path::new(Self::SUPER_BLK_STEM).with_extension(&suffix.to_string());
         self.local_cache.put_pinned(&rel_path, super_blk)
+    }
+
+    #[inline]
+    fn get_wal(&mut self, id: &Eid) -> Result<Vec<u8>> {
+        let rel_path = id.to_path_buf(&self.wal_base);
+        self.local_cache.get_pinned(&rel_path)
+    }
+
+    #[inline]
+    fn put_wal(&mut self, id: &Eid, wal: &[u8]) -> Result<()> {
+        let rel_path = id.to_path_buf(&self.wal_base);
+        self.local_cache.put_pinned(&rel_path, wal)
+    }
+
+    #[inline]
+    fn del_wal(&mut self, id: &Eid) -> Result<()> {
+        let rel_path = id.to_path_buf(&self.wal_base);
+        self.local_cache.del_pinned(&rel_path)
     }
 
     #[inline]
@@ -230,6 +253,13 @@ mod tests {
         zs.put_super_block(&buf, 0).unwrap();
         let s = zs.get_super_block(0).unwrap();
         assert_eq!(&s[..], &buf[..]);
+
+        // wal
+        zs.put_wal(&id, &buf).unwrap();
+        let s = zs.get_wal(&id).unwrap();
+        assert_eq!(&s[..], &buf[..]);
+        zs.del_wal(&id).unwrap();
+        assert_eq!(zs.get_wal(&id).unwrap_err(), Error::NotFound);
 
         // address
         zs.put_address(&id, &buf).unwrap();

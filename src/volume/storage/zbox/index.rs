@@ -4,16 +4,20 @@ use std::path::{Path, PathBuf};
 
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
+use bytes::BufMut;
 
 use super::local_cache::LocalCache;
 use base::crypto::{Crypto, HashKey, Key};
 use error::{Error, Result};
 use trans::Eid;
 
-// get bucket relative path from bucket id, 8 buckets in total
-#[inline]
-fn bucket_rel_path(bucket_id: u8) -> PathBuf {
-    PathBuf::from(format!("index/{:02x}", bucket_id))
+// get bucket relative path from bucket id
+fn bucket_rel_path(bucket_id: u8, hash_key: &HashKey) -> PathBuf {
+    let mut buf = Vec::with_capacity(1);
+    buf.put_u8(bucket_id);
+    let hash = Crypto::hash_with_key(&buf, hash_key);
+    let id = Eid::from_slice(&hash);
+    id.to_path_buf("index")
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -135,7 +139,7 @@ impl IndexMgr {
 
         // if bucket is not loaded, load it from local cache
         if !self.buckets.contains_key(&bucket_id) {
-            let rel_path = bucket_rel_path(bucket_id);
+            let rel_path = bucket_rel_path(bucket_id, &self.hash_key);
             match Bucket::load(&rel_path, &self.crypto, &self.key, local_cache)
             {
                 Ok(bucket) => {
@@ -193,7 +197,7 @@ impl IndexMgr {
     pub fn flush(&mut self, local_cache: &mut LocalCache) -> Result<()> {
         for (bucket_id, bucket) in self.buckets.iter_mut() {
             if bucket.is_changed {
-                let rel_path = bucket_rel_path(*bucket_id);
+                let rel_path = bucket_rel_path(*bucket_id, &self.hash_key);
                 bucket.save(&rel_path, &self.crypto, &self.key, local_cache)?;
             }
         }

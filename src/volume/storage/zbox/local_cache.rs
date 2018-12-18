@@ -303,7 +303,6 @@ impl CacheArea {
         &mut self,
         rel_path: &Path,
         offset: usize,
-        wmark: &str,
         obj: &[u8],
         is_pinned: bool,
         cache_ctl: CacheControl,
@@ -311,7 +310,7 @@ impl CacheArea {
         // save to remote first
         {
             let mut client = self.client.write().unwrap();
-            client.put(rel_path, offset, wmark, cache_ctl, obj)?;
+            client.put(rel_path, offset, cache_ctl, obj)?;
         }
 
         // save object to local
@@ -457,8 +456,8 @@ pub struct LocalCache {
     // repo update sequence
     update_seq: u64,
 
-    // is meta file saved flag
-    is_saved: bool,
+    // is meta changed flag
+    is_changed: bool,
 
     // main cache area
     cache: CacheArea,
@@ -508,7 +507,7 @@ impl LocalCache {
             cache_type,
             capacity,
             update_seq: 0,
-            is_saved: false,
+            is_changed: false,
             cache,
             idx_cache,
             client,
@@ -629,12 +628,11 @@ impl LocalCache {
         self.idx_cache.insert(
             &rel_path,
             0,
-            "",
             index,
             false,
             CacheControl::NoCache,
         )?;
-        self.is_saved = false;
+        self.is_changed = true;
         Ok(())
     }
 
@@ -642,38 +640,44 @@ impl LocalCache {
         &mut self,
         rel_path: &Path,
         offset: usize,
-        wmark: &str,
         obj: &[u8],
     ) -> Result<()> {
         self.cache.insert(
             rel_path,
             offset,
-            wmark,
             obj,
             false,
             CacheControl::Long,
         )?;
-        self.is_saved = false;
+        self.is_changed = true;
         Ok(())
     }
 
+    #[inline]
     pub fn put_pinned(&mut self, rel_path: &Path, obj: &[u8]) -> Result<()> {
-        self.cache
-            .insert(rel_path, 0, "", obj, true, CacheControl::NoCache)?;
-        self.is_saved = false;
+        self.cache.insert(rel_path, 0, obj, true, CacheControl::NoCache)?;
+        self.is_changed = true;
         Ok(())
     }
 
+    #[inline]
     pub fn del(&mut self, rel_path: &Path) -> Result<()> {
         self.cache.del(rel_path, CacheControl::Long)?;
-        self.is_saved = false;
+        self.is_changed = true;
+        Ok(())
+    }
+
+    #[inline]
+    pub fn del_pinned(&mut self, rel_path: &Path) -> Result<()> {
+        self.cache.del(rel_path, CacheControl::NoCache)?;
+        self.is_changed = true;
         Ok(())
     }
 
     pub fn flush(&mut self) -> Result<()> {
-        if !self.is_saved {
+        if self.is_changed {
             self.write_meta()?;
-            self.is_saved = true;
+            self.is_changed = false;
         }
         Ok(())
     }
@@ -685,7 +689,7 @@ impl Debug for LocalCache {
             .field("cache_type", &self.cache_type)
             .field("capacity", &self.capacity)
             .field("update_seq", &self.update_seq)
-            .field("is_saved", &self.is_saved)
+            .field("is_changed", &self.is_changed)
             .field("cache", &self.cache)
             .field("idx_cache", &self.idx_cache)
             .finish()
