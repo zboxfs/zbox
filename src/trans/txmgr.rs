@@ -20,8 +20,8 @@ pub struct TxMgr {
     // entity tx map
     ents: HashMap<Eid, Txid>,
 
-    // wal queue
-    walq: WalQueueMgr,
+    // wal queue manager
+    walq_mgr: WalQueueMgr,
 
     vol: VolumeRef,
 }
@@ -31,7 +31,7 @@ impl TxMgr {
         TxMgr {
             txs: LinkedHashMap::new(),
             ents: HashMap::new(),
-            walq: WalQueueMgr::new(walq_id, vol),
+            walq_mgr: WalQueueMgr::new(walq_id, vol),
             vol: vol.clone(),
         }
     }
@@ -39,7 +39,7 @@ impl TxMgr {
     /// Open transaction manager
     pub fn open(walq_id: &Eid, vol: &VolumeRef) -> Result<Self> {
         let mut txmgr = TxMgr::new(walq_id, vol);
-        txmgr.walq.open(walq_id, vol)?;
+        txmgr.walq_mgr.open(walq_id, vol)?;
         Ok(txmgr)
     }
 
@@ -54,14 +54,14 @@ impl TxMgr {
         let vol = tm.vol.clone();
 
         // try to redo abort tx if any tx failed abortion before,
-        tm.walq.hot_redo_abort(&vol)?;
+        tm.walq_mgr.hot_redo_abort(&vol)?;
 
         // get next txid, here we marked current thread as in tx
-        let txid = tm.walq.next_txid();
+        let txid = tm.walq_mgr.next_txid();
         debug!("begin tx#{}", txid);
 
         // begin a transaction in wal queue
-        tm.walq.begin_trans(txid).or_else(|err| {
+        tm.walq_mgr.begin_trans(txid).or_else(|err| {
             // if failed, remove the thread tx mark
             Txid::reset_current();
             debug!("tx#{} aborted before start", txid);
@@ -126,7 +126,7 @@ impl TxMgr {
             // commit tx, if any errors then abort the tx
             match tx
                 .commit(&self.vol)
-                .and_then(|wal| self.walq.commit_trans(wal))
+                .and_then(|wal| self.walq_mgr.commit_trans(wal))
             {
                 Ok(_) => {
                     tx.complete_commit();
@@ -158,8 +158,11 @@ impl TxMgr {
             let mut tx = tx_ref.write().unwrap();
             let wal = tx.get_wal();
 
-            self.walq.begin_abort(&wal);
-            match tx.abort(&self.vol).and_then(|_| self.walq.end_abort(txid)) {
+            self.walq_mgr.begin_abort(&wal);
+            match tx
+                .abort(&self.vol)
+                .and_then(|_| self.walq_mgr.end_abort(txid))
+            {
                 Ok(_) => debug!("tx#{} aborted", txid),
                 Err(err) => warn!("abort tx#{} failed: {}", txid, err),
             }
@@ -175,7 +178,7 @@ impl Debug for TxMgr {
         f.debug_struct("TxMgr")
             .field("txs", &self.txs)
             .field("ents", &self.ents)
-            .field("walq", &self.walq)
+            .field("walq_mgr", &self.walq_mgr)
             .finish()
     }
 }
@@ -403,6 +406,13 @@ mod tests {
             let tm = tm.read().unwrap();
             assert!(tm.txs.is_empty());
         }
+
+        // tx #3, normal tx after aborting
+        let tx = TxMgr::begin_trans(&tm).unwrap();
+        tx.run_all(|| {
+            a = Obj::new(val).into_cow(&tm)?;
+            Ok(())
+        }).unwrap();
     }
 
     #[test]

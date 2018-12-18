@@ -157,6 +157,30 @@ impl Storable for FaultyStorage {
         ms.put_super_block(super_blk, suffix)
     }
 
+    fn get_wal(&mut self, id: &Eid) -> Result<Vec<u8>> {
+        self.ctlr.make_random_error()?;
+
+        let mut inner = self.inner.write().unwrap();
+        let ms = inner.get_refresh(&self.loc).unwrap();
+        ms.get_wal(id)
+    }
+
+    fn put_wal(&mut self, id: &Eid, wal: &[u8]) -> Result<()> {
+        self.ctlr.make_random_error()?;
+
+        let mut inner = self.inner.write().unwrap();
+        let ms = inner.get_refresh(&self.loc).unwrap();
+        ms.put_wal(id, wal)
+    }
+
+    fn del_wal(&mut self, id: &Eid) -> Result<()> {
+        self.ctlr.make_random_error()?;
+
+        let mut inner = self.inner.write().unwrap();
+        let ms = inner.get_refresh(&self.loc).unwrap();
+        ms.del_wal(id)
+    }
+
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
         self.ctlr.make_random_error()?;
 
@@ -203,6 +227,14 @@ impl Storable for FaultyStorage {
         let mut inner = self.inner.write().unwrap();
         let ms = inner.get_refresh(&self.loc).unwrap();
         ms.del_blocks(span)
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        self.ctlr.make_random_error()?;
+
+        let mut inner = self.inner.write().unwrap();
+        let ms = inner.get_refresh(&self.loc).unwrap();
+        ms.flush()
     }
 }
 

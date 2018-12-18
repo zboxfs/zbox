@@ -480,13 +480,6 @@ impl Finish for Writer {
             None => Ok(()),
         }
     }
-
-    fn finish_and_flush(self) -> Result<()> {
-        match self.data_wtr {
-            Some(data_wtr) => data_wtr.finish_and_flush(),
-            None => Ok(()),
-        }
-    }
 }
 
 /// Segment cache

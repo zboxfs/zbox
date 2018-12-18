@@ -2,7 +2,6 @@ use std::cmp::min;
 use std::error::Error as StdError;
 use std::fmt::{self, Debug};
 use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write};
-use std::ops::DerefMut;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
@@ -34,6 +33,7 @@ impl Meter<Vec<u8>> for FrameCacheMeter {
 
 /// Storage
 pub struct Storage {
+    // underlying storage layer
     depot: Box<Storable>,
 
     // block allocator
@@ -127,13 +127,8 @@ impl Storage {
     }
 
     #[inline]
-    pub fn depot_mut(&mut self) -> &mut Storable {
-        self.depot.deref_mut()
-    }
-
-    #[inline]
-    pub fn crypto_ctx(&self) -> (&Crypto, &Key) {
-        (&self.crypto, &self.key)
+    pub fn get_key(&self) -> &Key {
+        &self.key
     }
 
     #[inline]
@@ -169,8 +164,22 @@ impl Storage {
     }
 
     #[inline]
-    pub fn allocator(&self) -> AllocatorRef {
+    pub fn get_allocator(&self) -> AllocatorRef {
         self.allocator.clone()
+    }
+
+    #[inline]
+    pub fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
+        self.depot.get_super_block(suffix)
+    }
+
+    #[inline]
+    pub fn put_super_block(
+        &mut self,
+        super_blk: &[u8],
+        suffix: u64,
+    ) -> Result<()> {
+        self.depot.put_super_block(super_blk, suffix)
     }
 
     // read entity address from depot and save to address cache
@@ -231,20 +240,12 @@ impl Storage {
         Ok(())
     }
 
-    fn write_new_address(&mut self, id: &Eid, addr: &Addr) -> Result<()> {
-        // if the old address exists, remove all of its blocks
-        match self.get_address(id) {
-            Ok(old_addr) => {
-                self.remove_address_blocks(&old_addr)?;
-            }
-            Err(ref err) if *err == Error::NotFound => {}
-            Err(err) => return Err(err),
-        }
-
-        // write new address
-        self.put_address(id, addr)
+    #[inline]
+    pub fn del_wal(&mut self, id: &Eid) -> Result<()> {
+        self.depot.del_wal(id)
     }
 
+    // delete an entity, including data and address
     pub fn del(&mut self, id: &Eid) -> Result<()> {
         // get address first
         let addr = match self.get_address(id) {
@@ -262,6 +263,12 @@ impl Storage {
 
         Ok(())
     }
+
+    // flush underlying storage
+    #[inline]
+    pub fn flush(&mut self) -> Result<()> {
+        self.depot.flush()
+    }
 }
 
 impl Debug for Storage {
@@ -277,6 +284,54 @@ impl IntoRef for Storage {}
 
 /// Storage reference type
 pub type StorageRef = Arc<RwLock<Storage>>;
+
+/// Storage Wal Reader
+#[derive(Debug)]
+pub struct WalReader {
+    id: Eid,
+    storage: StorageRef,
+    read: usize,
+    wal: Vec<u8>,
+}
+
+impl WalReader {
+    pub fn new(id: &Eid, storage: &StorageRef) -> Self {
+        WalReader {
+            id: id.clone(),
+            storage: storage.clone(),
+            read: 0,
+            wal: Vec::new(),
+        }
+    }
+}
+
+impl Read for WalReader {
+    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
+        if self.wal.is_empty() {
+            let mut storage = self.storage.write().unwrap();
+
+            // read wal bytes from underlying storage layer
+            let wal = storage.depot.get_wal(&self.id).map_err(|err| {
+                if err == Error::NotFound {
+                    IoError::new(ErrorKind::NotFound, "Wal not found")
+                } else {
+                    IoError::new(ErrorKind::Other, err.description())
+                }
+            })?;
+
+            // decrypt wal
+            self.wal =
+                map_io_err!(storage.crypto.decrypt(&wal, &storage.key,))?;
+        }
+
+        let copy_len = min(self.wal.len() - self.read, buf.len());
+        buf[..copy_len]
+            .copy_from_slice(&self.wal[self.read..self.read + copy_len]);
+        self.read += copy_len;
+
+        Ok(copy_len)
+    }
+}
 
 /// Storage Reader
 #[derive(Debug)]
@@ -426,6 +481,46 @@ impl Read for Reader {
     }
 }
 
+/// Storage Wal Writer
+pub struct WalWriter {
+    id: Eid,
+    storage: StorageRef,
+    wal: Vec<u8>,
+}
+
+impl WalWriter {
+    pub fn new(id: &Eid, storage: &StorageRef) -> Self {
+        WalWriter {
+            id: id.clone(),
+            storage: storage.clone(),
+            wal: Vec::new(),
+        }
+    }
+}
+
+impl Write for WalWriter {
+    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
+        self.wal.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    #[inline]
+    fn flush(&mut self) -> IoResult<()> {
+        // no-op here, call finish() to complete the writing
+        Ok(())
+    }
+}
+
+impl Finish for WalWriter {
+    fn finish(self) -> Result<()> {
+        let mut storage = self.storage.write().unwrap();
+
+        // encrypt wal and save to underlying storage
+        let enc = storage.crypto.encrypt(&self.wal, &storage.key)?;
+        storage.depot.put_wal(&self.id, &enc)
+    }
+}
+
 /// Storage Writer
 pub struct Writer {
     id: Eid,
@@ -483,7 +578,8 @@ impl Writer {
 
         // allocate blocks
         let span = {
-            let mut allocator = storage.allocator.write().unwrap();
+            let allocator_ref = storage.get_allocator();
+            let mut allocator = allocator_ref.write().unwrap();
             allocator.allocate(blk_cnt)
         };
 
@@ -511,24 +607,30 @@ impl Write for Writer {
         Ok(copy_len)
     }
 
+    #[inline]
     fn flush(&mut self) -> IoResult<()> {
+        // no-op here, call finish() to complete the writing
         Ok(())
     }
 }
 
 impl Finish for Writer {
     fn finish(mut self) -> Result<()> {
+        // write data frame
         self.write_frame()?;
-        let mut storage = self.storage.write().unwrap();
-        storage.write_new_address(&self.id, &self.addr)
-    }
 
-    fn finish_and_flush(mut self) -> Result<()> {
-        self.write_frame()?;
+        // if the old address exists, remove all of its blocks
         let mut storage = self.storage.write().unwrap();
-        storage.write_new_address(&self.id, &self.addr)?;
-        storage.depot.flush()?;
-        Ok(())
+        match storage.get_address(&self.id) {
+            Ok(old_addr) => {
+                storage.remove_address_blocks(&old_addr)?;
+            }
+            Err(ref err) if *err == Error::NotFound => {}
+            Err(err) => return Err(err),
+        }
+
+        // write new address
+        storage.put_address(&self.id, &self.addr)
     }
 }
 
@@ -697,7 +799,7 @@ mod tests {
         // write #1
         let mut wtr = Writer::new(&id, storage);
         wtr.write_all(&buf).unwrap();
-        wtr.finish_and_flush().unwrap();
+        wtr.finish().unwrap();
 
         // read
         let mut rdr = Reader::new(&id, storage).unwrap();

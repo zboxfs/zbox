@@ -5,6 +5,7 @@ use super::index::IndexMgr;
 use super::sector::SectorMgr;
 use super::vio;
 use base::crypto::{Crypto, Key};
+use base::utils;
 use error::{Error, Result};
 use trans::Eid;
 use volume::address::Span;
@@ -14,6 +15,7 @@ use volume::storage::Storable;
 #[derive(Debug)]
 pub struct FileStorage {
     base: PathBuf,
+    wal_base: PathBuf,
     idx_mgr: IndexMgr,
     sec_mgr: SectorMgr,
 }
@@ -22,7 +24,8 @@ impl FileStorage {
     // super block file name
     const SUPER_BLK_FILE_NAME: &'static str = "super_blk";
 
-    // index and data dir names
+    // wal, index and data dir names
+    const WAL_DIR: &'static str = "wal";
     const INDEX_DIR: &'static str = "index";
     const DATA_DIR: &'static str = "data";
 
@@ -33,6 +36,7 @@ impl FileStorage {
     pub fn new(base: &Path) -> Self {
         FileStorage {
             base: base.to_path_buf(),
+            wal_base: base.join(Self::WAL_DIR),
             idx_mgr: IndexMgr::new(&base.join(Self::INDEX_DIR)),
             sec_mgr: SectorMgr::new(&base.join(Self::DATA_DIR)),
         }
@@ -43,6 +47,12 @@ impl FileStorage {
         let mut path = self.base.join(Self::SUPER_BLK_FILE_NAME);
         path.set_extension(format!("{}", suffix));
         path
+    }
+
+    // wal file path
+    #[inline]
+    fn wal_path(&self, id: &Eid) -> PathBuf {
+        id.to_path_buf(&self.wal_base)
     }
 
     #[inline]
@@ -121,6 +131,40 @@ impl Storable for FileStorage {
         Ok(())
     }
 
+    fn get_wal(&mut self, id: &Eid) -> Result<Vec<u8>> {
+        let path = self.wal_path(id);
+        if !path.exists() {
+            return Err(Error::NotFound);
+        }
+
+        let mut ret = Vec::new();
+        let mut file = vio::OpenOptions::new().read(true).open(&path)?;
+        file.read_to_end(&mut ret)?;
+
+        Ok(ret)
+    }
+
+    fn put_wal(&mut self, id: &Eid, wal: &[u8]) -> Result<()> {
+        let path = self.wal_path(id);
+        utils::ensure_parents_dir(&path)?;
+        let mut file = vio::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&path)?;
+        file.write_all(wal)?;
+        Ok(())
+    }
+
+    fn del_wal(&mut self, id: &Eid) -> Result<()> {
+        let path = self.wal_path(id);
+        if path.exists() {
+            vio::remove_file(&path)?;
+            utils::remove_empty_parent_dir(&path)?;
+        }
+        Ok(())
+    }
+
     #[inline]
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
         self.idx_mgr.read_addr(id)
@@ -149,6 +193,11 @@ impl Storable for FileStorage {
     #[inline]
     fn del_blocks(&mut self, span: Span) -> Result<()> {
         self.sec_mgr.del_blocks(span)
+    }
+
+    #[inline]
+    fn flush(&mut self) -> Result<()> {
+        self.idx_mgr.flush()
     }
 }
 
@@ -198,6 +247,44 @@ mod tests {
     }
 
     #[test]
+    fn wal_oper() {
+        let (dir, _tmpdir) = setup();
+        let mut fs = FileStorage::new(&dir);
+        fs.init(Crypto::default(), Key::new_empty()).unwrap();
+
+        let id = Eid::new();
+        let id2 = Eid::new();
+        let wal = vec![1, 2, 3];
+        let wal2 = vec![4, 5, 6];
+
+        // add wal 1
+        fs.put_wal(&id, &wal).unwrap();
+        let tgt = fs.get_wal(&id).unwrap();
+        assert_eq!(&tgt[..], &wal[..]);
+
+        // add wal 2
+        fs.put_wal(&id2, &wal2).unwrap();
+        let tgt = fs.get_wal(&id2).unwrap();
+        assert_eq!(&tgt[..], &wal2[..]);
+
+        // delete wal 1, wal 2 should still be there
+        fs.del_wal(&id).unwrap();
+        assert_eq!(fs.get_wal(&id).unwrap_err(), Error::NotFound);
+        let tgt = fs.get_wal(&id2).unwrap();
+        assert_eq!(&tgt[..], &wal2[..]);
+
+        // re-open storage
+        drop(fs);
+        let mut fs = FileStorage::new(&dir);
+        fs.open(Crypto::default(), Key::new_empty()).unwrap();
+
+        // wal 1 is deleted, wal 2 should still be there
+        assert_eq!(fs.get_wal(&id).unwrap_err(), Error::NotFound);
+        let tgt = fs.get_wal(&id2).unwrap();
+        assert_eq!(&tgt[..], &wal2[..]);
+    }
+
+    #[test]
     fn index_oper() {
         let (dir, _tmpdir) = setup();
         let mut fs = FileStorage::new(&dir);
@@ -223,6 +310,8 @@ mod tests {
         assert_eq!(fs.get_address(&id).unwrap_err(), Error::NotFound);
         let tgt = fs.get_address(&id2).unwrap();
         assert_eq!(&tgt[..], &addr2[..]);
+
+        fs.flush().unwrap();
 
         // re-open storage
         drop(fs);

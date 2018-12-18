@@ -6,32 +6,58 @@ use bytes::BufMut;
 
 use super::file_armor::FileArmor;
 use base::crypto::{Crypto, HashKey, Key};
-use base::lru::{CountMeter, Lru, PinChecker};
 use error::{Error, Result};
 use trans::{Eid, Id};
 use volume::{Arm, ArmAccess, Armor, Seq};
 
-// entity index
+// entity address bucket
 #[derive(Clone, Deserialize, Serialize)]
-struct Index {
+struct Bucket {
     id: Eid,
     seq: u64,
     arm: Arm,
     map: HashMap<Eid, Vec<u8>>,
+
+    #[serde(skip_serializing, skip_deserializing, default)]
+    is_changed: bool,
 }
 
-impl Index {
+impl Bucket {
+    #[inline]
     fn new(id: Eid) -> Self {
-        Index {
+        Bucket {
             id,
             seq: 0,
             arm: Arm::default(),
             map: HashMap::new(),
+            is_changed: false,
+        }
+    }
+
+    #[inline]
+    fn get(&self, id: &Eid) -> Option<&Vec<u8>> {
+        self.map.get(id)
+    }
+
+    #[inline]
+    fn insert(&mut self, id: Eid, addr: Vec<u8>) -> Option<Vec<u8>> {
+        self.is_changed = true;
+        self.map.insert(id, addr)
+    }
+
+    #[inline]
+    fn remove(&mut self, id: &Eid) -> Option<Vec<u8>> {
+        match self.map.remove(id) {
+            Some(addr) => {
+                self.is_changed = true;
+                Some(addr)
+            }
+            None => None,
         }
     }
 }
 
-impl Id for Index {
+impl Id for Bucket {
     #[inline]
     fn id(&self) -> &Eid {
         &self.id
@@ -43,7 +69,7 @@ impl Id for Index {
     }
 }
 
-impl Seq for Index {
+impl Seq for Bucket {
     #[inline]
     fn seq(&self) -> u64 {
         self.seq
@@ -55,7 +81,7 @@ impl Seq for Index {
     }
 }
 
-impl<'de> ArmAccess<'de> for Index {
+impl<'de> ArmAccess<'de> for Bucket {
     #[inline]
     fn arm(&self) -> Arm {
         self.arm
@@ -67,32 +93,33 @@ impl<'de> ArmAccess<'de> for Index {
     }
 }
 
-impl Debug for Index {
+impl Debug for Bucket {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Index")
+        f.debug_struct("Bucket")
             .field("id", &self.id)
             .field("seq", &self.seq)
             .field("arm", &self.arm)
             .field("map.len", &self.map.len())
+            .field("is_changed", &self.is_changed)
             .finish()
     }
 }
 
 // entity index manager
 pub struct IndexMgr {
-    idx_armor: FileArmor<Index>,
-    cache: Lru<u8, Index, CountMeter<Index>, PinChecker<Index>>,
+    bkt_armor: FileArmor<Bucket>,
+    buckets: HashMap<u8, Bucket>,
     hash_key: HashKey,
 }
 
 impl IndexMgr {
-    // index cache size
-    const CACHE_SIZE: usize = 32;
+    // number of buckets
+    const BUCKET_NUM: u8 = 8;
 
     pub fn new(base: &Path) -> Self {
         IndexMgr {
-            idx_armor: FileArmor::new(base),
-            cache: Lru::new(Self::CACHE_SIZE),
+            bkt_armor: FileArmor::new(base),
+            buckets: HashMap::new(),
             hash_key: HashKey::new_empty(),
         }
     }
@@ -104,87 +131,92 @@ impl IndexMgr {
         key: Key,
         hash_key: HashKey,
     ) {
-        self.idx_armor.set_crypto_ctx(crypto, key);
+        self.bkt_armor.set_crypto_ctx(crypto, key);
         self.hash_key = hash_key;
     }
 
-    // convert bucket id to index id
-    fn bucket_id_to_eid(&self, bucket_id: u8) -> Eid {
+    // convert bucket index to id
+    fn bucket_idx_to_eid(&self, bucket_idx: u8) -> Eid {
         let mut buf = Vec::with_capacity(1);
-        buf.put_u8(bucket_id);
+        buf.put_u8(bucket_idx);
         let hash = Crypto::hash_with_key(&buf, &self.hash_key);
         Eid::from_slice(&hash)
     }
 
-    // load index from disk file
-    fn load_index(&mut self, bucket_id: u8) -> Result<Index> {
-        let index_id = self.bucket_id_to_eid(bucket_id);
-        self.idx_armor.load_item(&index_id)
-    }
+    // open bucket for an entity, if not exists then create it
+    fn open_bucket_raw(
+        &mut self,
+        id: &Eid,
+        create: bool,
+    ) -> Result<&mut Bucket> {
+        let bucket_idx = id[0] % Self::BUCKET_NUM;
+        let bucket_id = self.bucket_idx_to_eid(bucket_idx);
 
-    // save index to disk file
-    fn save_index(&mut self, id: &Eid) -> Result<()> {
-        let bucket_id = id[0];
-        let index = self.cache.get_refresh(&bucket_id).unwrap();
-        self.idx_armor.save_item(index)
-    }
-
-    // open index for an entity, if not exists then create it
-    fn open_index(&mut self, id: &Eid, create: bool) -> Result<&mut Index> {
-        let bucket_id = id[0];
-
-        if !self.cache.contains_key(&bucket_id) {
-            // load index and insert into cache
-            match self.load_index(bucket_id) {
-                Ok(index) => {
-                    self.cache.insert(bucket_id, index);
+        if !self.buckets.contains_key(&bucket_idx) {
+            // load bucket
+            match self.bkt_armor.load_item(&bucket_id) {
+                Ok(bucket) => {
+                    self.buckets.insert(bucket_idx, bucket);
                 }
                 Err(ref err) if *err == Error::NotFound && create => {
-                    // create a new index and save it to cache
-                    let index = Index::new(self.bucket_id_to_eid(bucket_id));
-                    self.cache.insert(bucket_id, index);
+                    // create a new bucket
+                    let bucket = Bucket::new(bucket_id);
+                    self.buckets.insert(bucket_idx, bucket);
                 }
                 Err(err) => return Err(err),
             }
         }
 
-        let index = self.cache.get_refresh(&bucket_id).unwrap();
+        let ret = self.buckets.get_mut(&bucket_idx).unwrap();
 
-        Ok(index)
+        Ok(ret)
     }
 
-    // read entity address from index
+    #[inline]
+    fn open_bucket_create(&mut self, id: &Eid) -> Result<&mut Bucket> {
+        self.open_bucket_raw(id, true)
+    }
+
+    #[inline]
+    fn open_bucket(&mut self, id: &Eid) -> Result<&mut Bucket> {
+        self.open_bucket_raw(id, false)
+    }
+
+    // read entity address
     pub fn read_addr(&mut self, id: &Eid) -> Result<Vec<u8>> {
-        let index = self.open_index(id, false)?;
-        index
-            .map
+        let bucket = self.open_bucket(id)?;
+        bucket
             .get(id)
             .ok_or(Error::NotFound)
             .map(|addr| addr.clone())
     }
 
-    // write entity address to index
+    // write entity address
     pub fn write_addr(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
-        {
-            let index = self.open_index(id, true)?;
-            index.map.insert(id.clone(), addr.to_vec());
-        }
-        self.save_index(id)?;
+        let bucket = self.open_bucket_create(id)?;
+        bucket.insert(id.clone(), addr.to_vec());
         Ok(())
     }
 
-    // delete entity address from index
+    // delete entity address
     pub fn del_address(&mut self, id: &Eid) -> Result<()> {
-        {
-            match self.open_index(id, false) {
-                Ok(index) => {
-                    index.map.remove(id);
-                }
-                Err(ref err) if *err == Error::NotFound => return Ok(()),
-                Err(err) => return Err(err),
+        match self.open_bucket(id) {
+            Ok(bucket) => {
+                bucket.remove(id);
+                Ok(())
+            }
+            Err(ref err) if *err == Error::NotFound => Ok(()),
+            Err(err) => Err(err),
+        }
+    }
+
+    pub fn flush(&mut self) -> Result<()> {
+        for bucket in self.buckets.values_mut() {
+            if bucket.is_changed {
+                self.bkt_armor.save_item(bucket)?;
+                bucket.is_changed = false;
             }
         }
-        self.save_index(id)?;
         Ok(())
     }
 }
@@ -192,6 +224,7 @@ impl IndexMgr {
 impl Debug for IndexMgr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("IndexMgr")
+            .field("buckets", &self.buckets)
             .field("hash_key", &self.hash_key)
             .finish()
     }

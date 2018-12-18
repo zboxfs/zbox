@@ -94,7 +94,8 @@ impl Headers {
 
     fn put_range(mut self, begin: usize, end: usize) -> Self {
         let header = HeaderName::from_static("zbox-range");
-        let value = HeaderValue::from_str(&format!("{}-{}", begin, end)).unwrap();
+        let value =
+            HeaderValue::from_str(&format!("{}-{}", begin, end)).unwrap();
         self.map.insert(header, value);
         self
     }

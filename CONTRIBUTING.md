@@ -129,14 +129,14 @@ cargo test --tests fuzz_test --features storage-faulty -- --nocapture
 
 ### Run performance test
 
-To run performance test cases, we need to turn on the feature `perf-test`. And
+To run performance test cases, we need to turn on the feature `test-perf`. And
 the performance test should be run under `release` mode otherwise the result
 will not be accurate.
 
 Run performance test:
 
 ```bash
-cargo test --tests perf_test --release --features perf-test -- --nocapture
+cargo test --tests perf_test --release --features test-perf -- --nocapture
 ```
 
 ## Code of Conduct

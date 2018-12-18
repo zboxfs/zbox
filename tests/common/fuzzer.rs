@@ -56,7 +56,7 @@ impl FileType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Action {
     New,
     Read,
@@ -273,6 +273,7 @@ impl Index<usize> for ControlGroup {
 }
 
 // test round step
+#[derive(Clone)]
 pub struct Step {
     pub round: usize,
     pub action: Action,

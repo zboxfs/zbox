@@ -7,7 +7,7 @@ use super::wal::Wal;
 use super::{Eid, EntityType, Id, Txid};
 use base::IntoRef;
 use error::{Error, Result};
-use volume::{Arm, Armor, VolumeArmor, VolumeRef};
+use volume::{Arm, Armor, VolumeRef, VolumeWalArmor};
 
 /// Cohort action in transaction
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize, Serialize)]
@@ -32,7 +32,7 @@ pub struct Trans {
     txid: Txid,
     cohorts: LinkedHashMap<Eid, TransableRef>,
     wal: Wal,
-    wal_armor: VolumeArmor<Wal>,
+    wal_armor: VolumeWalArmor<Wal>,
 }
 
 impl Trans {
@@ -41,7 +41,7 @@ impl Trans {
             txid,
             cohorts: LinkedHashMap::new(),
             wal: Wal::new(txid),
-            wal_armor: VolumeArmor::new(vol),
+            wal_armor: VolumeWalArmor::new(vol),
         }
     }
 
@@ -52,7 +52,7 @@ impl Trans {
 
     #[inline]
     pub fn begin_trans(&mut self) -> Result<()> {
-        self.wal_armor.save_item_flush(&mut self.wal)
+        self.wal_armor.save_item(&mut self.wal)
     }
 
     // add an entity to this transaction
@@ -66,12 +66,10 @@ impl Trans {
     ) -> Result<()> {
         // add a wal entry and save wal, if this failed remove entry from wal
         self.wal.add_entry(id, action, ent_type, arm);
-        self.wal_armor
-            .save_item_flush(&mut self.wal)
-            .or_else(|err| {
-                self.wal.remove_entry(id);
-                Err(err)
-            })?;
+        self.wal_armor.save_item(&mut self.wal).or_else(|err| {
+            self.wal.remove_entry(id);
+            Err(err)
+        })?;
 
         // add entity to cohorts
         self.cohorts.entry(id.clone()).or_insert(entity);
@@ -105,6 +103,12 @@ impl Trans {
             ent.commit(&vol)?;
         }
 
+        // flush volume
+        {
+            let mut vol = vol.write().unwrap();
+            vol.flush()?;
+        }
+
         Ok(self.wal.clone())
     }
 
@@ -131,7 +135,11 @@ impl Trans {
         self.wal.clean_aborted(vol)?;
 
         // remove wal
-        self.wal_armor.remove_all_arms(self.wal.id())
+        self.wal_armor.remove_all_arms(self.wal.id())?;
+
+        // flush volume
+        let mut vol = vol.write().unwrap();
+        vol.flush()
     }
 }
 

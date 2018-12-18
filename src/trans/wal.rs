@@ -7,7 +7,7 @@ use super::{Eid, Id, Txid};
 use base::crypto::{HashKey, HASHKEY_SIZE};
 use error::{Error, Result};
 use volume::{
-    AllocatorRef, Arm, ArmAccess, Armor, Seq, VolumeArmor, VolumeRef,
+    AllocatorRef, Arm, ArmAccess, Armor, Seq, VolumeRef, VolumeWalArmor,
 };
 
 /// Wal entry entity type
@@ -90,7 +90,7 @@ impl Wal {
     }
 
     // recylce a wal
-    fn recyle(&self, wal_armor: &VolumeArmor<Self>) -> Result<()> {
+    fn recyle(&self, wal_armor: &VolumeWalArmor<Self>) -> Result<()> {
         debug!("recycle tx#{}", self.txid);
         for ent in self.entries.values() {
             match ent.action {
@@ -200,13 +200,20 @@ struct WalQueue {
     aborting: HashMap<Txid, Wal>,
 
     #[serde(skip_serializing, skip_deserializing, default)]
-    wal_armor: VolumeArmor<Wal>,
+    wal_armor: VolumeWalArmor<Wal>,
+
+    #[serde(skip_serializing, skip_deserializing, default)]
+    allocator: AllocatorRef,
 }
 
 impl WalQueue {
     const COMMITTED_QUEUE_SIZE: usize = 2;
 
     pub fn new(id: &Eid, vol: &VolumeRef) -> Self {
+        let allocator = {
+            let vol = vol.read().unwrap();
+            vol.get_allocator()
+        };
         WalQueue {
             id: id.clone(),
             seq: 0,
@@ -216,7 +223,8 @@ impl WalQueue {
             done: VecDeque::new(),
             doing: HashSet::new(),
             aborting: HashMap::new(),
-            wal_armor: VolumeArmor::new(vol),
+            wal_armor: VolumeWalArmor::new(vol),
+            allocator,
         }
     }
 
@@ -243,7 +251,7 @@ impl WalQueue {
 
     #[inline]
     fn open(&mut self, vol: &VolumeRef) {
-        self.wal_armor = VolumeArmor::new(vol);
+        self.wal_armor = VolumeWalArmor::new(vol);
     }
 
     #[inline]
@@ -306,7 +314,7 @@ impl WalQueue {
             completed.push(wal.txid);
         }
 
-        // remove all txs which are completed to retry abort
+        // remove all txs which are completed retrying abort
         for txid in completed.iter() {
             self.end_abort(*txid);
         }
@@ -394,7 +402,7 @@ pub struct WalQueueMgr {
     // wal queue and wal queue armor
     walq: WalQueue,
     walq_backup: Option<WalQueue>,
-    walq_armor: VolumeArmor<WalQueue>,
+    walq_armor: VolumeWalArmor<WalQueue>,
 
     // block allocator
     allocator: AllocatorRef,
@@ -404,13 +412,13 @@ impl WalQueueMgr {
     pub fn new(walq_id: &Eid, vol: &VolumeRef) -> Self {
         let allocator = {
             let vol = vol.read().unwrap();
-            vol.allocator()
+            vol.get_allocator()
         };
         WalQueueMgr {
             txid_wmark: Txid::from(0),
             walq: WalQueue::new(walq_id, vol),
             walq_backup: None,
-            walq_armor: VolumeArmor::new(vol),
+            walq_armor: VolumeWalArmor::new(vol),
             allocator,
         }
     }
@@ -420,7 +428,7 @@ impl WalQueueMgr {
         self.walq = self.walq_armor.load_item(walq_id)?;
         self.walq.open(vol);
 
-        // restore water marks
+        // restore watermarks
         let (txid_wmark, blk_wmark) = self.walq.watermarks();
         self.txid_wmark = Txid::from(txid_wmark);
         {
@@ -441,7 +449,7 @@ impl WalQueueMgr {
         }
 
         debug!(
-            "WalQueue opened, seq: {}, watermarks: txid: {}, block: {}",
+            "WalQueue opened, seq: {}, watermarks: (txid: {}, block: {})",
             self.walq.seq(),
             txid_wmark,
             blk_wmark
@@ -466,28 +474,19 @@ impl WalQueueMgr {
     }
 
     fn save_walq(&mut self) -> Result<()> {
-        // reserve one block beforehand for the wal queue, because wal queue
-        // itself will consume a block
+        // get current block watermark and set it to wal queue
         let blk_wmark = {
-            let mut allocator = self.allocator.write().unwrap();
-            allocator.reserve(1)
-        };
-
-        // save watermarks to wal queue and save it,
-        self.walq.set_watermarks(self.txid_wmark.val(), blk_wmark);
-        self.walq_armor
-            .save_item_flush(&mut self.walq)
-            .or_else(|err| {
-                // if save failed, restore the walq backup
-                self.restore_walq();
-                Err(err)
-            })?;
-
-        // make sure the block watermark is correct
-        {
             let allocator = self.allocator.read().unwrap();
-            assert_eq!(allocator.block_wmark(), blk_wmark);
-        }
+            allocator.block_wmark()
+        };
+        self.walq.set_watermarks(self.txid_wmark.val(), blk_wmark);
+
+        // save wal queue
+        self.walq_armor.save_item(&mut self.walq).or_else(|err| {
+            // if save failed, restore the walq backup
+            self.restore_walq();
+            Err(err)
+        })?;
 
         Ok(())
     }

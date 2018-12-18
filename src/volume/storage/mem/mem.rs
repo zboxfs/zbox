@@ -13,6 +13,7 @@ use volume::BLK_SIZE;
 #[derive(Clone)]
 pub struct MemStorage {
     super_blk_map: HashMap<u64, Vec<u8>>,
+    wal_map: HashMap<Eid, Vec<u8>>,
     blk_map: HashMap<usize, Vec<u8>>,
     addr_map: HashMap<Eid, Vec<u8>>,
 }
@@ -21,6 +22,7 @@ impl MemStorage {
     pub fn new() -> Self {
         MemStorage {
             super_blk_map: HashMap::new(),
+            wal_map: HashMap::new(),
             blk_map: HashMap::new(),
             addr_map: HashMap::new(),
         }
@@ -63,6 +65,26 @@ impl Storable for MemStorage {
     #[inline]
     fn put_super_block(&mut self, super_blk: &[u8], suffix: u64) -> Result<()> {
         self.super_blk_map.insert(suffix, super_blk.to_vec());
+        Ok(())
+    }
+
+    #[inline]
+    fn get_wal(&mut self, id: &Eid) -> Result<Vec<u8>> {
+        self.wal_map
+            .get(id)
+            .map(|wal| wal.to_owned())
+            .ok_or(Error::NotFound)
+    }
+
+    #[inline]
+    fn put_wal(&mut self, id: &Eid, wal: &[u8]) -> Result<()> {
+        self.wal_map.insert(id.clone(), wal.to_vec());
+        Ok(())
+    }
+
+    #[inline]
+    fn del_wal(&mut self, id: &Eid) -> Result<()> {
+        self.wal_map.remove(id);
         Ok(())
     }
 
@@ -113,6 +135,11 @@ impl Storable for MemStorage {
         for blk_idx in span {
             self.blk_map.remove(&blk_idx);
         }
+        Ok(())
+    }
+
+    #[inline]
+    fn flush(&mut self) -> Result<()> {
         Ok(())
     }
 }

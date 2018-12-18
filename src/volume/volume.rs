@@ -8,9 +8,7 @@ use lz4::{
 };
 
 use super::allocator::AllocatorRef;
-use super::storage::{
-    Reader as StorageReader, Storage, StorageRef, Writer as StorageWriter,
-};
+use super::storage::{self, Storage, StorageRef};
 use super::super_block::SuperBlk;
 use base::crypto::{Cipher, Cost, Salt};
 use base::{IntoRef, Time, Version};
@@ -75,7 +73,7 @@ impl Volume {
         super_blk.head.cipher = cfg.cipher;
         super_blk.body.volume_id = self.info.id.clone();
         super_blk.body.ver = self.info.ver.clone();
-        super_blk.body.key = storage.crypto_ctx().1.clone();
+        super_blk.body.key = storage.get_key().clone();
         super_blk.body.uri = self.info.uri.clone();
         super_blk.body.compress = cfg.compress;
         super_blk.body.ctime = self.info.ctime;
@@ -83,8 +81,8 @@ impl Volume {
 
         // save super block twice to save its both arms
         super_blk
-            .save(pwd, storage.depot_mut())
-            .and(super_blk.save(pwd, storage.depot_mut()))?;
+            .save(pwd, &mut storage)
+            .and(super_blk.save(pwd, &mut storage))?;
 
         debug!("volume initialised");
 
@@ -97,7 +95,7 @@ impl Volume {
         storage.connect()?;
 
         // load super block from storage
-        let super_blk = SuperBlk::load(pwd, storage.depot_mut())?;
+        let super_blk = SuperBlk::load(pwd, &mut storage)?;
 
         // check volume version
         if !super_blk.body.ver.match_repo_version() {
@@ -147,11 +145,11 @@ impl Volume {
         let mut storage = self.storage.write().unwrap();
 
         // load old super block
-        let mut super_blk = SuperBlk::load(old_pwd, storage.depot_mut())?;
+        let mut super_blk = SuperBlk::load(old_pwd, &mut storage)?;
 
         // save new super block with new password and cost
         super_blk.head.cost = cost;
-        super_blk.save(new_pwd, storage.depot_mut())?;
+        super_blk.save(new_pwd, &mut storage)?;
 
         self.info.cost = cost;
 
@@ -173,15 +171,28 @@ impl Volume {
 
     // get allocator from storage
     #[inline]
-    pub fn allocator(&self) -> AllocatorRef {
+    pub fn get_allocator(&self) -> AllocatorRef {
         let storage = self.storage.read().unwrap();
-        storage.allocator()
+        storage.get_allocator()
+    }
+
+    #[inline]
+    pub fn del_wal(&mut self, id: &Eid) -> Result<()> {
+        let mut storage = self.storage.write().unwrap();
+        storage.del_wal(id)
     }
 
     // delete an entity
+    #[inline]
     pub fn del(&mut self, id: &Eid) -> Result<()> {
         let mut storage = self.storage.write().unwrap();
         storage.del(id)
+    }
+
+    #[inline]
+    pub fn flush(&mut self) -> Result<()> {
+        let mut storage = self.storage.write().unwrap();
+        storage.flush()
     }
 }
 
@@ -200,6 +211,28 @@ impl IntoRef for Volume {}
 /// Volume reference type
 pub type VolumeRef = Arc<RwLock<Volume>>;
 
+/// Volume Wal Reader
+pub struct WalReader {
+    inner: storage::WalReader,
+}
+
+impl WalReader {
+    #[inline]
+    pub fn new(id: &Eid, vol: &VolumeRef) -> Self {
+        let vol = vol.read().unwrap();
+        WalReader {
+            inner: storage::WalReader::new(id, &vol.storage),
+        }
+    }
+}
+
+impl Read for WalReader {
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
+        self.inner.read(buf)
+    }
+}
+
 /// Volume Reader
 pub struct Reader {
     inner: Box<Read>,
@@ -208,7 +241,7 @@ pub struct Reader {
 impl Reader {
     pub fn new(id: &Eid, vol: &VolumeRef) -> Result<Self> {
         let vol = vol.read().unwrap();
-        let rdr = StorageReader::new(id, &vol.storage)?;
+        let rdr = storage::Reader::new(id, &vol.storage)?;
         if vol.info.compress {
             Ok(Reader {
                 inner: Box::new(Lz4Decoder::new(rdr).unwrap()),
@@ -229,15 +262,50 @@ impl Read for Reader {
 }
 
 impl Debug for Reader {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "VolReader")
     }
 }
 
+/// Volume Wal Writer
+pub struct WalWriter {
+    inner: storage::WalWriter,
+}
+
+impl WalWriter {
+    #[inline]
+    pub fn new(id: &Eid, vol: &VolumeRef) -> Self {
+        let vol = vol.read().unwrap();
+        WalWriter {
+            inner: storage::WalWriter::new(id, &vol.storage),
+        }
+    }
+}
+
+impl Write for WalWriter {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
+        self.inner.write(buf)
+    }
+
+    #[inline]
+    fn flush(&mut self) -> IoResult<()> {
+        self.inner.flush()
+    }
+}
+
+impl Finish for WalWriter {
+    #[inline]
+    fn finish(self) -> Result<()> {
+        self.inner.finish()
+    }
+}
+
 // volume inner writer wrapper
 enum InnerWriter {
-    Compress(Lz4Encoder<StorageWriter>),
-    NoCompress(StorageWriter),
+    Compress(Lz4Encoder<storage::Writer>),
+    NoCompress(storage::Writer),
 }
 
 /// Volume writer
@@ -248,7 +316,7 @@ pub struct Writer {
 impl Writer {
     pub fn new(id: &Eid, vol: &VolumeRef) -> Result<Self> {
         let vol = vol.read().unwrap();
-        let wtr = StorageWriter::new(id, &vol.storage);
+        let wtr = storage::Writer::new(id, &vol.storage);
         let inner = if vol.info.compress {
             let comp = Lz4EncoderBuilder::new()
                 .level(0)
@@ -287,17 +355,6 @@ impl Finish for Writer {
                 wtr.finish()
             }
             InnerWriter::NoCompress(inner) => inner.finish(),
-        }
-    }
-
-    fn finish_and_flush(self) -> Result<()> {
-        match self.inner {
-            InnerWriter::Compress(inner) => {
-                let (mut wtr, result) = inner.finish();
-                result.map_err(|err| Error::from(err))?;
-                wtr.finish_and_flush()
-            }
-            InnerWriter::NoCompress(inner) => inner.finish_and_flush(),
         }
     }
 }
@@ -347,7 +404,7 @@ mod tests {
     fn write_to_entity(id: &Eid, buf: &[u8], vol: &VolumeRef) {
         let mut wtr = Writer::new(&id, &vol).unwrap();
         wtr.write_all(&buf).unwrap();
-        wtr.finish_and_flush().unwrap();
+        wtr.finish().unwrap();
     }
 
     fn verify_entity(id: &Eid, buf: &[u8], vol: &VolumeRef) {
@@ -385,10 +442,15 @@ mod tests {
         read_write_test(&vol);
         write_to_entity(&id, &buf, &vol);
 
+        {
+            let mut vol = vol.write().unwrap();
+            vol.flush().unwrap();
+        }
+
         let (uri, _info, wmark) = {
             let vol = vol.read().unwrap();
             let storage = vol.storage.read().unwrap();
-            let allocator_ref = storage.allocator();
+            let allocator_ref = storage.get_allocator();
             let allocator = allocator_ref.read().unwrap();
             (vol.info.uri.clone(), vol.info(), allocator.block_wmark())
         };
@@ -400,7 +462,7 @@ mod tests {
         assert_eq!(&buf[..], &payload[..]);
         {
             let storage = vol.storage.write().unwrap();
-            let allocator_ref = storage.allocator();
+            let allocator_ref = storage.get_allocator();
             let mut allocator = allocator_ref.write().unwrap();
             allocator.set_block_wmark(wmark);
         }

@@ -17,6 +17,12 @@ fn super_blk_key(suffix: u64) -> String {
     format!("super_blk:{}", suffix)
 }
 
+// redis key for wal
+#[inline]
+fn wal_key(id: &Eid) -> String {
+    format!("wal:{}", id.to_string())
+}
+
 // redis key for address
 #[inline]
 fn addr_key(id: &Eid) -> String {
@@ -127,6 +133,21 @@ impl Storable for RedisStorage {
         self.set_bytes(&key, super_blk)
     }
 
+    fn get_wal(&mut self, id: &Eid) -> Result<Vec<u8>> {
+        let key = wal_key(id);
+        self.get_bytes(&key)
+    }
+
+    fn put_wal(&mut self, id: &Eid, wal: &[u8]) -> Result<()> {
+        let key = wal_key(id);
+        self.set_bytes(&key, wal)
+    }
+
+    fn del_wal(&mut self, id: &Eid) -> Result<()> {
+        let key = wal_key(id);
+        self.del(&key)
+    }
+
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
         let key = addr_key(id);
         self.get_bytes(&key)
@@ -172,6 +193,11 @@ impl Storable for RedisStorage {
         }
         Ok(())
     }
+
+    #[inline]
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
 
 impl Debug for RedisStorage {
@@ -192,6 +218,7 @@ mod tests {
     fn redis_storage() {
         init_env();
         let mut rs = RedisStorage::new("127.0.0.1").unwrap();
+        rs.connect().unwrap();
         rs.init(Crypto::default(), Key::new_empty()).unwrap();
 
         let id = Eid::new();
@@ -204,6 +231,13 @@ mod tests {
         let s = rs.get_super_block(0).unwrap();
         assert_eq!(&s[..], &buf[..]);
 
+        // wal
+        rs.put_wal(&id, &buf).unwrap();
+        let s = rs.get_wal(&id).unwrap();
+        assert_eq!(&s[..], &buf[..]);
+        rs.del_wal(&id).unwrap();
+        assert_eq!(rs.get_wal(&id).unwrap_err(), Error::NotFound);
+
         // address
         rs.put_address(&id, &buf).unwrap();
         let s = rs.get_address(&id).unwrap();
@@ -212,33 +246,43 @@ mod tests {
         assert_eq!(rs.get_address(&id).unwrap_err(), Error::NotFound);
 
         // block
-        rs.put_blocks(0, 3, &blks).unwrap();
-        rs.get_blocks(&mut dst, 0, 3).unwrap();
+        let span = Span::new(0, 3);
+        rs.put_blocks(span, &blks).unwrap();
+        rs.get_blocks(&mut dst, span).unwrap();
         assert_eq!(&dst[..], &blks[..]);
-        rs.del_blocks(1, 2).unwrap();
-        assert_eq!(rs.get_blocks(&mut dst, 0, 3).unwrap_err(), Error::NotFound);
+        rs.del_blocks(Span::new(1, 2)).unwrap();
         assert_eq!(
-            rs.get_blocks(&mut dst[..BLK_SIZE], 1, 1).unwrap_err(),
+            rs.get_blocks(&mut dst, Span::new(0, 3)).unwrap_err(),
             Error::NotFound
         );
         assert_eq!(
-            rs.get_blocks(&mut dst[..BLK_SIZE], 2, 1).unwrap_err(),
+            rs.get_blocks(&mut dst[..BLK_SIZE], Span::new(1, 1))
+                .unwrap_err(),
+            Error::NotFound
+        );
+        assert_eq!(
+            rs.get_blocks(&mut dst[..BLK_SIZE], Span::new(2, 1))
+                .unwrap_err(),
             Error::NotFound
         );
 
         // re-open
         drop(rs);
         let mut rs = RedisStorage::new("127.0.0.1").unwrap();
+        rs.connect().unwrap();
         rs.open(Crypto::default(), Key::new_empty()).unwrap();
 
-        rs.get_blocks(&mut dst[..BLK_SIZE], 0, 1).unwrap();
+        rs.get_blocks(&mut dst[..BLK_SIZE], Span::new(0, 1))
+            .unwrap();
         assert_eq!(&dst[..BLK_SIZE], &blks[..BLK_SIZE]);
         assert_eq!(
-            rs.get_blocks(&mut dst[..BLK_SIZE], 1, 1).unwrap_err(),
+            rs.get_blocks(&mut dst[..BLK_SIZE], Span::new(1, 1))
+                .unwrap_err(),
             Error::NotFound
         );
         assert_eq!(
-            rs.get_blocks(&mut dst[..BLK_SIZE], 2, 1).unwrap_err(),
+            rs.get_blocks(&mut dst[..BLK_SIZE], Span::new(2, 1))
+                .unwrap_err(),
             Error::NotFound
         );
     }

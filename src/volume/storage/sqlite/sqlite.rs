@@ -126,6 +126,7 @@ pub struct SqliteStorage {
 impl SqliteStorage {
     // table name constants
     const TBL_SUPER_BLOCK: &'static str = "super_block";
+    const TBL_WALS: &'static str = "wals";
     const TBL_ADDRESSES: &'static str = "addresses";
     const TBL_BLOCKS: &'static str = "blocks";
 
@@ -169,6 +170,26 @@ impl SqliteStorage {
             INSERT INTO {}(suffix, data) VALUES (?, ?)
         ",
             Self::TBL_SUPER_BLOCK
+        ))?;
+
+        // wal sql
+        self.prepare_sql(format!(
+            "
+            SELECT data FROM {} WHERE id = ?
+        ",
+            Self::TBL_WALS
+        ))?;
+        self.prepare_sql(format!(
+            "
+            INSERT OR REPLACE INTO {}(id, data) VALUES (?, ?)
+        ",
+            Self::TBL_WALS
+        ))?;
+        self.prepare_sql(format!(
+            "
+            DELETE FROM {} WHERE id = ?
+        ",
+            Self::TBL_WALS
         ))?;
 
         // addresses sql
@@ -268,11 +289,16 @@ impl Storable for SqliteStorage {
                 data        BLOB
             );
             CREATE TABLE {} (
+                id          TEXT PRIMARY KEY,
+                data        BLOB
+            );
+            CREATE TABLE {} (
                 blk_idx     INTEGER PRIMARY KEY,
                 data        BLOB
             );
         ",
             Self::TBL_SUPER_BLOCK,
+            Self::TBL_WALS,
             Self::TBL_ADDRESSES,
             Self::TBL_BLOCKS
         );
@@ -324,7 +350,7 @@ impl Storable for SqliteStorage {
         run_dml(stmt)
     }
 
-    fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
+    fn get_wal(&mut self, id: &Eid) -> Result<Vec<u8>> {
         let stmt = self.stmts[2];
         reset_stmt(stmt)?;
 
@@ -333,8 +359,36 @@ impl Storable for SqliteStorage {
         run_select_blob(stmt)
     }
 
-    fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
+    fn put_wal(&mut self, id: &Eid, wal: &[u8]) -> Result<()> {
         let stmt = self.stmts[3];
+        reset_stmt(stmt)?;
+
+        // bind parameters and run sql
+        bind_id(stmt, 1, id)?;
+        bind_blob(stmt, 2, wal)?;
+        run_dml(stmt)
+    }
+
+    fn del_wal(&mut self, id: &Eid) -> Result<()> {
+        let stmt = self.stmts[4];
+        reset_stmt(stmt)?;
+
+        // bind parameters and run sql
+        bind_id(stmt, 1, id)?;
+        run_dml(stmt)
+    }
+
+    fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
+        let stmt = self.stmts[5];
+        reset_stmt(stmt)?;
+
+        // bind parameters and run sql
+        bind_id(stmt, 1, id)?;
+        run_select_blob(stmt)
+    }
+
+    fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
+        let stmt = self.stmts[6];
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
@@ -344,7 +398,7 @@ impl Storable for SqliteStorage {
     }
 
     fn del_address(&mut self, id: &Eid) -> Result<()> {
-        let stmt = self.stmts[4];
+        let stmt = self.stmts[7];
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
@@ -353,7 +407,7 @@ impl Storable for SqliteStorage {
     }
 
     fn get_blocks(&mut self, dst: &mut [u8], span: Span) -> Result<()> {
-        let stmt = self.stmts[5];
+        let stmt = self.stmts[8];
 
         let mut read = 0;
         for blk_idx in span {
@@ -372,7 +426,7 @@ impl Storable for SqliteStorage {
     }
 
     fn put_blocks(&mut self, span: Span, mut blks: &[u8]) -> Result<()> {
-        let stmt = self.stmts[6];
+        let stmt = self.stmts[9];
 
         for blk_idx in span {
             // reset statement and binding
@@ -390,7 +444,7 @@ impl Storable for SqliteStorage {
     }
 
     fn del_blocks(&mut self, span: Span) -> Result<()> {
-        let stmt = self.stmts[7];
+        let stmt = self.stmts[10];
 
         for blk_idx in span {
             // reset statement and binding
@@ -401,6 +455,11 @@ impl Storable for SqliteStorage {
             run_dml(stmt)?;
         }
 
+        Ok(())
+    }
+
+    #[inline]
+    fn flush(&mut self) -> Result<()> {
         Ok(())
     }
 }
@@ -443,6 +502,7 @@ mod tests {
         let dir = tmpdir.path().join("storage.db");
         let mut ss = SqliteStorage::new(dir.to_str().unwrap());
 
+        ss.connect().unwrap();
         ss.init(Crypto::default(), Key::new_empty()).unwrap();
 
         let id = Eid::new();
@@ -455,6 +515,13 @@ mod tests {
         let s = ss.get_super_block(0).unwrap();
         assert_eq!(&s[..], &buf[..]);
 
+        // wal
+        ss.put_wal(&id, &buf).unwrap();
+        let s = ss.get_wal(&id).unwrap();
+        assert_eq!(&s[..], &buf[..]);
+        ss.del_wal(&id).unwrap();
+        assert_eq!(ss.get_wal(&id).unwrap_err(), Error::NotFound);
+
         // address
         ss.put_address(&id, &buf).unwrap();
         let s = ss.get_address(&id).unwrap();
@@ -463,33 +530,40 @@ mod tests {
         assert_eq!(ss.get_address(&id).unwrap_err(), Error::NotFound);
 
         // block
-        ss.put_blocks(0, 3, &blks).unwrap();
-        ss.get_blocks(&mut dst, 0, 3).unwrap();
+        let span = Span::new(0, 3);
+        ss.put_blocks(span, &blks).unwrap();
+        ss.get_blocks(&mut dst, span).unwrap();
         assert_eq!(&dst[..], &blks[..]);
-        ss.del_blocks(1, 2).unwrap();
-        assert_eq!(ss.get_blocks(&mut dst, 0, 3).unwrap_err(), Error::NotFound);
+        ss.del_blocks(Span::new(1, 2)).unwrap();
+        assert_eq!(ss.get_blocks(&mut dst, span).unwrap_err(), Error::NotFound);
         assert_eq!(
-            ss.get_blocks(&mut dst[..BLK_SIZE], 1, 1).unwrap_err(),
+            ss.get_blocks(&mut dst[..BLK_SIZE], Span::new(1, 1))
+                .unwrap_err(),
             Error::NotFound
         );
         assert_eq!(
-            ss.get_blocks(&mut dst[..BLK_SIZE], 2, 1).unwrap_err(),
+            ss.get_blocks(&mut dst[..BLK_SIZE], Span::new(2, 1))
+                .unwrap_err(),
             Error::NotFound
         );
 
         // re-open
         drop(ss);
         let mut ss = SqliteStorage::new(dir.to_str().unwrap());
+        ss.connect().unwrap();
         ss.open(Crypto::default(), Key::new_empty()).unwrap();
 
-        ss.get_blocks(&mut dst[..BLK_SIZE], 0, 1).unwrap();
+        ss.get_blocks(&mut dst[..BLK_SIZE], Span::new(0, 1))
+            .unwrap();
         assert_eq!(&dst[..BLK_SIZE], &blks[..BLK_SIZE]);
         assert_eq!(
-            ss.get_blocks(&mut dst[..BLK_SIZE], 1, 1).unwrap_err(),
+            ss.get_blocks(&mut dst[..BLK_SIZE], Span::new(1, 1))
+                .unwrap_err(),
             Error::NotFound
         );
         assert_eq!(
-            ss.get_blocks(&mut dst[..BLK_SIZE], 2, 1).unwrap_err(),
+            ss.get_blocks(&mut dst[..BLK_SIZE], Span::new(2, 1))
+                .unwrap_err(),
             Error::NotFound
         );
     }

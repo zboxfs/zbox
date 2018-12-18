@@ -645,8 +645,14 @@ impl LocalCache {
         wmark: &str,
         obj: &[u8],
     ) -> Result<()> {
-        self.cache
-            .insert(rel_path, offset, wmark, obj, false, CacheControl::Long)?;
+        self.cache.insert(
+            rel_path,
+            offset,
+            wmark,
+            obj,
+            false,
+            CacheControl::Long,
+        )?;
         self.is_saved = false;
         Ok(())
     }

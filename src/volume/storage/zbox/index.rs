@@ -107,6 +107,9 @@ pub struct IndexMgr {
 }
 
 impl IndexMgr {
+    // number of buckets
+    const BUCKET_NUM: u8 = 8;
+
     pub fn new() -> Self {
         IndexMgr {
             buckets: HashMap::new(),
@@ -128,7 +131,7 @@ impl IndexMgr {
         id: &Eid,
         local_cache: &mut LocalCache,
     ) -> Result<&mut Bucket> {
-        let bucket_id = id[0] % 8;
+        let bucket_id = id[0] % Self::BUCKET_NUM;
 
         // if bucket is not loaded, load it from local cache
         if !self.buckets.contains_key(&bucket_id) {

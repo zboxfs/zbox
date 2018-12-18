@@ -286,8 +286,10 @@ impl SectorMgr {
         let wmark = self.sec_idx * BLKS_PER_SECTOR + self.sec_top / BLK_SIZE;
         let mut buf = Vec::new();
         buf.put_u64_le(wmark as u64);
-        let enc_buf = self.crypto.encrypt_with_ad(&buf, &self.key, &Self::MAGIC)?;
-        let ret = enc_buf.iter()
+        let enc_buf =
+            self.crypto.encrypt_with_ad(&buf, &self.key, &Self::MAGIC)?;
+        let ret = enc_buf
+            .iter()
             .map(|b| format!("{:02x}", b))
             .collect::<Vec<String>>()
             .join("");
