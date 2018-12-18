@@ -96,21 +96,13 @@ where
     }
 
     fn remove_lru(&mut self) -> Option<V> {
-        let capacity = self.capacity;
         let pin_ckr = self.pin_ckr.clone();
         let ret = self
             .map
             .entries()
             .enumerate()
             .find(|&(_, ref ent)| !pin_ckr.is_pinned(ent.get()))
-            .and_then(|(idx, ent)| {
-                if idx < capacity {
-                    Some(ent.remove())
-                } else {
-                    warn!("Cannot find item to remove in LRU");
-                    None
-                }
-            });
+            .and_then(|(_, ent)| Some(ent.remove()));
         if let Some(ref v) = ret {
             self.used = (self.used as isize - self.meter.measure(v)) as usize;
         }
