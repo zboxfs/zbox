@@ -155,11 +155,6 @@ impl Storable for ZboxStorage {
         self.sec_mgr.open(&mut self.local_cache)
     }
 
-    #[inline]
-    fn close(&mut self) -> Result<()> {
-        self.local_cache.close()
-    }
-
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
         let rel_path =
             Path::new(Self::SUPER_BLK_STEM).with_extension(suffix.to_string());

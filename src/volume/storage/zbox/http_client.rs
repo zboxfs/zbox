@@ -250,19 +250,6 @@ impl HttpClient {
         Ok(self.update_seq)
     }
 
-    pub fn close(&mut self) -> Result<()> {
-        if !self.session_token.is_empty() {
-            // send close requests to remote
-            let uri = self.make_uri("close").unwrap();
-            let headers = self.headers.build().bearer_auth(&self.session_token);
-            self.transport.get(&uri, headers.as_ref())?;
-
-            self.session_token.clear();
-            debug!("session closed");
-        }
-        Ok(())
-    }
-
     // send get request
     fn send_get_req(
         &mut self,
@@ -462,9 +449,18 @@ impl Default for HttpClient {
 
 impl Drop for HttpClient {
     fn drop(&mut self) {
-        if self.close().is_err() {
-            warn!("close session failed");
+        if self.session_token.is_empty() {
+            return;
         }
+
+        // send close requests to remote
+        let uri = self.make_uri("close").unwrap();
+        let headers = self.headers.build().bearer_auth(&self.session_token);
+        if self.transport.get(&uri, headers.as_ref()).is_err() {
+            warn!("close session failed");
+        } else {
+            debug!("session closed");
+        };
     }
 }
 

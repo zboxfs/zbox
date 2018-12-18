@@ -44,9 +44,6 @@ pub trait Storable: Debug + Send + Sync {
     // open a storage
     fn open(&mut self, crypto: Crypto, key: Key) -> Result<()>;
 
-    // close a storage
-    fn close(&mut self) -> Result<()>;
-
     // super block read/write, must not buffered
     // write no need to be atomic, but must gurantee any successful
     // write is persistent

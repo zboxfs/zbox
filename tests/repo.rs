@@ -164,9 +164,7 @@ fn repo_oper() {
             .open(&mut repo, "/file")
             .unwrap();
 
-        // close twice should be same
-        repo.close().unwrap();
-        repo.close().unwrap();
+        drop(repo);
 
         let buf = [1u8, 2u8, 3u8];
         assert_eq!(f.write_once(&buf[..]).unwrap_err(), Error::Closed);

@@ -597,12 +597,6 @@ impl LocalCache {
     }
 
     #[inline]
-    pub fn close(&mut self) -> Result<()> {
-        let mut client = self.client.write().unwrap();
-        client.close()
-    }
-
-    #[inline]
     pub fn get_index(&mut self, rel_path: &Path) -> Result<Vec<u8>> {
         self.idx_cache
             .get_all(&rel_path, false, CacheControl::NoCache)

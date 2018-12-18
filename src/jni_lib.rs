@@ -303,24 +303,6 @@ pub extern "system" fn Java_io_zbox_fs_Repo_jniExists(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_fs_Repo_jniClose(
-    env: JNIEnv,
-    obj: JObject,
-) {
-    let mut repo = unsafe {
-        env.get_rust_field::<&str, Repo>(obj, RUST_OBJ_FIELD)
-            .unwrap()
-    };
-
-    match repo.close() {
-        Ok(_) => {}
-        Err(ref err) => {
-            throw(&env, err);
-        }
-    }
-}
-
-#[no_mangle]
 pub extern "system" fn Java_io_zbox_fs_Repo_jniInfo<'a>(
     env: JNIEnv<'a>,
     obj: JObject,

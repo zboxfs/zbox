@@ -50,11 +50,6 @@ impl Storable for MemStorage {
         Ok(())
     }
 
-    #[inline]
-    fn close(&mut self) -> Result<()> {
-        Ok(())
-    }
-
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
         self.super_blk_map
             .get(&suffix)

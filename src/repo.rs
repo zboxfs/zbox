@@ -655,15 +655,6 @@ impl Repo {
         Ok(Repo { fs: Some(fs) })
     }
 
-    // close repo
-    #[inline]
-    pub fn close(&mut self) -> Result<()> {
-        match self.fs.take() {
-            Some(mut fs) => fs.close(),
-            None => Ok(()),
-        }
-    }
-
     /// Get repository metadata infomation.
     pub fn info(&self) -> Result<RepoInfo> {
         match self.fs {
