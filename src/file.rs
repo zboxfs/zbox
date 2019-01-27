@@ -33,12 +33,14 @@ impl VersionReader {
 }
 
 impl Read for VersionReader {
+    #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.rdr.read(buf)
     }
 }
 
 impl Seek for VersionReader {
+    #[inline]
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         self.rdr.seek(pos)
     }

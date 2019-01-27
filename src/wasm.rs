@@ -14,10 +14,9 @@ use web_sys;
 use base::crypto::{Cipher, MemLimit, OpsLimit};
 use base;
 use error::Error;
-//use file::{File, VersionReader};
+use file::{File as ZboxFile, VersionReader as ZboxVersionReader};
 use fs::{DirEntry as ZboxDirEntry, Metadata as ZboxMetadata, Version as ZboxVersion};
 use repo::{OpenOptions as ZboxOpenOptions, Repo as ZboxRepo, RepoInfo as ZboxRepoInfo, RepoOpener as ZboxRepoOpener};
-use file::{File as ZboxFile};
 
 #[wasm_bindgen]
 extern {
@@ -370,6 +369,53 @@ impl From<&ZboxVersion> for Version {
     }
 }
 
+#[wasm_bindgen(js_name = VersionReader)]
+pub struct VersionReader {
+    inner: Option<ZboxVersionReader>
+}
+
+#[wasm_bindgen(js_class = VersionReader)]
+impl VersionReader {
+    pub fn close(&mut self) {
+        self.inner.take();
+    }
+
+    pub fn read(&mut self, dst: &mut [u8]) -> Result<usize> {
+        let read = map_js_err!(match self.inner {
+            Some(ref mut rdr) => rdr.read(dst).map_err(Error::from),
+            None => Err(Error::Closed),
+        })?;
+        Ok(read)
+    }
+
+    #[wasm_bindgen(js_name = readAll)]
+    pub fn read_all(&mut self) -> Result<js_sys::Uint8ClampedArray> {
+        let mut buf = Vec::new();
+        map_js_err!(match self.inner {
+            Some(ref mut rdr) => rdr.read_to_end(&mut buf).map_err(Error::from),
+            None => Err(Error::Closed),
+        })?;
+        let array = unsafe { js_sys::Uint8Array::view(&buf) };
+        Ok(array.slice(0, array.length()))
+    }
+
+    pub fn seek(&mut self, from: u32, offset: i32) -> Result<u32> {
+        let new_pos = map_js_err!(match self.inner {
+            Some(ref mut rdr) => {
+                let pos = match from {
+                    0 => SeekFrom::Start(offset as u64),
+                    1 => SeekFrom::End(offset as i64),
+                    2 => SeekFrom::Current(offset as i64),
+                    _ => return map_js_err!(Err(Error::InvalidArgument))
+                };
+                rdr.seek(pos).map_err(Error::from)
+            }
+            None => Err(Error::Closed),
+        })?;
+        Ok(new_pos as u32)
+    }
+}
+
 #[wasm_bindgen(js_name = File)]
 pub struct File {
     inner: Option<ZboxFile>
@@ -408,10 +454,17 @@ impl File {
         Ok(written)
     }
 
+    pub fn finish(&mut self) -> Result<()> {
+        map_js_err!(match self.inner {
+            Some(ref mut file) => file.finish(),
+            None => Err(Error::Closed),
+        })
+    }
+
     #[wasm_bindgen(js_name = writeOnce)]
     pub fn write_once(&mut self, buf: &[u8]) -> Result<()> {
         map_js_err!(match self.inner {
-            Some(ref mut file) => file.write_once(buf).map_err(Error::from),
+            Some(ref mut file) => file.write_once(buf),
             None => Err(Error::Closed),
         })?;
         Ok(())
@@ -431,6 +484,49 @@ impl File {
             None => Err(Error::Closed),
         })?;
         Ok(new_pos as u32)
+    }
+
+    #[wasm_bindgen(js_name = setLen)]
+    pub fn set_len(&mut self, len: usize) -> Result<()> {
+        map_js_err!(match self.inner {
+            Some(ref mut file) => file.set_len(len),
+            None => Err(Error::Closed),
+        })
+    }
+
+    #[wasm_bindgen(js_name = currVersion)]
+    pub fn curr_version(&self) -> Result<usize> {
+        map_js_err!(match self.inner {
+            Some(ref file) => file.curr_version(),
+            None => Err(Error::Closed),
+        })
+    }
+
+    #[wasm_bindgen(js_name = versionReader)]
+    pub fn version_reader(&self, ver_num: usize) -> Result<VersionReader> {
+        let rdr = map_js_err!(match self.inner {
+            Some(ref file) => file.version_reader(ver_num),
+            None => Err(Error::Closed),
+        })?;
+        Ok(VersionReader { inner: Some(rdr) })
+    }
+
+    pub fn metadata(&self) -> Result<JsValue> {
+        let md = map_js_err!(match self.inner {
+            Some(ref file) => file.metadata(),
+            None => Err(Error::Closed),
+        })?;
+        let ret = Metadata::from(md);
+        Ok(JsValue::from_serde(&ret).unwrap())
+    }
+
+    pub fn history(&self) -> Result<JsValue> {
+        let hist = map_js_err!(match self.inner {
+            Some(ref file) => file.history(),
+            None => Err(Error::Closed),
+        })?;
+        let ret: Vec<Version> = hist.iter().map(Version::from).collect();
+        Ok(JsValue::from_serde(&ret).unwrap())
     }
 }
 
