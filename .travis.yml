@@ -20,6 +20,12 @@ script:
   - cargo build
   - cargo test
 
+# only build on master and stable branches
+branches:
+  only:
+    - master
+    - stable
+
 notifications:
   email:
     on_success: never
