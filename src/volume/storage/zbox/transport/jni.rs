@@ -113,7 +113,7 @@ pub struct JniTransport {
 }
 
 impl JniTransport {
-    pub fn new(timeout: u64) -> Result<Self> {
+    pub fn new(timeout: u32) -> Result<Self> {
         let jvm = unsafe {
             let jvm = JVM.lock().unwrap();
             JavaVM::from_raw(jvm.get_java_vm_pointer())?

@@ -2,15 +2,12 @@ use std::cmp::min;
 use std::error::Error as StdError;
 use std::fmt::{self, Debug};
 use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write};
-use std::path::Path;
 use std::sync::{Arc, RwLock};
 
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
-use super::file::FileStorage;
-use super::mem::MemStorage;
-use super::Storable;
+use super::{Storable, DummyStorage};
 use base::crypto::{Cipher, Cost, Crypto, Key};
 use base::lru::{CountMeter, Lru, Meter, PinChecker};
 use base::utils::align_ceil_chunk;
@@ -64,12 +61,26 @@ impl Storage {
 
     pub fn new(uri: &str) -> Result<Self> {
         let depot: Box<Storable> = if uri.starts_with("mem://") {
-            let depot = MemStorage::new();
-            Box::new(depot)
+            #[cfg(feature = "storage-mem")]
+            {
+                let depot = super::mem::MemStorage::new();
+                Box::new(depot)
+            }
+            #[cfg(not(feature = "storage-mem"))]
+            {
+                return Err(Error::InvalidUri);
+            }
         } else if uri.starts_with("file://") {
-            let path = Path::new(&uri[7..]);
-            let depot = FileStorage::new(path);
-            Box::new(depot)
+            #[cfg(feature = "storage-file")]
+            {
+                let path = std::path::Path::new(&uri[7..]);
+                let depot = super::file::FileStorage::new(path);
+                Box::new(depot)
+            }
+            #[cfg(not(feature = "storage-file"))]
+            {
+                return Err(Error::InvalidUri);
+            }
         } else if uri.starts_with("sqlite://") {
             #[cfg(feature = "storage-sqlite")]
             {
@@ -263,6 +274,20 @@ impl Storage {
     #[inline]
     pub fn flush(&mut self) -> Result<()> {
         self.depot.flush()
+    }
+}
+
+impl Default for Storage {
+    #[inline]
+    fn default() -> Self {
+        Storage {
+            depot: Box::new(DummyStorage::default()),
+            allocator: Allocator::default().into_ref(),
+            crypto: Crypto::default(),
+            key: Key::new_empty(),
+            frame_cache: Lru::default(),
+            addr_cache: Lru::default(),
+        }
     }
 }
 
@@ -633,8 +658,6 @@ impl Finish for Writer {
 mod tests {
     extern crate tempdir;
 
-    use std::env;
-    use std::fs;
     use std::time::Instant;
 
     use self::tempdir::TempDir;
@@ -924,16 +947,9 @@ mod tests {
     fn crypto_perf_test() {
         init_env();
 
-        let mut dir = env::temp_dir();
-        dir.push("zbox_crypto_perf_test");
-        if dir.exists() {
-            fs::remove_dir_all(&dir).unwrap();
-        }
-        fs::create_dir(&dir).unwrap();
-
         let crypto = Crypto::new(Cost::default(), Cipher::Aes).unwrap();
         let key = Key::new_empty();
-        let mut depot = FileStorage::new(&dir);
+        let mut depot = super::super::mem::MemStorage::new();
         depot.init(crypto.clone(), key.derive(0)).unwrap();
 
         const DATA_LEN: usize = 32 * 1024 * 1024;
@@ -970,11 +986,9 @@ mod tests {
         let read_time = now.elapsed();
 
         println!(
-            "Raw crypto + file storage perf: read: {}, write: {}",
+            "Raw crypto + mem storage perf: read: {}, write: {}",
             speed_str(&read_time, DATA_LEN),
             speed_str(&write_time, DATA_LEN)
         );
-
-        fs::remove_dir_all(&dir).unwrap();
     }
 }

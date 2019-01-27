@@ -1,12 +1,14 @@
-mod file;
-mod mem;
 mod storage;
 
-pub use self::file::FileStorage;
-pub use self::mem::MemStorage;
 pub use self::storage::{
     Reader, Storage, StorageRef, WalReader, WalWriter, Writer,
 };
+
+#[cfg(feature = "storage-mem")]
+mod mem;
+
+#[cfg(feature = "storage-file")]
+mod file;
 
 #[cfg(feature = "storage-faulty")]
 mod faulty;
@@ -72,4 +74,90 @@ pub trait Storable: Debug + Send + Sync {
     // flush possibly buffered address and block to storage
     // storage must gurantee write is persistent
     fn flush(&mut self) -> Result<()>;
+}
+
+/// Dummy storage
+#[derive(Debug, Default)]
+pub struct DummyStorage;
+
+impl Storable for DummyStorage {
+    #[inline]
+    fn exists(&self) -> Result<bool> {
+        Ok(false)
+    }
+
+    #[inline]
+    fn connect(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    #[inline]
+    fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
+        Ok(())
+    }
+
+    #[inline]
+    fn open(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
+        Ok(())
+    }
+
+    #[inline]
+    fn get_super_block(&mut self, _suffix: u64) -> Result<Vec<u8>> {
+        Ok(Vec::new())
+    }
+
+    #[inline]
+    fn put_super_block(&mut self, _super_blk: &[u8], _suffix: u64) -> Result<()> {
+        Ok(())
+    }
+
+    #[inline]
+    fn get_wal(&mut self, _id: &Eid) -> Result<Vec<u8>> {
+        Ok(Vec::new())
+    }
+
+    #[inline]
+    fn put_wal(&mut self, _id: &Eid, _wal: &[u8]) -> Result<()> {
+        Ok(())
+    }
+
+    #[inline]
+    fn del_wal(&mut self, _id: &Eid) -> Result<()> {
+        Ok(())
+    }
+
+    #[inline]
+    fn get_address(&mut self, _id: &Eid) -> Result<Vec<u8>> {
+        Ok(Vec::new())
+    }
+
+    #[inline]
+    fn put_address(&mut self, _id: &Eid, _addr: &[u8]) -> Result<()> {
+        Ok(())
+    }
+
+    #[inline]
+    fn del_address(&mut self, _id: &Eid) -> Result<()> {
+        Ok(())
+    }
+
+    #[inline]
+    fn get_blocks(&mut self, _dst: &mut [u8], _span: Span) -> Result<()> {
+        Ok(())
+    }
+
+    #[inline]
+    fn put_blocks(&mut self, _span: Span, _blks: &[u8]) -> Result<()> {
+        Ok(())
+    }
+
+    #[inline]
+    fn del_blocks(&mut self, _span: Span) -> Result<()> {
+        Ok(())
+    }
+
+    #[inline]
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
 }

@@ -7,6 +7,9 @@ pub(super) mod native;
 #[cfg(feature = "storage-zbox-jni")]
 pub(super) mod jni;
 
+#[cfg(feature = "storage-zbox-wasm")]
+pub(super) mod wasm;
+
 use std::io::{copy, Read, Write};
 
 use http::{HeaderMap, Response as HttpResponse, Uri};

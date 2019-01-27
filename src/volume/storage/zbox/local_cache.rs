@@ -200,6 +200,7 @@ impl CacheArea {
                     client.get(rel_path, cache_ctl)?
                 };
                 let remote_len = remote.len();
+                println!("ensure_in_local: {:?}, {}", rel_path, remote_len);
                 self.mem_store.insert(rel_path.to_path_buf(), remote);
                 self.evict(rel_path, remote_len, is_pinned)
             }
@@ -238,6 +239,7 @@ impl CacheArea {
             CacheType::Mem => {
                 let obj = self.mem_store.get(rel_path).unwrap();
                 let len = dst.len();
+        println!("local_cache.get_exact: {:?}, {:?}, {}, {}, {}", rel_path, offset, obj.len(), len, dst.len());
                 dst.copy_from_slice(&obj[offset..offset + len]);
             }
             CacheType::File => {

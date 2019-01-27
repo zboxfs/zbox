@@ -78,6 +78,7 @@ impl TxMgr {
             tx.begin_trans()
         };
         if let Err(err) = result {
+            debug!("begin tx failed: {:?}", err);
             tm.abort_trans(txid);
             return Err(err);
         }
@@ -139,6 +140,7 @@ impl TxMgr {
 
         if result.is_err() {
             // error happened during commit, abort the tx
+            debug!("commit tx failed: {:?}", result);
             self.abort_trans(txid);
         } else {
             // commit succeed, remove tx from tx manager
@@ -227,6 +229,8 @@ impl TxHandle {
     /// Abort a transaction
     fn abort(&self, err: Error) -> Result<()> {
         let mut tm = self.txmgr.write().unwrap();
+
+        debug!("run tx failed: {:?}", err);
         tm.abort_trans(self.txid);
 
         // return the original error

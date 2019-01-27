@@ -303,7 +303,7 @@ impl File {
     fn check_closed(&self) -> Result<()> {
         let shutter = self.handle.shutter.read().unwrap();
         if shutter.is_closed() {
-            return Err(Error::Closed);
+            return Err(Error::RepoClosed);
         }
         Ok(())
     }

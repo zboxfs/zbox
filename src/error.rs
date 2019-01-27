@@ -49,6 +49,7 @@ pub enum Error {
     WrongVersion,
     NoEntity,
     NotInSync,
+    RepoClosed,
 
     InTrans,
     NotInTrans,
@@ -100,6 +101,9 @@ pub enum Error {
 
     #[cfg(feature = "storage-zbox-jni")]
     Jni(JniError),
+
+    #[cfg(feature = "storage-zbox-wasm")]
+    RequestError,
 }
 
 impl Display for Error {
@@ -119,10 +123,11 @@ impl Display for Error {
             Error::InvalidUri => write!(f, "Invalid Uri"),
             Error::InvalidSuperBlk => write!(f, "Invalid super block"),
             Error::Corrupted => write!(f, "Volume is corrupted"),
-            Error::Opened => write!(f, "Volume is opened"),
+            Error::Opened => write!(f, "Repo is opened"),
             Error::WrongVersion => write!(f, "Version not match"),
             Error::NoEntity => write!(f, "Entity not found"),
             Error::NotInSync => write!(f, "Repo is not in sync"),
+            Error::RepoClosed => write!(f, "Repo is closed"),
 
             Error::InTrans => write!(f, "Already in transaction"),
             Error::NotInTrans => write!(f, "Not in transaction"),
@@ -149,7 +154,7 @@ impl Display for Error {
             Error::CannotWrite => write!(f, "Cannot write file"),
             Error::NotWrite => write!(f, "File does not write yet"),
             Error::NotFinish => write!(f, "File does not finish yet"),
-            Error::Closed => write!(f, "Repo is closed"),
+            Error::Closed => write!(f, "File is closed"),
 
             Error::Encode(ref err) => err.fmt(f),
             Error::Decode(ref err) => err.fmt(f),
@@ -176,6 +181,9 @@ impl Display for Error {
 
             #[cfg(feature = "storage-zbox-jni")]
             Error::Jni(ref err) => err.fmt(f),
+
+            #[cfg(feature = "storage-zbox-wasm")]
+            Error::RequestError => write!(f, "Http request failed"),
         }
     }
 }
@@ -197,10 +205,11 @@ impl StdError for Error {
             Error::InvalidUri => "Invalid Uri",
             Error::InvalidSuperBlk => "Invalid super block",
             Error::Corrupted => "Volume is corrupted",
-            Error::Opened => "Volume is opened",
+            Error::Opened => "Repo is opened",
             Error::WrongVersion => "Version not match",
             Error::NoEntity => "Entity not found",
             Error::NotInSync => "Repo is not in sync",
+            Error::RepoClosed => "Repo is closed",
 
             Error::InTrans => "Already in transaction",
             Error::NotInTrans => "Not in transaction",
@@ -227,7 +236,7 @@ impl StdError for Error {
             Error::CannotWrite => "Cannot write file",
             Error::NotWrite => "File does not write yet",
             Error::NotFinish => "File does not finish yet",
-            Error::Closed => "Repo is closed",
+            Error::Closed => "File is closed",
 
             Error::Encode(ref err) => err.description(),
             Error::Decode(ref err) => err.description(),
@@ -252,6 +261,9 @@ impl StdError for Error {
 
             #[cfg(feature = "storage-zbox-jni")]
             Error::Jni(ref err) => err.description(),
+
+            #[cfg(feature = "storage-zbox-wasm")]
+            Error::RequestError => "Http request error",
         }
     }
 
@@ -371,6 +383,7 @@ impl Into<i32> for Error {
             Error::WrongVersion => -1024,
             Error::NoEntity => -1025,
             Error::NotInSync => -1026,
+            Error::RepoClosed => -1027,
 
             Error::InTrans => -1030,
             Error::NotInTrans => -1031,
@@ -422,6 +435,9 @@ impl Into<i32> for Error {
 
             #[cfg(feature = "storage-zbox-jni")]
             Error::Jni(_) => -2064,
+
+            #[cfg(feature = "storage-zbox-wasm")]
+            Error::RequestError => -2065,
         }
     }
 }
@@ -447,6 +463,7 @@ impl PartialEq for Error {
             (&Error::WrongVersion, &Error::WrongVersion) => true,
             (&Error::NoEntity, &Error::NoEntity) => true,
             (&Error::NotInSync, &Error::NotInSync) => true,
+            (&Error::RepoClosed, &Error::RepoClosed) => true,
 
             (&Error::InTrans, &Error::InTrans) => true,
             (&Error::NotInTrans, &Error::NotInTrans) => true,
@@ -500,6 +517,9 @@ impl PartialEq for Error {
             (&Error::Jni(ref a), &Error::Jni(ref b)) => {
                 a.kind().description() == b.kind().description()
             }
+
+            #[cfg(feature = "storage-zbox-wasm")]
+            (&Error::RequestError, &Error::RequestError) => true,
 
             (_, _) => false,
         }

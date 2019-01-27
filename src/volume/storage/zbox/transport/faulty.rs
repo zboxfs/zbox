@@ -49,7 +49,7 @@ impl StaticStore {
 pub struct FaultyTransport;
 
 impl FaultyTransport {
-    pub fn new(_timeout: u64) -> Result<Self> {
+    pub fn new(_timeout: u32) -> Result<Self> {
         Ok(FaultyTransport {})
     }
 }

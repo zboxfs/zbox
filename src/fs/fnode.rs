@@ -434,7 +434,7 @@ impl Fnode {
                 }
                 PathBuf::from(path_str)
             }
-            #[cfg(unix)]
+            #[cfg(not(windows))]
             {
                 path
             }

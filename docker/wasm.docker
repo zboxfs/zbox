@@ -1,0 +1,90 @@
+FROM ubuntu:16.04
+
+RUN apt-get update -y && apt-get install -y \
+    g++ \
+    make \
+    cmake \
+    curl \
+    xz-utils \
+    python \
+    git \
+    libssl-dev \
+    libc6-dev-i386 \
+    pkg-config \
+    nodejs \
+    subversion
+
+# build llvm 8.0
+WORKDIR /llvm
+RUN svn co http://llvm.org/svn/llvm-project/llvm/trunk llvm
+WORKDIR /llvm/llvm/tools
+RUN svn co http://llvm.org/svn/llvm-project/cfe/trunk clang
+RUN svn co http://llvm.org/svn/llvm-project/lld/trunk lld
+WORKDIR /llvm/build
+RUN cmake ../llvm \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/clang \
+    -DLLVM_TARGETS_TO_BUILD=X86 \
+    -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=WebAssembly
+RUN make -j $(nproc) && make install
+
+# install emscripten
+WORKDIR /
+RUN git clone https://github.com/juj/emsdk.git
+RUN cd emsdk && ./emsdk install latest && ./emsdk activate latest
+
+# build wabt
+WORKDIR /wabt
+RUN git clone --recursive https://github.com/WebAssembly/wabt ./src
+WORKDIR /wabt/src/build
+RUN cmake .. \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/wabt
+RUN make -j $(nproc) install
+
+# install nightly rust
+ENV CARGO_HOME /cargo
+ENV RUSTUP_HOME /rustup
+RUN curl https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly
+ENV PATH $PATH:/cargo/bin
+RUN rustup target add wasm32-unknown-unknown \
+    && cargo install wasm-bindgen-cli \
+    && cargo install wasm-nm
+
+# get libsodium stable source code and apply our patch for building wasm target
+WORKDIR /libsodium
+RUN git clone https://github.com/jedisct1/libsodium.git . && git checkout origin/stable
+COPY docker/libsodium-wasm.patch .
+RUN git apply libsodium-wasm.patch
+
+# set environment variable and change llvm root directory to indicate
+# emscripten use our custom llvm as wasm backend
+ENV EMCC_WASM_BACKEND=1
+RUN echo "LLVM_ROOT='/clang/bin'" >> /root/.emscripten
+
+# build libsodium using emscripten
+RUN bash -c "source /emsdk/emsdk_env.sh && ./dist-build/emscripten.sh --standard"
+
+# environment variables for linking with libsodium
+ENV SODIUM_LIB_DIR=/libsodium/libsodium-js/lib/
+ENV SODIUM_STATIC=1
+
+ENV CC=/clang/bin/clang
+ENV AR=/clang/bin/llvm-ar
+
+RUN rustup self update
+RUN cargo install --force wasm-bindgen-cli
+
+# pre-build dependencies
+RUN mkdir /tmp/zbox
+WORKDIR /tmp/zbox
+COPY Cargo.toml ./
+COPY Cargo.lock ./
+COPY src ./src
+COPY build.rs ./
+RUN cargo build --target wasm32-unknown-unknown --features storage-zbox-wasm && \
+    cargo clean && \
+    rm -rf /tmp/zbox
+
+# set work dir
+WORKDIR /root/zbox

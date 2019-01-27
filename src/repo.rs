@@ -401,10 +401,7 @@ impl OpenOptions {
                 return Err(Error::InvalidArgument);
             }
         }
-        match repo.fs {
-            Some(ref mut fs) => open_file_with_options(fs, path, self),
-            None => Err(Error::Closed),
-        }
+        open_file_with_options(&mut repo.fs, path, self)
     }
 }
 
@@ -627,7 +624,7 @@ fn open_file_with_options<P: AsRef<Path>>(
 /// [`RepoOpener`]: struct.RepoOpener.html
 /// [`read-only`]: struct.RepoOpener.html#method.read_only
 pub struct Repo {
-    fs: Option<Fs>,
+    fs: Fs,
 }
 
 impl Repo {
@@ -645,36 +642,31 @@ impl Repo {
     #[inline]
     fn create(uri: &str, pwd: &str, cfg: &Config) -> Result<Repo> {
         let fs = Fs::create(uri, pwd, cfg)?;
-        Ok(Repo { fs: Some(fs) })
+        Ok(Repo { fs })
     }
 
     // open repo
     #[inline]
     fn open(uri: &str, pwd: &str, read_only: bool) -> Result<Repo> {
         let fs = Fs::open(uri, pwd, read_only)?;
-        Ok(Repo { fs: Some(fs) })
+        Ok(Repo { fs })
     }
 
     /// Get repository metadata infomation.
     pub fn info(&self) -> Result<RepoInfo> {
-        match self.fs {
-            Some(ref fs) => {
-                let meta = fs.info();
-                Ok(RepoInfo {
-                    volume_id: meta.vol_info.id.clone(),
-                    ver: meta.vol_info.ver.clone(),
-                    uri: meta.vol_info.uri.clone(),
-                    cost: meta.vol_info.cost.clone(),
-                    cipher: meta.vol_info.cipher.clone(),
-                    compress: meta.vol_info.compress,
-                    version_limit: meta.opts.version_limit,
-                    dedup_chunk: meta.opts.dedup_chunk,
-                    read_only: meta.read_only,
-                    ctime: meta.vol_info.ctime.clone(),
-                })
-            }
-            None => Err(Error::Closed),
-        }
+        let meta = self.fs.info();
+        Ok(RepoInfo {
+            volume_id: meta.vol_info.id.clone(),
+            ver: meta.vol_info.ver.clone(),
+            uri: meta.vol_info.uri.clone(),
+            cost: meta.vol_info.cost.clone(),
+            cipher: meta.vol_info.cipher.clone(),
+            compress: meta.vol_info.compress,
+            version_limit: meta.opts.version_limit,
+            dedup_chunk: meta.opts.dedup_chunk,
+            read_only: meta.read_only,
+            ctime: meta.vol_info.ctime.clone(),
+        })
     }
 
     /// Reset password for the respository.
@@ -685,25 +677,15 @@ impl Repo {
         ops_limit: OpsLimit,
         mem_limit: MemLimit,
     ) -> Result<()> {
-        match self.fs {
-            Some(ref mut fs) => {
-                let cost = Cost::new(ops_limit, mem_limit);
-                fs.reset_password(old_pwd, new_pwd, cost)
-            }
-            None => Err(Error::Closed),
-        }
+        let cost = Cost::new(ops_limit, mem_limit);
+        self.fs.reset_password(old_pwd, new_pwd, cost)
     }
 
     /// Returns whether the path points at an existing entity in repository.
     ///
     /// `path` must be an absolute path.
     pub fn path_exists<P: AsRef<Path>>(&self, path: P) -> Result<bool> {
-        match self.fs {
-            Some(ref fs) => {
-                Ok(fs.resolve(path.as_ref()).map(|_| true).unwrap_or(false))
-            }
-            None => Err(Error::Closed),
-        }
+        Ok(self.fs.resolve(path.as_ref()).map(|_| true).unwrap_or(false))
     }
 
     /// Returns whether the path exists in repository and is pointing at
@@ -711,15 +693,12 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn is_file<P: AsRef<Path>>(&self, path: P) -> Result<bool> {
-        match self.fs {
-            Some(ref fs) => match fs.resolve(path.as_ref()) {
-                Ok(fnode_ref) => {
-                    let fnode = fnode_ref.read().unwrap();
-                    Ok(fnode.is_file())
-                }
-                Err(_) => Ok(false),
-            },
-            None => Err(Error::Closed),
+        match self.fs.resolve(path.as_ref()) {
+            Ok(fnode_ref) => {
+                let fnode = fnode_ref.read().unwrap();
+                Ok(fnode.is_file())
+            }
+            Err(_) => Ok(false),
         }
     }
 
@@ -728,15 +707,12 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn is_dir<P: AsRef<Path>>(&self, path: P) -> Result<bool> {
-        match self.fs {
-            Some(ref fs) => match fs.resolve(path.as_ref()) {
-                Ok(fnode_ref) => {
-                    let fnode = fnode_ref.read().unwrap();
-                    Ok(fnode.is_dir())
-                }
-                Err(_) => Ok(false),
-            },
-            None => Err(Error::Closed),
+        match self.fs.resolve(path.as_ref()) {
+            Ok(fnode_ref) => {
+                let fnode = fnode_ref.read().unwrap();
+                Ok(fnode.is_dir())
+            }
+            Err(_) => Ok(false),
         }
     }
 
@@ -749,9 +725,6 @@ impl Repo {
     /// function for more details.
     #[inline]
     pub fn create_file<P: AsRef<Path>>(&mut self, path: P) -> Result<File> {
-        if self.fs.is_none() {
-            return Err(Error::Closed);
-        }
         OpenOptions::new()
             .create(true)
             .truncate(true)
@@ -786,9 +759,6 @@ impl Repo {
     /// [`OpenOptions::open`]: struct.OpenOptions.html#method.open
     #[inline]
     pub fn open_file<P: AsRef<Path>>(&mut self, path: P) -> Result<File> {
-        if self.fs.is_none() {
-            return Err(Error::Closed);
-        }
         OpenOptions::new().open(self, path)
     }
 
@@ -797,12 +767,9 @@ impl Repo {
     /// `path` must be an absolute path.
     #[inline]
     pub fn create_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        match self.fs {
-            Some(ref mut fs) => fs
-                .create_fnode(path.as_ref(), FileType::Dir, Options::default())
-                .map(|_| ()),
-            None => Err(Error::Closed),
-        }
+        self.fs
+            .create_fnode(path.as_ref(), FileType::Dir, Options::default())
+            .map(|_| ())
     }
 
     /// Recursively create a directory and all of its parent components if they
@@ -811,10 +778,7 @@ impl Repo {
     /// `path` must be an absolute path.
     #[inline]
     pub fn create_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        match self.fs {
-            Some(ref mut fs) => fs.create_dir_all(path.as_ref()),
-            None => Err(Error::Closed),
-        }
+        self.fs.create_dir_all(path.as_ref())
     }
 
     /// Returns a vector of all the entries within a directory.
@@ -822,10 +786,7 @@ impl Repo {
     /// `path` must be an absolute path.
     #[inline]
     pub fn read_dir<P: AsRef<Path>>(&self, path: P) -> Result<Vec<DirEntry>> {
-        match self.fs {
-            Some(ref fs) => fs.read_dir(path.as_ref()),
-            None => Err(Error::Closed),
-        }
+        self.fs.read_dir(path.as_ref())
     }
 
     /// Given a path, query the repository to get information about a file,
@@ -834,10 +795,7 @@ impl Repo {
     /// `path` must be an absolute path.
     #[inline]
     pub fn metadata<P: AsRef<Path>>(&self, path: P) -> Result<Metadata> {
-        match self.fs {
-            Some(ref fs) => fs.metadata(path.as_ref()),
-            None => Err(Error::Closed),
-        }
+        self.fs.metadata(path.as_ref())
     }
 
     /// Return a vector of history versions of a regular file.
@@ -845,10 +803,7 @@ impl Repo {
     /// `path` must be an absolute path to a regular file.
     #[inline]
     pub fn history<P: AsRef<Path>>(&self, path: P) -> Result<Vec<Version>> {
-        match self.fs {
-            Some(ref fs) => fs.history(path.as_ref()),
-            None => Err(Error::Closed),
-        }
+        self.fs.history(path.as_ref())
     }
 
     /// Copies the content of one file to another.
@@ -865,10 +820,7 @@ impl Repo {
         from: P,
         to: Q,
     ) -> Result<()> {
-        match self.fs {
-            Some(ref mut fs) => fs.copy(from.as_ref(), to.as_ref()),
-            None => Err(Error::Closed),
-        }
+        self.fs.copy(from.as_ref(), to.as_ref())
     }
 
     /// Removes a regular file from the repository.
@@ -876,10 +828,7 @@ impl Repo {
     /// `path` must be an absolute path.
     #[inline]
     pub fn remove_file<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        match self.fs {
-            Some(ref mut fs) => fs.remove_file(path.as_ref()),
-            None => Err(Error::Closed),
-        }
+        self.fs.remove_file(path.as_ref())
     }
 
     /// Remove an existing empty directory.
@@ -887,10 +836,7 @@ impl Repo {
     /// `path` must be an absolute path.
     #[inline]
     pub fn remove_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        match self.fs {
-            Some(ref mut fs) => fs.remove_dir(path.as_ref()),
-            None => Err(Error::Closed),
-        }
+        self.fs.remove_dir(path.as_ref())
     }
 
     /// Removes a directory at this path, after removing all its children.
@@ -899,10 +845,7 @@ impl Repo {
     /// `path` must be an absolute path.
     #[inline]
     pub fn remove_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        match self.fs {
-            Some(ref mut fs) => fs.remove_dir_all(path.as_ref()),
-            None => Err(Error::Closed),
-        }
+        self.fs.remove_dir_all(path.as_ref())
     }
 
     /// Rename a file or directory to a new name, replacing the original file
@@ -915,10 +858,7 @@ impl Repo {
         from: P,
         to: Q,
     ) -> Result<()> {
-        match self.fs {
-            Some(ref mut fs) => fs.rename(from.as_ref(), to.as_ref()),
-            None => Err(Error::Closed),
-        }
+        self.fs.rename(from.as_ref(), to.as_ref())
     }
 }
 

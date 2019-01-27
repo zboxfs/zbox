@@ -4,9 +4,7 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
-use http::header::{
-    HeaderMap, HeaderName, HeaderValue, AUTHORIZATION, CACHE_CONTROL,
-};
+use http::header::{self, HeaderMap, HeaderName, HeaderValue};
 use http::{Error as HttpError, HttpTryFrom, StatusCode, Uri};
 
 use super::transport::{DummyTransport, Response, Transport};
@@ -71,24 +69,23 @@ impl Headers {
             HeaderValue::from_str(&Version::current_lib_version().to_string())
                 .unwrap();
         map.insert(version_header, version_value);
+        #[cfg(not(feature = "storage-zbox-wasm"))]
+        {
+            map.insert(header::ORIGIN, HeaderValue::from_str("http://localhost").unwrap());
+        }
         Headers { map }
-    }
-
-    #[inline]
-    fn build(&self) -> Self {
-        self.clone()
     }
 
     fn bearer_auth(mut self, auth_key: &str) -> Self {
         let value_str = format!("Bearer {}", auth_key);
         let value = HeaderValue::from_str(&value_str).unwrap();
-        self.map.insert(AUTHORIZATION, value);
+        self.map.insert(header::AUTHORIZATION, value);
         self
     }
 
     #[inline]
     fn cache_control(mut self, cache_ctl: CacheControl) -> Self {
-        self.map.insert(CACHE_CONTROL, cache_ctl.to_header_value());
+        self.map.insert(header::CACHE_CONTROL, cache_ctl.to_header_value());
         self
     }
 
@@ -126,7 +123,7 @@ impl HttpClient {
     const ROOT_URL: &'static str = "https://data.zbox.io/";
 
     // default timeout, in secnods
-    const DEFAULT_TIMEOUT: u64 = 30;
+    const DEFAULT_TIMEOUT: u32 = 30;
 
     pub fn new(repo_id: &str, access_key: &str) -> Result<Self> {
         // create transport
@@ -147,6 +144,13 @@ impl HttpClient {
             #[cfg(feature = "storage-zbox-jni")]
             {
                 Box::new(super::transport::jni::JniTransport::new(
+                    Self::DEFAULT_TIMEOUT,
+                )?)
+            }
+
+            #[cfg(feature = "storage-zbox-wasm")]
+            {
+                Box::new(super::transport::wasm::WasmTransport::new(
                     Self::DEFAULT_TIMEOUT,
                 )?)
             }
@@ -192,7 +196,7 @@ impl HttpClient {
         debug!("check repo exists");
 
         let uri = self.make_uri("exists")?;
-        let headers = self.headers.build().bearer_auth(&self.access_key);
+        let headers = self.headers.clone().bearer_auth(&self.access_key);
         let mut resp = self
             .transport
             .get(&uri, headers.as_ref())?
@@ -212,7 +216,7 @@ impl HttpClient {
         let uri = self.make_uri("open")?;
         let headers = self
             .headers
-            .build()
+            .clone()
             .bearer_auth(&self.access_key)
             .cache_control(CacheControl::NoCache);
         let mut resp = self
@@ -258,7 +262,7 @@ impl HttpClient {
     ) -> Result<Response> {
         let headers = self
             .headers
-            .build()
+            .clone()
             .bearer_auth(&self.session_token)
             .cache_control(cache_ctl);
         self.transport
@@ -330,7 +334,7 @@ impl HttpClient {
     ) -> Result<()> {
         let headers = self
             .headers
-            .build()
+            .clone()
             .bearer_auth(&self.session_token)
             .cache_control(cache_ctl)
             .put_range(offset, offset + body.len() - 1);
@@ -375,7 +379,7 @@ impl HttpClient {
     ) -> Result<()> {
         let headers = self
             .headers
-            .build()
+            .clone()
             .bearer_auth(&self.session_token)
             .cache_control(cache_ctl);
         self.transport
@@ -455,7 +459,7 @@ impl Drop for HttpClient {
 
         // send close requests to remote
         let uri = self.make_uri("close").unwrap();
-        let headers = self.headers.build().bearer_auth(&self.session_token);
+        let headers = self.headers.clone().bearer_auth(&self.session_token);
         if self.transport.get(&uri, headers.as_ref()).is_err() {
             warn!("close session failed");
         } else {

@@ -20,7 +20,13 @@ use log::Level;
 #[cfg(target_os = "android")]
 use android_logger::{self, Filter};
 
-#[cfg(not(target_os = "android"))]
+#[cfg(target_arch = "wasm32")]
+use log::Level;
+
+#[cfg(target_arch = "wasm32")]
+use wasm_logger;
+
+#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 use env_logger;
 
 static INIT: Once = ONCE_INIT;
@@ -42,7 +48,11 @@ pub fn init_env() {
                 Some("zboxfs"),
             );
         }
-        #[cfg(not(target_os = "android"))]
+        #[cfg(target_arch = "wasm32")]
+        {
+            wasm_logger::init(wasm_logger::Config::new(Level::Trace));
+        }
+        #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
             env_logger::try_init().ok();
         }

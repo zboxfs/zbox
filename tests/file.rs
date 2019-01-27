@@ -817,3 +817,30 @@ fn file_rename() {
         assert!(repo.path_exists("/file6").unwrap());
     }
 }
+
+#[test]
+fn file_xxx() {
+    let mut env = common::TestEnv::new();
+    let repo = &mut env.repo;
+    let buf = [1u8, 2u8, 3u8];
+    let buf2 = [4u8, 5u8, 6u8];
+
+    //{
+        //let mut f = OpenOptions::new()
+            //.create(true)
+            //.open(repo, "/file2")
+            //.unwrap();
+        //f.write_once(&buf2[..]).unwrap();
+    //}
+    //repo.create_dir("/dir").unwrap();
+
+    {
+        let mut f = OpenOptions::new()
+            .read(true)
+            .open(repo, "/file2")
+            .unwrap();
+        verify_content(&mut f, &buf2);
+    }
+    //let dirs = repo.read_dir("/").unwrap();
+    //println!("dirs: {:?}", dirs);
+}

@@ -24,9 +24,9 @@ pub struct NativeTransport {
 }
 
 impl NativeTransport {
-    pub fn new(timeout: u64) -> Result<Self> {
+    pub fn new(timeout: u32) -> Result<Self> {
         let client = Client::builder()
-            .timeout(Duration::from_secs(timeout))
+            .timeout(Duration::from_secs(timeout as u64))
             .build()?;
 
         Ok(NativeTransport { client })

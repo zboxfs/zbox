@@ -17,16 +17,26 @@ travis-ci = { repository = "zboxfs/zbox" }
 
 [lib]
 name = "zbox"
-crate-type = ["rlib", "dylib", "staticlib"]
+crate-type = ["rlib", "cdylib", "staticlib"]
+
+[profile.release]
+lto = true
+opt-level = 's'
 
 [features]
-default = []
+default = ["storage-mem"]
 
 # performance test compilation flag
 test-perf = []
 
 # ffi compilation flag
 ffi = []
+
+# memory storage
+storage-mem = []
+
+# file storage
+storage-file = []
 
 # faulty storage for random io error test
 storage-faulty = ["lazy_static"]
@@ -46,6 +56,9 @@ storage-zbox-native = ["storage-zbox", "reqwest"]
 # zbox storage with jni transport
 storage-zbox-jni = ["storage-zbox", "jni", "lazy_static"]
 
+# zbox storage with wasm transport
+storage-zbox-wasm = ["storage-zbox", "wasm-bindgen", "js-sys", "web-sys", "wee_alloc", "wasm-logger"]
+
 # zbox storage base dependencies
 storage-zbox = ["http", "serde_json"]
 
@@ -53,7 +66,8 @@ storage-zbox = ["http", "serde_json"]
 bytes = "0.4.10"
 env_logger = "0.6.0"
 log = "0.4.6"
-lz4 = "1.23.1"
+#lz4 = "1.23.1"
+lz4 = { git = "https://github.com/zboxfs/lz4-rs.git"  }
 rmp-serde = "0.13.7"
 serde = "1.0.80"
 serde_derive = "1.0.80"
@@ -64,6 +78,10 @@ http  = { version = "0.1.14", optional = true }
 serde_json = { version = "1.0.33", optional = true }
 reqwest  = { version = "0.9.5", optional = true }
 jni = { version = "0.10.2", optional = true }
+wasm-bindgen = { version = "0.2.31", features = ["serde-serialize"], optional = true }
+js-sys = { version = "0.3.8", optional = true }
+wee_alloc = { version = "0.4.2", optional = true }
+wasm-logger = { version = "0.1.1", optional = true }
 
 [dependencies.linked-hash-map]
 version = "0.5.1"
@@ -71,6 +89,11 @@ features = ["serde_impl"]
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.7.0"
+
+[dependencies.web-sys]
+version = "0.3.6"
+optional = true
+features = [ "Crypto", "WorkerGlobalScope", "XmlHttpRequest", "XmlHttpRequestResponseType", "Blob"]
 
 [dev-dependencies]
 tempdir = "0.3.7"

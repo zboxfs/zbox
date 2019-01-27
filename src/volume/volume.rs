@@ -29,7 +29,7 @@ pub struct Info {
 }
 
 /// Volume
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Volume {
     info: Info,
     storage: StorageRef,
@@ -186,16 +186,6 @@ impl Volume {
     pub fn flush(&mut self) -> Result<()> {
         let mut storage = self.storage.write().unwrap();
         storage.flush()
-    }
-}
-
-impl Default for Volume {
-    fn default() -> Self {
-        let storage = Storage::new("mem://dummy").unwrap().into_ref();
-        Volume {
-            info: Info::default(),
-            storage,
-        }
     }
 }
 

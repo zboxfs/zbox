@@ -1,0 +1,45 @@
+diff --git a/dist-build/emscripten.sh b/dist-build/emscripten.sh
+index 778f3e74..ba1f0d44 100755
+--- a/dist-build/emscripten.sh
++++ b/dist-build/emscripten.sh
+@@ -63,7 +63,7 @@ echo
+ emconfigure ./configure $CONFIG_EXTRA --disable-shared --prefix="$PREFIX" \
+                         --without-pthreads \
+                         --disable-ssp --disable-asm --disable-pie \
+-                        CFLAGS="$CFLAGS" && \
++                        CFLAGS="$CFLAGS -s WASM_OBJECT_FILES=1" && \
+ emmake make clean
+ [ $? = 0 ] || exit 1
+ 
+@@ -75,6 +75,7 @@ if [ "$DIST" = yes ]; then
+       "${PREFIX}/lib/libsodium.a" -o "${outFile}" || exit 1
+   }
+   emmake make $MAKE_FLAGS install || exit 1
++  exit 0
+   emccLibsodium "${PREFIX}/lib/libsodium.asm.tmp.js" -Oz -s WASM=0 -s RUNNING_JS_OPTS=1
+   emccLibsodium "${PREFIX}/lib/libsodium.wasm.tmp.js" -O3 -s WASM=1
+ 
+diff --git a/src/libsodium/randombytes/randombytes.c b/src/libsodium/randombytes/randombytes.c
+index 4c1a536e..fcc213a6 100644
+--- a/src/libsodium/randombytes/randombytes.c
++++ b/src/libsodium/randombytes/randombytes.c
+@@ -69,6 +69,8 @@ randombytes_implementation_name(void)
+ #endif
+ }
+ 
++extern uint32_t js_random_uint32();
++
+ uint32_t
+ randombytes_random(void)
+ {
+@@ -76,9 +78,7 @@ randombytes_random(void)
+     randombytes_init_if_needed();
+     return implementation->random();
+ #else
+-    return EM_ASM_INT_V({
+-        return Module.getRandomValue();
+-    });
++    return js_random_uint32();
+ #endif
+ }
+ 
