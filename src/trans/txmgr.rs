@@ -73,15 +73,12 @@ impl TxMgr {
         tm.txs.insert(txid, tx.clone());
 
         // start the transaction
-        let result = {
-            let mut tx = tx.write().unwrap();
-            tx.begin_trans()
-        };
-        if let Err(err) = result {
+        let mut tx = tx.write().unwrap();
+        tx.begin_trans().or_else(|err| {
             debug!("begin tx failed: {:?}", err);
             tm.abort_trans(txid);
-            return Err(err);
-        }
+            Err(err)
+        })?;
 
         Ok(TxHandle {
             txid,
