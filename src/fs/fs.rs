@@ -345,9 +345,9 @@ impl Fs {
         }
 
         let opts;
-        let src = self.open_fnode(from)?;
+        let src = self.resolve(from)?;
         {
-            let fnode = src.fnode.read().unwrap();
+            let fnode = src.read().unwrap();
             if !fnode.is_file() {
                 return Err(Error::NotFile);
             }
@@ -357,12 +357,12 @@ impl Fs {
         let tgt = {
             match self.open_fnode(to) {
                 Ok(tgt) => {
-                    // if target and source is same fnode, do nothing
-                    if Arc::ptr_eq(&tgt.fnode, &src.fnode) {
-                        return Ok(());
-                    }
-
                     {
+                        // if target and source is same fnode, do nothing
+                        if Arc::ptr_eq(&tgt.fnode, &src) {
+                            return Ok(());
+                        }
+
                         let fnode = tgt.fnode.read().unwrap();
                         if !fnode.is_file() {
                             return Err(Error::NotFile);
@@ -386,7 +386,7 @@ impl Fs {
             Fnode::set_len(tgt.clone(), 0, tx_handle.txid)?;
 
             // copy data from source to target
-            let mut rdr = FnodeReader::new_current(src.fnode.clone())?;
+            let mut rdr = FnodeReader::new_current(src.clone())?;
             let mut wtr = FnodeWriter::new(tgt.clone(), tx_handle.txid);
             io::copy(&mut rdr, &mut wtr)?;
             wtr.finish()?;
