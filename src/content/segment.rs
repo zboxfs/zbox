@@ -415,9 +415,8 @@ impl Writer {
         // create a new segment
         let seg = Segment::new();
 
-        // add segment data to tx, this is a dummy as the actual data will
-        // directly write using volume writer instead of writing to the
-        // segment data itself
+        // add a dummy segment data to tx, the actual data will be directly
+        // written using volume writer instead of writing to the segment data
         SegData::add_to_trans(
             &seg.data_id,
             Action::New,

@@ -32,8 +32,9 @@ lazy_static! {
 struct ErrorContext {
     is_on: bool,
     prob: f32, // error occur probability
+    threshold: u8,
     samples: Vec<u8>,
-    sample_idx: usize,
+    sample_seq: usize,
 }
 
 // controller for random error generation
@@ -63,7 +64,8 @@ impl Controller {
         Crypto::random_buf_deterministic(&mut context.samples[..], &seed);
         context.is_on = false;
         context.prob = prob;
-        context.sample_idx = 0;
+        context.threshold = ((Self::ERR_SAMPLE_SIZE - 1) as f32 * prob) as u8;
+        context.sample_seq = 0;
     }
 
     // make a IO error based on the random sample
@@ -74,14 +76,14 @@ impl Controller {
         }
 
         assert!(!context.samples.is_empty());
-        let idx = context.sample_idx % context.samples.len();
-        context.sample_idx += 1;
+        let idx = context.sample_seq % context.samples.len();
+        context.sample_seq += 1;
 
-        let threshold =
-            ((Self::ERR_SAMPLE_SIZE - 1) as f32 * context.prob) as u8;
         let sample = context.samples[idx];
         match sample {
-            _ if sample <= threshold => {
+            _ if sample <= context.threshold => {
+                //println!("faulty: raise error {}", context.sample_seq);
+                //if context.sample_seq == 810 { panic!("xxx"); }
                 Err(IoError::new(ErrorKind::Other, "Faulty error"))
             }
             _ => Ok(()),

@@ -73,12 +73,14 @@ impl TxMgr {
         tm.txs.insert(txid, tx.clone());
 
         // start the transaction
-        let mut tx = tx.write().unwrap();
-        tx.begin_trans().or_else(|err| {
-            debug!("begin tx failed: {:?}", err);
+        let result = {
+            let mut tx = tx.write().unwrap();
+            tx.begin_trans()
+        };
+        if let Err(err) = result {
             tm.abort_trans(txid);
-            Err(err)
-        })?;
+            return Err(err);
+        }
 
         Ok(TxHandle {
             txid,
@@ -196,6 +198,7 @@ pub struct TxHandle {
 
 impl TxHandle {
     /// Run operations in transaction and continue
+    #[inline]
     pub fn run<F>(&self, oper: F) -> Result<()>
     where
         F: FnOnce() -> Result<()>,
@@ -207,6 +210,7 @@ impl TxHandle {
     }
 
     /// Run operations in transaction and commit
+    #[inline]
     pub fn run_all<F>(&self, oper: F) -> Result<()>
     where
         F: FnOnce() -> Result<()>,
@@ -218,6 +222,7 @@ impl TxHandle {
     }
 
     /// Commit a transaction
+    #[inline]
     pub fn commit(&self) -> Result<()> {
         let mut tm = self.txmgr.write().unwrap();
         tm.commit_trans(self.txid)

@@ -98,7 +98,7 @@ impl Storable for RedisStorage {
         self.client
             .get_connection()
             .map(|_| true)
-            .map_err(|err| Error::from(err))
+            .map_err(Error::from)
     }
 
     fn connect(&mut self) -> Result<()> {

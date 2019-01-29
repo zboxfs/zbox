@@ -488,16 +488,21 @@ impl Fs {
             return Err(Error::InvalidArgument);
         }
 
-        let src = self.open_fnode(from)?;
+        let src = self.resolve(from)?;
+        let tgt = match self.resolve(to) {
+            Ok(tgt) => Some(tgt),
+            Err(ref err) if *err == Error::NotFound => None,
+            Err(err) => return Err(err),
+        };
 
         {
-            let src_fnode = src.fnode.read().unwrap();
+            let src_fnode = src.read().unwrap();
             if src_fnode.is_root() {
                 return Err(Error::IsRoot);
             }
 
-            if let Ok(tgt_handle) = self.open_fnode(to) {
-                let tgt_fnode = tgt_handle.fnode.read().unwrap();
+            if let Some(ref tgt_fnode) = tgt {
+                let tgt_fnode = tgt_fnode.read().unwrap();
                 if tgt_fnode.is_root() {
                     return Err(Error::IsRoot);
                 }
@@ -520,12 +525,12 @@ impl Fs {
         // begin and run transaction
         TxMgr::begin_trans(&self.txmgr)?.run_all(|| {
             // remove from source
-            Fnode::remove_from_parent(&src.fnode)?;
+            Fnode::remove_from_parent(&src)?;
 
             // remove target if it exists
-            if let Ok(tgt_handle) = self.open_fnode(to) {
-                Fnode::remove_from_parent(&tgt_handle.fnode)?;
-                let mut tgt_fnode = tgt_handle.fnode.write().unwrap();
+            if let Some(tgt_fnode) = tgt {
+                Fnode::remove_from_parent(&tgt_fnode)?;
+                let mut tgt_fnode = tgt_fnode.write().unwrap();
                 if tgt_fnode.is_file() {
                     tgt_fnode.make_mut()?.clear_vers()?;
                 }
@@ -534,7 +539,7 @@ impl Fs {
             }
 
             // and then add to target
-            Fnode::add_child(&tgt_parent, &src.fnode, &name)
+            Fnode::add_child(&tgt_parent, &src, &name)
         })
     }
 }

@@ -660,6 +660,7 @@ mod tests {
 
     use std::time::Instant;
 
+    #[cfg(feature = "storage-file")]
     use self::tempdir::TempDir;
     use super::*;
     use base::crypto::{Cipher, Cost, Crypto, RandomSeed, RANDOM_SEED_SIZE};
@@ -851,6 +852,7 @@ mod tests {
         test_depot(storage.into_ref());
     }
 
+    #[cfg(feature = "storage-file")]
     #[test]
     fn file_depot() {
         init_env();
@@ -931,6 +933,7 @@ mod tests {
         perf_test(&storage, "Memory storage");
     }
 
+    #[cfg(feature = "storage-file")]
     #[test]
     fn file_perf() {
         init_env();

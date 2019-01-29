@@ -129,7 +129,7 @@ impl CacheArea {
                         let local_path = self.local_base.join(ent.key());
                         if local_path.exists() {
                             vio::remove_file(&local_path)
-                                .map_err(|err| Error::from(err))
+                                .map_err(Error::from)
                                 .and_then(|_| {
                                     utils::remove_empty_parent_dir(&local_path)
                                 })?;
@@ -200,7 +200,6 @@ impl CacheArea {
                     client.get(rel_path, cache_ctl)?
                 };
                 let remote_len = remote.len();
-                println!("ensure_in_local: {:?}, {}", rel_path, remote_len);
                 self.mem_store.insert(rel_path.to_path_buf(), remote);
                 self.evict(rel_path, remote_len, is_pinned)
             }
@@ -239,7 +238,6 @@ impl CacheArea {
             CacheType::Mem => {
                 let obj = self.mem_store.get(rel_path).unwrap();
                 let len = dst.len();
-        println!("local_cache.get_exact: {:?}, {:?}, {}, {}, {}", rel_path, offset, obj.len(), len, dst.len());
                 dst.copy_from_slice(&obj[offset..offset + len]);
             }
             CacheType::File => {

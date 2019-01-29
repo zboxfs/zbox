@@ -149,7 +149,9 @@ impl Testable for Tester {
                             {
                                 // if the file is created, do the same to
                                 // control group by adding an empty file
-                                ctlgrp.add_file(&path, &fuzzer.data[..0]);
+                                if !ctlgrp.has_node(&path) {
+                                    ctlgrp.add_file(&path, &fuzzer.data[..0]);
+                                }
                             }
                             fuzzer.ctlr.turn_on();
                             return;
@@ -429,7 +431,6 @@ impl Testable for Tester {
 }
 
 #[test]
-//#[ignore]
 fn fuzz_test() {
     // increase below numbers to perform intensive fuzz test
     let batches = 1; // number of fuzz test batches
@@ -455,5 +456,5 @@ fn fuzz_test() {
 fn fuzz_test_rerun() {
     let tester = Tester {};
     // copy batch number from std output and replace it below
-    Fuzzer::rerun("1536125739", Box::new(tester));
+    Fuzzer::rerun("1548762508", Box::new(tester));
 }

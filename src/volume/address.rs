@@ -27,11 +27,6 @@ impl Span {
         self.cnt * BLK_SIZE
     }
 
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.cnt == 0
-    }
-
     pub fn split_to(&mut self, at: usize) -> Span {
         assert!(self.begin <= at && at < self.end());
         let ret = Span {
@@ -43,10 +38,11 @@ impl Span {
         ret
     }
 
+    #[cfg(any(feature = "storage-file", feature = "storage-zbox"))]
     pub fn divide_by(&self, size: usize) -> Vec<Span> {
         let mut ret = Vec::new();
 
-        if self.is_empty() {
+        if self.cnt == 0 {
             return ret;
         }
 

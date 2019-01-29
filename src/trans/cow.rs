@@ -244,7 +244,7 @@ where
 
     // save cow to volume
     #[inline]
-    pub fn save(&mut self, vol: &VolumeRef) -> Result<()> {
+    fn save(&mut self, vol: &VolumeRef) -> Result<()> {
         let vol_armor = VolumeArmor::<Cow<T>>::new(vol);
         vol_armor.save_item(self)
     }

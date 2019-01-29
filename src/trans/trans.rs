@@ -33,6 +33,7 @@ pub struct Trans {
     cohorts: LinkedHashMap<Eid, TransableRef>,
     wal: Wal,
     wal_armor: VolumeWalArmor<Wal>,
+    wal_saved: bool,
 }
 
 impl Trans {
@@ -42,6 +43,7 @@ impl Trans {
             cohorts: LinkedHashMap::new(),
             wal: Wal::new(txid),
             wal_armor: VolumeWalArmor::new(vol),
+            wal_saved: false,
         }
     }
 
@@ -64,12 +66,20 @@ impl Trans {
         ent_type: EntityType,
         arm: Arm,
     ) -> Result<()> {
-        // add a wal entry and save wal, if this failed remove entry from wal
+        // add a wal entry
         self.wal.add_entry(id, action, ent_type, arm);
-        self.wal_armor.save_item(&mut self.wal).or_else(|err| {
-            self.wal.remove_entry(id);
-            Err(err)
-        })?;
+        self.wal_saved = false;
+
+        // If the entity is a direct entity, such as Segment Data, we need to
+        // save the wal now before writing to that entity. For the other types
+        // of entities, the wal save is delayed before commit.
+        if ent_type == EntityType::Direct {
+            self.wal_armor.save_item(&mut self.wal).or_else(|err| {
+                self.wal.remove_entry(id);
+                Err(err)
+            })?;
+            self.wal_saved = true;
+        }
 
         // add entity to cohorts
         self.cohorts.entry(id.clone()).or_insert(entity);
@@ -82,6 +92,12 @@ impl Trans {
         debug!("commit tx#{}, cohorts: {}", self.txid, self.cohorts.len());
 
         //debug!("trans.commit: cohorts: {:#?}", self.cohorts);
+
+        // save wal if it is not saved yet
+        if !self.wal_saved {
+            self.wal_armor.save_item(&mut self.wal)?;
+            self.wal_saved = true;
+        }
 
         // commit each entity
         for entity in self.cohorts.values() {
@@ -151,6 +167,7 @@ impl Debug for Trans {
             .field("txid", &self.txid)
             .field("cohorts", &self.cohorts)
             .field("wal", &self.wal)
+            .field("wal_saved", &self.wal_saved)
             .finish()
     }
 }

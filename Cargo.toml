@@ -27,7 +27,7 @@ opt-level = 's'
 default = ["storage-mem"]
 
 # performance test compilation flag
-test-perf = []
+test-perf = ["storage-file"]
 
 # ffi compilation flag
 ffi = []
@@ -39,7 +39,7 @@ storage-mem = []
 storage-file = []
 
 # faulty storage for random io error test
-storage-faulty = ["lazy_static"]
+storage-faulty = ["storage-file", "lazy_static"]
 
 # sqlite storage
 storage-sqlite = ["libsqlite3-sys"]

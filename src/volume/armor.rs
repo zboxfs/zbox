@@ -122,17 +122,15 @@ pub trait Armor<'de> {
                     assert!(left.seq() != right.seq());
                     Ok((Some(left), Some(right)))
                 }
-                Err(ref err) if *err == Error::NotFound => {
-                    Ok((Some(left), None))
-                }
-                Err(err) => return Err(err),
+                Err(ref err) if *err == Error::NotFound => Ok((Some(left), None)),
+                Err(err) => Err(err),
             },
             Err(ref err) if *err == Error::NotFound => match right_arm {
                 Ok(right) => Ok((None, Some(right))),
                 Err(ref err) if *err == Error::NotFound => Ok((None, None)),
-                Err(err) => return Err(err),
+                Err(err) => Err(err),
             },
-            Err(err) => return Err(err),
+            Err(err) => Err(err),
         }
     }
 

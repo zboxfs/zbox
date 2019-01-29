@@ -167,10 +167,10 @@ fn repo_oper() {
         drop(repo);
 
         let buf = [1u8, 2u8, 3u8];
-        assert_eq!(f.write_once(&buf[..]).unwrap_err(), Error::Closed);
-        assert_eq!(f.metadata().unwrap_err(), Error::Closed);
-        assert_eq!(f.history().unwrap_err(), Error::Closed);
-        assert_eq!(f.curr_version().unwrap_err(), Error::Closed);
+        assert_eq!(f.write_once(&buf[..]).unwrap_err(), Error::RepoClosed);
+        assert_eq!(f.metadata().unwrap_err(), Error::RepoClosed);
+        assert_eq!(f.history().unwrap_err(), Error::RepoClosed);
+        assert_eq!(f.curr_version().unwrap_err(), Error::RepoClosed);
     }
 
     // case #9: test file read/write after repo is dropped
@@ -190,9 +190,9 @@ fn repo_oper() {
         drop(repo);
 
         let buf = [1u8, 2u8, 3u8];
-        assert_eq!(f.write_once(&buf[..]).unwrap_err(), Error::Closed);
-        assert_eq!(f.metadata().unwrap_err(), Error::Closed);
-        assert_eq!(f.history().unwrap_err(), Error::Closed);
-        assert_eq!(f.curr_version().unwrap_err(), Error::Closed);
+        assert_eq!(f.write_once(&buf[..]).unwrap_err(), Error::RepoClosed);
+        assert_eq!(f.metadata().unwrap_err(), Error::RepoClosed);
+        assert_eq!(f.history().unwrap_err(), Error::RepoClosed);
+        assert_eq!(f.curr_version().unwrap_err(), Error::RepoClosed);
     }
 }

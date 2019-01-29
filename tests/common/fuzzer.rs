@@ -203,6 +203,7 @@ impl Debug for Node {
 }
 
 // control group
+#[derive(Debug, Clone)]
 pub struct ControlGroup(pub Vec<Node>);
 
 impl ControlGroup {
@@ -719,8 +720,8 @@ impl Fuzzer {
         // ------------------
         {
             let mut fuzzer = fuzzer.write().unwrap();
-            let mut ctlgrp = ctlgrp.write().unwrap();
-            fuzzer.verify(&mut ctlgrp);
+            let ctlgrp = ctlgrp.read().unwrap();
+            fuzzer.verify(&ctlgrp);
         }
     }
 
@@ -751,7 +752,9 @@ impl Fuzzer {
         // ------------------
         for round in 0..rounds {
             let step = &steps[round];
+            //if round == 12 { fuzzer.ctlr.turn_off(); }
             tester.test_round(&mut fuzzer, &step, &mut ctlgrp);
+            //if round == 12 { break; }
             if round % 10 == 0 {
                 println!("[{}]: {}/{}...", worker, round, rounds);
             }
@@ -760,17 +763,18 @@ impl Fuzzer {
 
         // verify
         // ------------------
-        fuzzer.verify(&mut ctlgrp);
+        fuzzer.verify(&ctlgrp);
     }
 
     // verify fuzz test result
-    fn verify(&mut self, ctlgrp: &mut ControlGroup) {
+    fn verify(&mut self, ctlgrp: &ControlGroup) {
         println!("Start verifying...");
 
         // turn off random error controller
         self.ctlr.turn_off();
 
         // sort control group nodes by its path for fast search
+        let mut ctlgrp = ctlgrp.clone();
         ctlgrp.0.sort_by(|a, b| a.path.cmp(&b.path));
 
         // loop all nodes to do the comparison

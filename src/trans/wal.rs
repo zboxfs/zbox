@@ -2,6 +2,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::{self, Debug};
 use std::hash::{Hash, Hasher};
 
+use linked_hash_map::LinkedHashMap;
+
 use super::trans::Action;
 use super::{Eid, Id, Txid};
 use base::crypto::{HashKey, HASHKEY_SIZE};
@@ -11,7 +13,7 @@ use volume::{
 };
 
 /// Wal entry entity type
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 pub enum EntityType {
     Cow,
     Direct,
@@ -41,7 +43,7 @@ pub struct Wal {
     seq: u64,
     arm: Arm,
     txid: Txid,
-    entries: HashMap<Eid, Entry>,
+    entries: LinkedHashMap<Eid, Entry>,
 }
 
 impl Wal {
@@ -54,7 +56,7 @@ impl Wal {
             seq: 0,
             arm: Arm::default(),
             txid,
-            entries: HashMap::new(),
+            entries: LinkedHashMap::new(),
         }
     }
 
@@ -329,8 +331,10 @@ impl WalQueue {
         for txid in &self.doing {
             debug!("cold redo abort tx#{}", txid);
             let wal_id = Wal::derive_id(*txid);
-            if let Ok(wal) = self.wal_armor.load_item(&wal_id) {
-                wal.clean_aborted(vol)?;
+            match self.wal_armor.load_item(&wal_id) {
+                Ok(wal) => wal.clean_aborted(vol)?,
+                Err(ref err) if *err == Error::NotFound => {},
+                Err(err) => return Err(err),
             }
             completed.push(*txid);
         }
@@ -440,7 +444,9 @@ impl WalQueueMgr {
         if self.walq.has_doing() {
             self.backup_walq();
             self.walq.cold_redo_abort(vol).or_else(|err| {
-                // if failed, restore the walq backup
+                // if failed, restore the walq backup and return the
+                // original error
+                debug!("cold redo abort failed: {:?}", err);
                 self.restore_walq();
                 Err(err)
             })?;

@@ -162,7 +162,7 @@ impl Store {
                 .content_map
                 .get_mut(ctn.hash())
                 .ok_or(Error::NoContent)
-                .and_then(|ent| ent.dec_ref().map_err(|e| Error::from(e)))?;
+                .and_then(|ent| ent.dec_ref().map_err(Error::from))?;
             if refcnt > 0 {
                 return Ok(None);
             }

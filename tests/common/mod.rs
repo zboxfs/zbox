@@ -25,12 +25,12 @@ impl TestEnv {
         if dir.exists() {
             fs::remove_dir_all(&dir).unwrap();
         }
-        //let uri = "file://".to_string() + dir.to_str().unwrap();
-        let uri = "zbox://accessKey456@repo456?cache_type=mem&cache_size=1";
+        let uri = "file://".to_string() + dir.to_str().unwrap();
+        //let uri = "zbox://accessKey456@repo456?cache_type=mem&cache_size=1";
         let repo = RepoOpener::new()
-            .create(true)
-            .cipher(zbox::Cipher::Xchacha)
-            //.create_new(true)
+            //.create(true)
+            //.cipher(zbox::Cipher::Xchacha)
+            .create_new(true)
             .open(&uri, "pwd")
             .unwrap();
         TestEnv { repo, tmpdir }
