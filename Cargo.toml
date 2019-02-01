@@ -26,11 +26,11 @@ opt-level = 's'
 [features]
 default = ["storage-mem"]
 
-# performance test compilation flag
-test-perf = ["storage-file"]
-
 # ffi compilation flag
 ffi = []
+
+# performance test compilation flag
+test-perf = ["storage-file"]
 
 # memory storage
 storage-mem = []
@@ -64,6 +64,7 @@ storage-zbox = ["http", "serde_json"]
 
 [dependencies]
 bytes = "0.4.10"
+cfg-if = "0.1"
 env_logger = "0.6.0"
 log = "0.4.6"
 #lz4 = "1.23.1"
@@ -98,7 +99,7 @@ features = [ "Crypto", "WorkerGlobalScope", "XmlHttpRequest", "XmlHttpRequestRes
 [dev-dependencies]
 tempdir = "0.3.7"
 rand = "0.6"
-rand_xorshift = "0.1.0"
+rand_xorshift = "0.1"
 
 [build-dependencies]
 pkg-config = "0.3.14"

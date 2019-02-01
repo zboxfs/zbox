@@ -96,6 +96,8 @@
 //! [`RepoOpener`]: struct.RepoOpener.html
 
 extern crate bytes;
+#[macro_use]
+extern crate cfg_if;
 extern crate env_logger;
 extern crate linked_hash_map;
 #[macro_use]

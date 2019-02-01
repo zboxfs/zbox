@@ -1,3 +1,7 @@
+#![cfg(any(feature = "storage-faulty", feature = "storage-file"))]
+
+#[macro_use]
+extern crate cfg_if;
 extern crate zbox;
 
 mod common;
@@ -106,9 +110,10 @@ fn handle_rename(
 
 // fuzz tester
 #[derive(Debug)]
-struct Tester {}
+struct Tester;
 
 impl Tester {
+    #[allow(dead_code)]
     fn into_ref(self) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(self))
     }
@@ -439,8 +444,10 @@ fn fuzz_test() {
 
     let storage = if cfg!(feature = "storage-faulty") {
         "faulty"
-    } else {
+    } else if cfg!(feature = "storage-file") {
         "file"
+    } else {
+        panic!("Fuzz test only supports faulty and file storage.");
     };
 
     for _ in 0..batches {

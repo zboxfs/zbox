@@ -2,6 +2,7 @@
 #![cfg(feature = "test-perf")]
 
 extern crate rand;
+extern crate rand_xorshift;
 extern crate zbox;
 
 use std::env;
@@ -11,7 +12,7 @@ use std::path::Path;
 use std::ptr;
 use std::time::{Duration, Instant};
 
-use rand::prng::XorShiftRng;
+use rand_xorshift::XorShiftRng;
 use rand::{RngCore, SeedableRng};
 use zbox::{init_env, File, OpenOptions, Repo, RepoOpener};
 

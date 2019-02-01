@@ -18,7 +18,7 @@ before_install:
 
 script:
   - cargo build
-  - cargo test
+  - cargo test --features storage-file
 
 # only build on master and stable branches
 branches:

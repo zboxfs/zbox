@@ -2,13 +2,15 @@ extern crate tempdir;
 
 extern crate zbox;
 
-use std::fs;
+#[cfg(feature = "storage-file")]
 use tempdir::TempDir;
 
+#[cfg(feature = "storage-file")]
 use zbox::{
     init_env, Cipher, Error, MemLimit, OpenOptions, OpsLimit, RepoOpener,
 };
 
+#[cfg(feature = "storage-file")]
 #[test]
 fn repo_oper() {
     init_env();
@@ -18,7 +20,7 @@ fn repo_oper() {
     let dir = tmpdir.path().to_path_buf();
     //let dir = std::path::PathBuf::from("./tt");
     if dir.exists() {
-        fs::remove_dir_all(&dir).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
     }
     let base = "file://".to_string() + dir.to_str().unwrap();
 

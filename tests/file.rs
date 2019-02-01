@@ -1,3 +1,5 @@
+#[macro_use]
+extern crate cfg_if;
 extern crate rand;
 extern crate rand_xorshift;
 extern crate tempdir;

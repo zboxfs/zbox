@@ -35,29 +35,36 @@ static INIT: Once = ONCE_INIT;
 ///
 /// This function should be called before any other functions provided by ZboxFS.
 /// This function can be called more than one time.
-pub fn init_env() {
-    // only call the initialisation code once globally
-    INIT.call_once(|| {
-        #[cfg(target_os = "android")]
-        {
-            android_logger::init_once(
-                Filter::default()
-                    .with_min_level(Level::Trace)
-                    .with_allowed_module_path("zbox::fs::fs")
-                    .with_allowed_module_path("zbox::trans::txmgr"),
-                Some("zboxfs"),
-            );
+cfg_if! {
+    if #[cfg(target_os = "android")] {
+        pub fn init_env() {
+            // only call the initialisation code once globally
+            INIT.call_once(|| {
+                android_logger::init_once(
+                    Filter::default()
+                        .with_min_level(Level::Trace)
+                        .with_allowed_module_path("zbox::fs::fs")
+                        .with_allowed_module_path("zbox::trans::txmgr"),
+                    Some("zboxfs"),
+                );
+                crypto::Crypto::init().expect("Initialise crypto failed");
+            });
         }
-        #[cfg(target_arch = "wasm32")]
-        {
-            wasm_logger::init(wasm_logger::Config::new(Level::Trace));
+    } else if #[cfg(target_arch = "wasm32")] {
+        pub fn init_env() {
+            INIT.call_once(|| {
+                wasm_logger::init(wasm_logger::Config::new(Level::Trace));
+                crypto::Crypto::init().expect("Initialise crypto failed");
+            });
         }
-        #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-        {
-            env_logger::try_init().ok();
+    } else {
+        pub fn init_env() {
+            INIT.call_once(|| {
+                env_logger::try_init().ok();
+                crypto::Crypto::init().expect("Initialise crypto failed");
+            });
         }
-        crypto::Crypto::init().expect("Initialise crypto failed");
-    });
+    }
 }
 
 /// Wrap type into reference type Arc<RwLock<T>>

@@ -352,10 +352,9 @@ impl Debug for Writer {
 mod tests {
     extern crate tempdir;
 
-    use std::fs;
-    //use std::path::PathBuf;
     use std::time::Instant;
 
+    #[cfg(feature = "storage-file")]
     use self::tempdir::TempDir;
     use super::*;
     use base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE};
@@ -370,13 +369,13 @@ mod tests {
         vol.into_ref()
     }
 
+    #[cfg(feature = "storage-file")]
     fn setup_file_vol(pwd: &str, payload: &[u8]) -> (VolumeRef, TempDir) {
         init_env();
         let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
         let dir = tmpdir.path().to_path_buf();
-        //let dir = PathBuf::from("./tt");
         if dir.exists() {
-            fs::remove_dir_all(&dir).unwrap();
+            std::fs::remove_dir_all(&dir).unwrap();
         }
         let uri = format!("file://{}", dir.display());
         let mut vol = Volume::new(&uri).unwrap();
@@ -418,6 +417,7 @@ mod tests {
         assert_eq!(Reader::new(&id, &vol).unwrap_err(), Error::NotFound);
     }
 
+    #[cfg(feature = "storage-file")]
     fn reopen_test(pwd: &str, payload: &[u8], vol: VolumeRef) {
         let id = Eid::new();
         let buf = [1, 2, 3];
@@ -461,6 +461,7 @@ mod tests {
         read_write_test(&vol);
     }
 
+    #[cfg(feature = "storage-file")]
     #[test]
     fn file_volume() {
         let pwd = "pwd";
@@ -518,6 +519,7 @@ mod tests {
         perf_test(vol, "Memory volume");
     }
 
+    #[cfg(feature = "storage-file")]
     #[test]
     fn file_perf() {
         let (vol, _tmpdir) = setup_file_vol("pwd", &Vec::new());

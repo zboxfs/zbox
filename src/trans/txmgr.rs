@@ -244,6 +244,7 @@ impl TxHandle {
 mod tests {
     extern crate tempdir;
 
+    #[cfg(feature = "storage-file")]
     use self::tempdir::TempDir;
     use super::*;
 
@@ -261,6 +262,7 @@ mod tests {
         vol.into_ref()
     }
 
+    #[cfg(feature = "storage-file")]
     fn setup_file_vol() -> (VolumeRef, TempDir) {
         init_env();
         let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
@@ -433,6 +435,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "storage-file")]
     #[test]
     fn test_trans_file() {
         {
