@@ -7,7 +7,7 @@ use std::sync::{Arc, RwLock};
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
-use super::{Storable, DummyStorage};
+use super::{DummyStorage, Storable};
 use base::crypto::{Cipher, Cost, Crypto, Key};
 use base::lru::{CountMeter, Lru, Meter, PinChecker};
 use base::utils::align_ceil_chunk;

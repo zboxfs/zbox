@@ -636,20 +636,16 @@ impl LocalCache {
         offset: usize,
         obj: &[u8],
     ) -> Result<()> {
-        self.cache.insert(
-            rel_path,
-            offset,
-            obj,
-            false,
-            CacheControl::Long,
-        )?;
+        self.cache
+            .insert(rel_path, offset, obj, false, CacheControl::Long)?;
         self.is_changed = true;
         Ok(())
     }
 
     #[inline]
     pub fn put_pinned(&mut self, rel_path: &Path, obj: &[u8]) -> Result<()> {
-        self.cache.insert(rel_path, 0, obj, true, CacheControl::NoCache)?;
+        self.cache
+            .insert(rel_path, 0, obj, true, CacheControl::NoCache)?;
         self.is_changed = true;
         Ok(())
     }

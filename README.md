@@ -235,8 +235,8 @@ Test result:
 | Baseline (file):              | 1307.97 MB/s    | 2206.30 MB/s   | N/A          |
 | Memory storage (no compress): | 605.01 MB/s     | 186.20 MB/s    | 1783 tx/s    |
 | Memory storage (compress):    | 505.04 MB/s     | 161.11 MB/s    | 1180 tx/s    |
-| File storage (no compress):   | 508.66 MB/s     | 177.39 MB/s    | 302 tx/s     |
-| File storage (compress):      | 394.26 MB/s     | 158.22 MB/s    | 313 tx/s     |
+| File storage (no compress):   | 445.28 MB/s     | 177.39 MB/s    | 313 tx/s     |
+| File storage (compress):      | 415.85 MB/s     | 158.22 MB/s    | 325 tx/s     |
 
 To run the performance test on your own computer, please follow the
 instructions in [CONTRIBUTING.md](CONTRIBUTING.md#run-performance-test).

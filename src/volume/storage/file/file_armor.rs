@@ -1,7 +1,9 @@
 use std::cmp::min;
 use std::error::Error as StdError;
 use std::fmt::Debug;
-use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write};
+use std::io::{
+    Error as IoError, ErrorKind, Read, Result as IoResult, Take, Write,
+};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
@@ -18,16 +20,15 @@ const FRAME_SIZE: usize = 16 * 1024;
 
 // File crypto reader
 pub struct CryptoReader {
-    file: vio::File,
+    file: Take<vio::File>,
 
     // encrypted frame, read from file
     enc_frame: Vec<u8>,
-    enc_frame_len: usize,
 
     // decrypted frame
     frame: Vec<u8>,
     frame_len: usize,
-    read: usize,
+    read: usize, // bytes read in a frame
 
     crypto: Crypto,
     key: Key,
@@ -36,9 +37,8 @@ pub struct CryptoReader {
 impl CryptoReader {
     fn new(file: vio::File, crypto: &Crypto, key: &Key) -> Self {
         CryptoReader {
-            file,
-            enc_frame: vec![0u8; FRAME_SIZE],
-            enc_frame_len: 0,
+            file: file.take(FRAME_SIZE as u64),
+            enc_frame: Vec::with_capacity(FRAME_SIZE),
             frame: vec![0u8; FRAME_SIZE],
             frame_len: 0,
             read: 0,
@@ -53,27 +53,21 @@ impl Read for CryptoReader {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
         if self.read >= self.frame_len {
             // frame has been exhausted, read in a new frame
-            loop {
-                match self.file.read(&mut self.enc_frame[self.enc_frame_len..])
-                {
-                    Ok(0) => break,
-                    Ok(len) => self.enc_frame_len += len,
-                    Err(ref err) if err.kind() == ErrorKind::Interrupted => {}
-                    Err(err) => return Err(err),
-                }
-            }
-
-            if self.enc_frame_len == 0 {
+            self.file.read_to_end(&mut self.enc_frame)?;
+            if self.enc_frame.is_empty() {
                 return Ok(0);
             }
 
             // decrypt frame
             self.frame_len = map_io_err!(self.crypto.decrypt_to(
                 &mut self.frame,
-                &self.enc_frame[..self.enc_frame_len],
+                &self.enc_frame,
                 &self.key
             ))?;
-            self.enc_frame_len = 0;
+
+            self.file.set_limit(FRAME_SIZE as u64);
+            self.enc_frame.clear();
+            self.read = 0;
         }
 
         // copy decrypted to destination
@@ -156,6 +150,7 @@ impl Write for CryptoWriter {
         Ok(copy_len)
     }
 
+    #[inline]
     fn flush(&mut self) -> IoResult<()> {
         // do nothing, use finish() to finalise writing
         Ok(())
@@ -163,6 +158,7 @@ impl Write for CryptoWriter {
 }
 
 impl Finish for CryptoWriter {
+    #[inline]
     fn finish(mut self) -> Result<()> {
         self.write_frame()?;
         Ok(())
@@ -170,7 +166,7 @@ impl Finish for CryptoWriter {
 }
 
 // file armor
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct FileArmor<T> {
     base: PathBuf,
     crypto: Crypto,
@@ -224,8 +220,11 @@ impl<'de, T: ArmAccess<'de> + Debug> Armor<'de> for FileArmor<T> {
 
     fn del_arm(&self, arm_id: &Eid) -> Result<()> {
         let path = arm_id.to_path_buf(&self.base);
-        vio::remove_file(&path)?;
-        remove_empty_parent_dir(&path)?;
-        Ok(())
+        match vio::remove_file(&path) {
+            Ok(_) => {}
+            Err(ref err) if err.kind() == ErrorKind::NotFound => {}
+            Err(err) => return Err(Error::from(err)),
+        }
+        remove_empty_parent_dir(&path)
     }
 }

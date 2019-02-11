@@ -685,7 +685,11 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     pub fn path_exists<P: AsRef<Path>>(&self, path: P) -> Result<bool> {
-        Ok(self.fs.resolve(path.as_ref()).map(|_| true).unwrap_or(false))
+        Ok(self
+            .fs
+            .resolve(path.as_ref())
+            .map(|_| true)
+            .unwrap_or(false))
     }
 
     /// Returns whether the path exists in repository and is pointing at

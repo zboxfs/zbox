@@ -107,7 +107,11 @@ impl Storable for DummyStorage {
     }
 
     #[inline]
-    fn put_super_block(&mut self, _super_blk: &[u8], _suffix: u64) -> Result<()> {
+    fn put_super_block(
+        &mut self,
+        _super_blk: &[u8],
+        _suffix: u64,
+    ) -> Result<()> {
         Ok(())
     }
 

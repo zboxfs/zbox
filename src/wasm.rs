@@ -1,25 +1,30 @@
-use std::ptr;
-use std::mem;
-use std::io::{Read, Write, Seek, SeekFrom};
 use std::error::Error as StdError;
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::mem;
+use std::ptr;
 use std::result;
 use std::time::SystemTime;
 
+use js_sys;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use js_sys;
 use web_sys;
 //use http::header::{ HeaderMap, HeaderName, HeaderValue };
 
-use base::crypto::{Cipher, MemLimit, OpsLimit};
 use base;
+use base::crypto::{Cipher, MemLimit, OpsLimit};
 use error::Error;
 use file::{File as ZboxFile, VersionReader as ZboxVersionReader};
-use fs::{DirEntry as ZboxDirEntry, Metadata as ZboxMetadata, Version as ZboxVersion};
-use repo::{OpenOptions as ZboxOpenOptions, Repo as ZboxRepo, RepoInfo as ZboxRepoInfo, RepoOpener as ZboxRepoOpener};
+use fs::{
+    DirEntry as ZboxDirEntry, Metadata as ZboxMetadata, Version as ZboxVersion,
+};
+use repo::{
+    OpenOptions as ZboxOpenOptions, Repo as ZboxRepo, RepoInfo as ZboxRepoInfo,
+    RepoOpener as ZboxRepoOpener,
+};
 
 #[wasm_bindgen]
-extern {
+extern "C" {
     #[wasm_bindgen(js_namespace = console)]
     fn log(a: &str);
 }
@@ -52,7 +57,9 @@ pub fn calloc(nmemb: u32, size: u32) -> u32 {
 
 #[wasm_bindgen]
 pub fn free(ptr: u32) {
-    if ptr == 0 { return; }
+    if ptr == 0 {
+        return;
+    }
     //console_log!("free: {:?}", ptr);
     let p = ptr as *mut u8;
     unsafe {
@@ -104,8 +111,10 @@ pub fn strchr(s: u32, c: u32) -> u32 {
 #[wasm_bindgen]
 pub fn strncmp(s1: u32, s2: u32, n: u32) -> i32 {
     console_log!("[rust] call strncmp()");
-    let s1 = unsafe { core::slice::from_raw_parts(s1 as *const u8, n as usize) };
-    let s2 = unsafe { core::slice::from_raw_parts(s2 as *const u8, n as usize) };
+    let s1 =
+        unsafe { core::slice::from_raw_parts(s1 as *const u8, n as usize) };
+    let s2 =
+        unsafe { core::slice::from_raw_parts(s2 as *const u8, n as usize) };
 
     for (&a, &b) in s1.iter().zip(s2.iter()) {
         let val = (a as i32) - (b as i32);
@@ -130,7 +139,10 @@ pub fn js_random_uint32() -> u32 {
     // generate a random u32 number using the global scope crypto
     let mut buf = vec![0u8; 4];
     crypto.get_random_values_with_u8_array(&mut buf).unwrap();
-    let ret: u32 = (buf[3] as u32) << 24 | (buf[2] as u32) << 16 | (buf[1] as u32) << 8 | (buf[0] as u32);
+    let ret: u32 = (buf[3] as u32) << 24
+        | (buf[2] as u32) << 16
+        | (buf[1] as u32) << 8
+        | (buf[0] as u32);
 
     ret
 }
@@ -175,7 +187,7 @@ pub fn init_env() {
 
 #[wasm_bindgen]
 pub struct RepoOpener {
-    inner: ZboxRepoOpener
+    inner: ZboxRepoOpener,
 }
 
 #[wasm_bindgen(js_class = RepoOpener)]
@@ -183,7 +195,8 @@ impl RepoOpener {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         let mut inner = ZboxRepoOpener::new();
-        inner.cipher(Cipher::Xchacha)
+        inner
+            .cipher(Cipher::Xchacha)
             .ops_limit(OpsLimit::Interactive)
             .mem_limit(MemLimit::Interactive);
         RepoOpener { inner }
@@ -225,14 +238,16 @@ impl RepoOpener {
 
 #[wasm_bindgen]
 pub struct OpenOptions {
-    inner: ZboxOpenOptions
+    inner: ZboxOpenOptions,
 }
 
 #[wasm_bindgen(js_class = OpenOptions)]
 impl OpenOptions {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
-        OpenOptions { inner: ZboxOpenOptions::new() }
+        OpenOptions {
+            inner: ZboxOpenOptions::new(),
+        }
     }
 
     pub fn read(&mut self, read: bool) {
@@ -371,7 +386,7 @@ impl From<&ZboxVersion> for Version {
 
 #[wasm_bindgen(js_name = VersionReader)]
 pub struct VersionReader {
-    inner: Option<ZboxVersionReader>
+    inner: Option<ZboxVersionReader>,
 }
 
 #[wasm_bindgen(js_class = VersionReader)]
@@ -406,7 +421,7 @@ impl VersionReader {
                     0 => SeekFrom::Start(offset as u64),
                     1 => SeekFrom::End(offset as i64),
                     2 => SeekFrom::Current(offset as i64),
-                    _ => return map_js_err!(Err(Error::InvalidArgument))
+                    _ => return map_js_err!(Err(Error::InvalidArgument)),
                 };
                 rdr.seek(pos).map_err(Error::from)
             }
@@ -418,7 +433,7 @@ impl VersionReader {
 
 #[wasm_bindgen(js_name = File)]
 pub struct File {
-    inner: Option<ZboxFile>
+    inner: Option<ZboxFile>,
 }
 
 #[wasm_bindgen(js_class = File)]
@@ -439,7 +454,9 @@ impl File {
     pub fn read_all(&mut self) -> Result<js_sys::Uint8ClampedArray> {
         let mut buf = Vec::new();
         map_js_err!(match self.inner {
-            Some(ref mut file) => file.read_to_end(&mut buf).map_err(Error::from),
+            Some(ref mut file) => {
+                file.read_to_end(&mut buf).map_err(Error::from)
+            }
             None => Err(Error::Closed),
         })?;
         let array = unsafe { js_sys::Uint8Array::view(&buf) };
@@ -477,7 +494,7 @@ impl File {
                     0 => SeekFrom::Start(offset as u64),
                     1 => SeekFrom::End(offset as i64),
                     2 => SeekFrom::Current(offset as i64),
-                    _ => return map_js_err!(Err(Error::InvalidArgument))
+                    _ => return map_js_err!(Err(Error::InvalidArgument)),
                 };
                 file.seek(pos).map_err(Error::from)
             }
@@ -532,7 +549,7 @@ impl File {
 
 #[wasm_bindgen]
 pub struct Repo {
-    inner: Option<ZboxRepo>
+    inner: Option<ZboxRepo>,
 }
 
 #[wasm_bindgen(js_class = Repo)]
@@ -555,11 +572,18 @@ impl Repo {
     }
 
     #[wasm_bindgen(js_name = resetPassword)]
-    pub fn reset_password(&mut self, old_pwd: &str, new_pwd: &str) -> Result<()> {
+    pub fn reset_password(
+        &mut self,
+        old_pwd: &str,
+        new_pwd: &str,
+    ) -> Result<()> {
         map_js_err!(match self.inner {
-            Some(ref mut repo) => repo.reset_password(old_pwd, new_pwd,
-                                                      OpsLimit::Interactive,
-                                                      MemLimit::Interactive),
+            Some(ref mut repo) => repo.reset_password(
+                old_pwd,
+                new_pwd,
+                OpsLimit::Interactive,
+                MemLimit::Interactive
+            ),
             None => Err(Error::RepoClosed),
         })
     }
@@ -718,7 +742,7 @@ impl Repo {
         assert_eq!(&dst[..], &buf[..]);
     }*/
 
-/*
+    /*
     pub fn put() -> JsValue {
         debug!("call put()");
         let xhr = web_sys::XmlHttpRequest::new().unwrap();
@@ -782,4 +806,3 @@ impl Repo {
         ret*/
     }*/
 }
-

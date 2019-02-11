@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 #[cfg(any(feature = "storage-file", feature = "storage-zbox"))]
-use error::Result;
+use error::{Error, Result};
 
 /// Calculate usize align offset, size must be 2^n integer
 #[inline]
@@ -78,8 +78,12 @@ pub fn ensure_parents_dir(path: &std::path::Path) -> Result<()> {
 #[cfg(any(feature = "storage-file", feature = "storage-zbox"))]
 pub fn remove_empty_parent_dir(path: &std::path::Path) -> Result<()> {
     for parent in path.ancestors().skip(1) {
-        if std::fs::read_dir(parent)?.count() > 0 {
-            break;
+        match std::fs::read_dir(parent) {
+            Ok(dirs) => if dirs.count() > 0 {
+                break;
+            },
+            Err(ref err) if err.kind() == std::io::ErrorKind::NotFound => break,
+            Err(err) => return Err(Error::from(err)),
         }
         std::fs::remove_dir(&parent)?;
     }

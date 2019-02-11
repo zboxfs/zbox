@@ -333,7 +333,7 @@ impl WalQueue {
             let wal_id = Wal::derive_id(*txid);
             match self.wal_armor.load_item(&wal_id) {
                 Ok(wal) => wal.clean_aborted(vol)?,
-                Err(ref err) if *err == Error::NotFound => {},
+                Err(ref err) if *err == Error::NotFound => {}
                 Err(err) => return Err(err),
             }
             completed.push(*txid);

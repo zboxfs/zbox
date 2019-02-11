@@ -12,8 +12,8 @@ use std::path::Path;
 use std::ptr;
 use std::time::{Duration, Instant};
 
-use rand_xorshift::XorShiftRng;
 use rand::{RngCore, SeedableRng};
+use rand_xorshift::XorShiftRng;
 use zbox::{init_env, File, OpenOptions, Repo, RepoOpener};
 
 const DATA_LEN: usize = 60 * 1024 * 1024;

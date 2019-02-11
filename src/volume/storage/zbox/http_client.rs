@@ -71,7 +71,10 @@ impl Headers {
         map.insert(version_header, version_value);
         #[cfg(not(feature = "storage-zbox-wasm"))]
         {
-            map.insert(header::ORIGIN, HeaderValue::from_str("http://localhost").unwrap());
+            map.insert(
+                header::ORIGIN,
+                HeaderValue::from_str("http://localhost").unwrap(),
+            );
         }
         Headers { map }
     }
@@ -85,7 +88,8 @@ impl Headers {
 
     #[inline]
     fn cache_control(mut self, cache_ctl: CacheControl) -> Self {
-        self.map.insert(header::CACHE_CONTROL, cache_ctl.to_header_value());
+        self.map
+            .insert(header::CACHE_CONTROL, cache_ctl.to_header_value());
         self
     }
 

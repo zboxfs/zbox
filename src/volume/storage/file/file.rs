@@ -66,9 +66,8 @@ impl FileStorage {
     }
 
     fn set_crypto_ctx(&mut self, crypto: Crypto, key: Key) {
-        let hash_key = key.derive(Self::SUBKEY_ID_INDEX);
         self.idx_mgr
-            .set_crypto_ctx(crypto.clone(), key.clone(), hash_key);
+            .set_crypto_ctx(crypto.clone(), key.derive(Self::SUBKEY_ID_INDEX));
         let hash_key = key.derive(Self::SUBKEY_ID_SECTOR);
         self.sec_mgr
             .set_crypto_ctx(crypto.clone(), key.clone(), hash_key);
@@ -98,13 +97,14 @@ impl Storable for FileStorage {
         // set crypto context
         self.set_crypto_ctx(crypto, key);
 
-        Ok(())
+        // initialise index manager
+        self.idx_mgr.init()
     }
 
     #[inline]
     fn open(&mut self, crypto: Crypto, key: Key) -> Result<()> {
-        self.set_crypto_ctx(crypto, key);
-        Ok(())
+        self.set_crypto_ctx(crypto, key.clone());
+        self.idx_mgr.open()
     }
 
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
@@ -147,7 +147,7 @@ impl Storable for FileStorage {
             .create(true)
             .truncate(true)
             .open(&path)?;
-        file.write_all(wal)?;
+        file.write_all(wal).and_then(|_| file.flush())?;
         Ok(())
     }
 
@@ -162,17 +162,18 @@ impl Storable for FileStorage {
 
     #[inline]
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
-        self.idx_mgr.read_addr(id)
+        self.idx_mgr.get(id)
     }
 
     #[inline]
     fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
-        self.idx_mgr.write_addr(id, addr)
+        assert!(addr.len() > 0);
+        self.idx_mgr.insert(id, addr)
     }
 
     #[inline]
     fn del_address(&mut self, id: &Eid) -> Result<()> {
-        self.idx_mgr.del_address(id)
+        self.idx_mgr.delete(id)
     }
 
     #[inline]

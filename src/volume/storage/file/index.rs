@@ -1,63 +1,174 @@
-use std::collections::HashMap;
+use std::cmp::Ordering;
 use std::fmt::{self, Debug};
+use std::iter::FromIterator;
+use std::ops::Deref;
 use std::path::Path;
 
-use bytes::BufMut;
+use linked_hash_map::LinkedHashMap;
 
 use super::file_armor::FileArmor;
-use base::crypto::{Crypto, HashKey, Key};
+use base::crypto::{Crypto, Key};
+use base::lru::{CountMeter, Lru, PinChecker};
 use error::{Error, Result};
 use trans::{Eid, Id};
 use volume::{Arm, ArmAccess, Armor, Seq};
 
-// entity address bucket
-#[derive(Clone, Deserialize, Serialize)]
-struct Bucket {
+#[derive(Clone, Default, Eq, Deserialize, Serialize)]
+struct TabItem((Eid, Vec<u8>));
+
+impl TabItem {
+    #[inline]
+    fn id(&self) -> &Eid {
+        &(self.0).0
+    }
+
+    #[inline]
+    fn addr(&self) -> &[u8] {
+        &(self.0).1
+    }
+}
+
+impl Ord for TabItem {
+    fn cmp(&self, other: &TabItem) -> Ordering {
+        self.id().cmp(other.id())
+    }
+}
+
+impl PartialOrd for TabItem {
+    #[inline]
+    fn partial_cmp(&self, other: &TabItem) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for TabItem {
+    #[inline]
+    fn eq(&self, other: &TabItem) -> bool {
+        self.id() == other.id()
+    }
+}
+
+impl Debug for TabItem {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("TabItem")
+            .field("eid", self.id())
+            .field("addr.len", &self.addr().len())
+            .finish()
+    }
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+struct Tab {
     id: Eid,
     seq: u64,
     arm: Arm,
-    map: HashMap<Eid, Vec<u8>>,
-
-    #[serde(skip_serializing, skip_deserializing, default)]
-    is_changed: bool,
+    items: Vec<TabItem>,
 }
 
-impl Bucket {
+impl Tab {
     #[inline]
-    fn new(id: Eid) -> Self {
-        Bucket {
-            id,
+    fn new() -> Self {
+        Tab {
+            id: Eid::new(),
             seq: 0,
             arm: Arm::default(),
-            map: HashMap::new(),
-            is_changed: false,
+            items: Vec::new(),
         }
     }
 
     #[inline]
-    fn get(&self, id: &Eid) -> Option<&Vec<u8>> {
-        self.map.get(id)
+    fn with_capacity(cap: usize) -> Self {
+        Tab {
+            id: Eid::new(),
+            seq: 0,
+            arm: Arm::default(),
+            items: Vec::with_capacity(cap),
+        }
     }
 
     #[inline]
-    fn insert(&mut self, id: Eid, addr: Vec<u8>) -> Option<Vec<u8>> {
-        self.is_changed = true;
-        self.map.insert(id, addr)
+    fn len(&self) -> usize {
+        self.items.len()
     }
 
     #[inline]
-    fn remove(&mut self, id: &Eid) -> Option<Vec<u8>> {
-        match self.map.remove(id) {
-            Some(addr) => {
-                self.is_changed = true;
-                Some(addr)
+    fn append(&mut self, other: &mut Tab) {
+        self.items.append(&mut other.items)
+    }
+
+    #[inline]
+    fn extend_from_slice(&mut self, other: &[TabItem]) {
+        self.items.extend_from_slice(other)
+    }
+
+    #[inline]
+    fn sort_unstable(&mut self) {
+        // sort by eid
+        self.items.sort_unstable_by(|a, b| a.0.cmp(&b.0))
+    }
+
+    fn search(&self, id: &Eid) -> Option<Vec<u8>> {
+        self.items
+            .binary_search_by(|item| item.id().cmp(id))
+            .map(|idx| self[idx].addr().to_vec())
+            .ok()
+    }
+
+    // divide tab to equal-sized tabs
+    fn divide(&self, chunk_size: usize) -> Vec<Tab> {
+        let mut ret = Vec::new();
+        for chunk in self.items.chunks(chunk_size) {
+            let mut tab = Tab::with_capacity(chunk_size);
+            tab.extend_from_slice(chunk);
+            ret.push(tab);
+        }
+        ret
+    }
+
+    // merge sorted tabs
+    fn merge(&self, other: &Tab) -> Tab {
+        let mut merged = Tab::with_capacity(self.len() + other.len());
+        let (mut i, mut j) = (0, 0);
+
+        // sorted merge with the other tab
+        while i < self.len() && j < other.len() {
+            let low = &self[i];
+            let high = &other[j];
+
+            match low.cmp(high) {
+                Ordering::Less => {
+                    merged.items.push(low.clone());
+                    i += 1;
+                }
+                Ordering::Equal => {
+                    // empty address is deletion mark, if the address is
+                    // deleted, skip it
+                    if !low.addr().is_empty() {
+                        merged.items.push(low.clone());
+                    }
+
+                    i += 1;
+                    j += 1;
+                }
+                Ordering::Greater => {
+                    merged.items.push(high.clone());
+                    j += 1;
+                }
             }
-            None => None,
         }
+
+        if i < self.len() {
+            merged.extend_from_slice(&self[i..]);
+        }
+        if j < other.len() {
+            merged.extend_from_slice(&other[j..]);
+        }
+
+        merged
     }
 }
 
-impl Id for Bucket {
+impl Id for Tab {
     #[inline]
     fn id(&self) -> &Eid {
         &self.id
@@ -69,7 +180,7 @@ impl Id for Bucket {
     }
 }
 
-impl Seq for Bucket {
+impl Seq for Tab {
     #[inline]
     fn seq(&self) -> u64 {
         self.seq
@@ -81,7 +192,7 @@ impl Seq for Bucket {
     }
 }
 
-impl<'de> ArmAccess<'de> for Bucket {
+impl<'de> ArmAccess<'de> for Tab {
     #[inline]
     fn arm(&self) -> Arm {
         self.arm
@@ -93,129 +204,562 @@ impl<'de> ArmAccess<'de> for Bucket {
     }
 }
 
-impl Debug for Bucket {
+impl Deref for Tab {
+    type Target = [TabItem];
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.items.deref()
+    }
+}
+
+impl FromIterator<TabItem> for Tab {
+    fn from_iter<I: IntoIterator<Item = TabItem>>(iter: I) -> Self {
+        let mut ret = Tab::new();
+        for i in iter {
+            ret.items.push(i);
+        }
+        ret
+    }
+}
+
+impl Debug for Tab {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Bucket")
+        f.debug_struct("Tab")
             .field("id", &self.id)
             .field("seq", &self.seq)
             .field("arm", &self.arm)
-            .field("map.len", &self.map.len())
-            .field("is_changed", &self.is_changed)
+            .field("items.len", &self.items.len())
             .finish()
     }
 }
 
-// entity index manager
-pub struct IndexMgr {
-    bkt_armor: FileArmor<Bucket>,
-    buckets: HashMap<u8, Bucket>,
-    hash_key: HashKey,
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct TabInfo {
+    id: Eid,
+    begin: Eid,
+    end: Eid,
+    cnt: usize,
 }
 
-impl IndexMgr {
-    // number of buckets
-    const BUCKET_NUM: u8 = 8;
-
-    pub fn new(base: &Path) -> Self {
-        IndexMgr {
-            bkt_armor: FileArmor::new(base),
-            buckets: HashMap::new(),
-            hash_key: HashKey::new_empty(),
+impl TabInfo {
+    fn new(tab: &Tab) -> Self {
+        TabInfo {
+            id: tab.id().clone(),
+            begin: tab.first().unwrap().id().clone(),
+            end: tab.last().unwrap().id().clone(),
+            cnt: tab.len(),
         }
     }
 
     #[inline]
-    pub fn set_crypto_ctx(
-        &mut self,
-        crypto: Crypto,
-        key: Key,
-        hash_key: HashKey,
-    ) {
-        self.bkt_armor.set_crypto_ctx(crypto, key);
-        self.hash_key = hash_key;
+    fn contains(&self, id: &Eid) -> bool {
+        &self.begin <= id && id <= &self.end
     }
 
-    // convert bucket index to id
-    fn bucket_idx_to_eid(&self, bucket_idx: u8) -> Eid {
-        let mut buf = Vec::with_capacity(1);
-        buf.put_u8(bucket_idx);
-        let hash = Crypto::hash_with_key(&buf, &self.hash_key);
-        Eid::from_slice(&hash)
+    #[inline]
+    fn is_overlapping(&self, begin: &Eid, end: &Eid) -> bool {
+        !(end < &self.begin || &self.end < begin)
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct Level {
+    num: usize,
+    tabs: Vec<TabInfo>,
+}
+
+impl Level {
+    const ITEM_CAP_BASE: usize = 4096;
+
+    fn new(num: usize) -> Self {
+        Level {
+            num,
+            tabs: Vec::new(),
+        }
     }
 
-    // open bucket for an entity, if not exists then create it
-    fn open_bucket_raw(
-        &mut self,
-        id: &Eid,
-        create: bool,
-    ) -> Result<&mut Bucket> {
-        let bucket_idx = id[0] % Self::BUCKET_NUM;
-        let bucket_id = self.bucket_idx_to_eid(bucket_idx);
+    // calculate item number cap for a specified level
+    // level 0 is 4k and each other level is 10 times of previous level
+    #[inline]
+    fn item_cap(lvl_num: usize) -> usize {
+        Self::ITEM_CAP_BASE * 10_usize.pow(lvl_num as u32)
+    }
 
-        if !self.buckets.contains_key(&bucket_idx) {
-            // load bucket
-            match self.bkt_armor.load_item(&bucket_id) {
-                Ok(bucket) => {
-                    self.buckets.insert(bucket_idx, bucket);
+    #[inline]
+    fn item_cnt(&self) -> usize {
+        self.tabs.iter().map(|t| t.cnt).sum()
+    }
+
+    #[inline]
+    fn is_full(&self) -> bool {
+        self.item_cnt() >= Self::item_cap(self.num)
+    }
+
+    fn find_tabs_contain(&self, id: &Eid) -> Vec<Eid> {
+        self.tabs
+            .iter()
+            .rev()
+            .filter(|t| t.contains(id))
+            .map(|t| t.id.clone())
+            .collect()
+    }
+
+    #[inline]
+    fn push(&mut self, tab: &Tab) {
+        let tab_info = TabInfo::new(tab);
+        self.tabs.push(tab_info);
+    }
+
+    #[inline]
+    fn remove(&mut self, tab_id: &Eid) {
+        let pos = self.tabs.iter().position(|t| t.id == *tab_id).unwrap();
+        self.tabs.remove(pos);
+    }
+
+    fn clear(&mut self, tab_armor: &FileArmor<Tab>) -> Result<()> {
+        for tab_info in self.tabs.iter() {
+            tab_armor.remove_all_arms(&tab_info.id)?;
+        }
+        self.tabs.clear();
+        Ok(())
+    }
+}
+
+// Log Structured Merge Tree
+//
+// Inspired from LevelDB implementation.
+// https://github.com/google/leveldb/blob/master/doc/impl.md
+#[derive(Deserialize, Serialize)]
+struct Lsmt {
+    id: Eid,
+    seq: u64,
+    arm: Arm,
+    lvls: Vec<Level>,
+
+    #[serde(skip_serializing, skip_deserializing, default)]
+    tab_armor: FileArmor<Tab>,
+
+    #[serde(skip_serializing, skip_deserializing, default)]
+    tab_cache: Lru<Eid, Tab, CountMeter<Tab>, PinChecker<Tab>>,
+}
+
+impl Lsmt {
+    const TAB_CNT_BASE: usize = 4;
+    const TAB_CACHE_SIZE: usize = 4;
+
+    fn new(base: &Path) -> Self {
+        Lsmt {
+            id: Eid::new_empty(),
+            seq: 0,
+            arm: Arm::default(),
+            lvls: vec![Level::new(0)],
+            tab_armor: FileArmor::new(base),
+            tab_cache: Lru::new(Self::TAB_CACHE_SIZE),
+        }
+    }
+
+    #[inline]
+    fn set_crypto_ctx(&mut self, crypto: Crypto, key: Key) {
+        self.tab_armor.set_crypto_ctx(crypto, key);
+    }
+
+    fn open(&mut self, lsmt_armor: &FileArmor<Lsmt>) -> Result<()> {
+        let lsmt = lsmt_armor.load_item(&self.id)?;
+        self.seq = lsmt.seq;
+        self.arm = lsmt.arm;
+        self.lvls = lsmt.lvls;
+        Ok(())
+    }
+
+    fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
+        for lvl_idx in 0..self.lvls.len() {
+            let lvl = &self.lvls[lvl_idx];
+
+            for tab_id in lvl.find_tabs_contain(id) {
+                if !self.tab_cache.contains_key(&tab_id) {
+                    // load tab into cache
+                    let tab = self.tab_armor.load_item(&tab_id)?;
+                    self.tab_cache.insert(tab_id.clone(), tab);
                 }
-                Err(ref err) if *err == Error::NotFound && create => {
-                    // create a new bucket
-                    let bucket = Bucket::new(bucket_id);
-                    self.buckets.insert(bucket_idx, bucket);
+
+                let tab = self.tab_cache.get_refresh(&tab_id).unwrap();
+
+                if let Some(addr) = tab.search(id) {
+                    if addr.is_empty() {
+                        return Err(Error::NotFound);
+                    }
+                    return Ok(addr.clone());
                 }
-                Err(err) => return Err(err),
             }
         }
+        Err(Error::NotFound)
+    }
 
-        let ret = self.buckets.get_mut(&bucket_idx).unwrap();
+    // read all tabs in specified level
+    fn read_all_tabs_in_level(&self, lvl_num: usize) -> Result<Tab> {
+        let lvl = &self.lvls[lvl_num];
+        let mut ret = Tab::with_capacity(lvl.item_cnt());
+
+        for tab_info in lvl.tabs.iter() {
+            let mut tab = self.tab_armor.load_item(&tab_info.id)?;
+            ret.append(&mut tab);
+        }
+
+        // if it is level 0, tabs may be overlapping so we need to
+        // sort all items
+        if lvl_num == 0 {
+            ret.sort_unstable();
+        }
 
         Ok(ret)
     }
 
-    #[inline]
-    fn open_bucket_create(&mut self, id: &Eid) -> Result<&mut Bucket> {
-        self.open_bucket_raw(id, true)
+    // read and combine specified tabs
+    fn combine_tabs(&self, tabs: &[TabInfo]) -> Result<Tab> {
+        let mut ret = Tab::new();
+        for tab_info in tabs.iter() {
+            let mut tab = self.tab_armor.load_item(&tab_info.id)?;
+            ret.append(&mut tab);
+        }
+        Ok(ret)
     }
 
-    #[inline]
-    fn open_bucket(&mut self, id: &Eid) -> Result<&mut Bucket> {
-        self.open_bucket_raw(id, false)
+    // find all overlapping tabs in specified level
+    fn find_overlapping(&self, lvl_num: usize, tab: &Tab) -> Vec<TabInfo> {
+        let lvl = &self.lvls[lvl_num];
+        let begin = tab.items.first().unwrap();
+        let end = tab.items.last().unwrap();
+        lvl.tabs
+            .iter()
+            .filter(|t| t.is_overlapping(begin.id(), end.id()))
+            .map(|t| t.clone())
+            .collect()
     }
 
-    // read entity address
-    pub fn read_addr(&mut self, id: &Eid) -> Result<Vec<u8>> {
-        let bucket = self.open_bucket(id)?;
-        bucket
-            .get(id)
-            .ok_or(Error::NotFound)
-            .map(|addr| addr.clone())
-    }
+    // compact current level tab against next level
+    fn compact(&mut self, curr: usize) -> Result<()> {
+        // combine all tabs in current level
+        let mut tab = self.read_all_tabs_in_level(curr)?;
 
-    // write entity address
-    pub fn write_addr(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
-        let bucket = self.open_bucket_create(id)?;
-        bucket.insert(id.clone(), addr.to_vec());
+        let next = curr + 1;
+
+        // next level is not created yet
+        if next >= self.lvls.len() {
+            debug!(
+                "compaction: {} -> {} (new), tab.len: {}",
+                curr,
+                next,
+                tab.len()
+            );
+            // save merged tab and clear current level
+            self.tab_armor.save_item(&mut tab)?;
+            self.lvls[curr].clear(&self.tab_armor)?;
+
+            // create the next level
+            let mut new_lvl = Level::new(next);
+            new_lvl.push(&tab);
+            self.lvls.push(new_lvl);
+
+            return Ok(());
+        }
+
+        debug!("compaction: {} -> {}, tab.len: {}", curr, next, tab.len());
+
+        // read overlapping tabs from next level and merge with the combined
+        // tab from current level
+        let overlap = self.find_overlapping(next, &tab);
+        let overlap_tab = self.combine_tabs(&overlap)?;
+        let merged = tab.merge(&overlap_tab);
+
+        // remove overlapping tabs in next level
+        for tab_info in overlap.iter() {
+            self.tab_armor.remove_all_arms(&tab_info.id)?;
+            self.lvls[next].remove(&tab_info.id);
+        }
+
+        // save merged tab to next level
+        let item_cap =
+            Level::item_cap(next) / (Self::TAB_CNT_BASE * (next + 1));
+        for mut tab in merged.divide(item_cap) {
+            self.tab_armor.save_item(&mut tab)?;
+            self.lvls[next].push(&tab);
+        }
+
+        // clear current level
+        self.lvls[curr].clear(&self.tab_armor)?;
+
         Ok(())
     }
 
-    // delete entity address
-    pub fn del_address(&mut self, id: &Eid) -> Result<()> {
-        match self.open_bucket(id) {
-            Ok(bucket) => {
-                bucket.remove(id);
-                Ok(())
+    // add young tab to lsmt
+    fn push_young(&mut self, young: &mut Tab) -> Result<()> {
+        // save young tab and push young tab to level 0
+        self.tab_armor.save_item(young)?;
+        self.lvls[0].push(young);
+
+        // iterate all levels and try to do compaction
+        let lvl_cnt = self.lvls.len();
+        for curr in 0..lvl_cnt {
+            // if current level is full then do compaction
+            if self.lvls[curr].is_full() {
+                self.compact(curr)?;
             }
-            Err(ref err) if *err == Error::NotFound => Ok(()),
-            Err(err) => Err(err),
+        }
+
+        Ok(())
+    }
+}
+
+impl Id for Lsmt {
+    #[inline]
+    fn id(&self) -> &Eid {
+        &self.id
+    }
+
+    #[inline]
+    fn id_mut(&mut self) -> &mut Eid {
+        &mut self.id
+    }
+}
+
+impl Seq for Lsmt {
+    #[inline]
+    fn seq(&self) -> u64 {
+        self.seq
+    }
+
+    #[inline]
+    fn inc_seq(&mut self) {
+        self.seq += 1
+    }
+}
+
+impl<'de> ArmAccess<'de> for Lsmt {
+    #[inline]
+    fn arm(&self) -> Arm {
+        self.arm
+    }
+
+    #[inline]
+    fn arm_mut(&mut self) -> &mut Arm {
+        &mut self.arm
+    }
+}
+
+impl Debug for Lsmt {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Lsmt")
+            .field("id", &self.id)
+            .field("seq", &self.seq)
+            .field("arm", &self.arm)
+            .field("lvls", &self.lvls)
+            .finish()
+    }
+}
+
+// memory table
+#[derive(Deserialize, Serialize)]
+struct MemTab {
+    id: Eid,
+    seq: u64,
+    arm: Arm,
+    map: LinkedHashMap<Eid, Vec<u8>>,
+
+    #[serde(skip_serializing, skip_deserializing, default)]
+    is_changed: bool,
+}
+
+impl MemTab {
+    // memory table total capacity
+    const CAPACITY: usize = 4 * 1024;
+
+    // number of items resident in memory
+    const RESIDENCE_CAP: usize = 3 * 1024;
+
+    fn new() -> Self {
+        MemTab {
+            id: Eid::new_empty(),
+            seq: 0,
+            arm: Arm::default(),
+            map: LinkedHashMap::new(),
+            is_changed: false,
         }
     }
 
-    pub fn flush(&mut self) -> Result<()> {
-        for bucket in self.buckets.values_mut() {
-            if bucket.is_changed {
-                self.bkt_armor.save_item(bucket)?;
-                bucket.is_changed = false;
+    #[inline]
+    fn is_full(&self) -> bool {
+        self.map.len() >= Self::CAPACITY
+    }
+
+    #[inline]
+    fn get_address(&mut self, id: &Eid) -> Option<&mut Vec<u8>> {
+        self.map.get_refresh(id)
+    }
+
+    #[inline]
+    fn insert(&mut self, id: &Eid, addr: &[u8]) {
+        self.map.insert(id.clone(), addr.to_owned());
+        self.is_changed = true;
+    }
+
+    // extract young tab, the memory table must be full
+    fn extract_young(&self) -> Tab {
+        let mut young: Tab = self
+            .map
+            .iter()
+            .take(self.map.len() - Self::RESIDENCE_CAP)
+            .map(|ent| TabItem((ent.0.clone(), ent.1.clone())))
+            .collect();
+        young.sort_unstable();
+        young
+    }
+
+    // evict young tab from memory table
+    fn evict_young(&mut self, young: &Tab) {
+        for item in young.iter() {
+            self.map.remove(item.id());
+        }
+        self.is_changed = true;
+    }
+}
+
+impl Id for MemTab {
+    #[inline]
+    fn id(&self) -> &Eid {
+        &self.id
+    }
+
+    #[inline]
+    fn id_mut(&mut self) -> &mut Eid {
+        &mut self.id
+    }
+}
+
+impl Seq for MemTab {
+    #[inline]
+    fn seq(&self) -> u64 {
+        self.seq
+    }
+
+    #[inline]
+    fn inc_seq(&mut self) {
+        self.seq += 1
+    }
+}
+
+impl<'de> ArmAccess<'de> for MemTab {
+    #[inline]
+    fn arm(&self) -> Arm {
+        self.arm
+    }
+
+    #[inline]
+    fn arm_mut(&mut self) -> &mut Arm {
+        &mut self.arm
+    }
+}
+
+impl Debug for MemTab {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("MemTab")
+            .field("id", &self.id)
+            .field("seq", &self.seq)
+            .field("arm", &self.arm)
+            .field("map.len", &self.map.len())
+            .finish()
+    }
+}
+
+// Index manager
+pub struct IndexMgr {
+    lsmt: Lsmt,
+    lsmt_armor: FileArmor<Lsmt>,
+    memtab: MemTab,
+    memtab_armor: FileArmor<MemTab>,
+}
+
+impl IndexMgr {
+    // lsmt and memtab subkey ids
+    const SUBKEY_ID_LSMT: u64 = 17;
+    const SUBKEY_ID_MEMTAB: u64 = 18;
+
+    pub fn new(base: &Path) -> Self {
+        IndexMgr {
+            lsmt: Lsmt::new(base),
+            lsmt_armor: FileArmor::new(base),
+            memtab: MemTab::new(),
+            memtab_armor: FileArmor::new(base),
+        }
+    }
+
+    pub fn set_crypto_ctx(&mut self, crypto: Crypto, key: Key) {
+        let sub_key = key.derive(Self::SUBKEY_ID_LSMT);
+        *self.lsmt.id_mut() = Eid::from_slice(sub_key.derive(0).as_slice());
+        self.lsmt.set_crypto_ctx(crypto.clone(), sub_key.clone());
+        self.lsmt_armor.set_crypto_ctx(crypto.clone(), sub_key);
+
+        let sub_key = key.derive(Self::SUBKEY_ID_MEMTAB);
+        *self.memtab.id_mut() = Eid::from_slice(sub_key.derive(0).as_slice());
+        self.memtab_armor.set_crypto_ctx(crypto.clone(), sub_key);
+    }
+
+    pub fn init(&mut self) -> Result<()> {
+        self.lsmt_armor.save_item(&mut self.lsmt)?;
+        self.memtab_armor.save_item(&mut self.memtab)?;
+        Ok(())
+    }
+
+    pub fn open(&mut self) -> Result<()> {
+        self.lsmt.open(&self.lsmt_armor)?;
+        self.memtab = self.memtab_armor.load_item(self.memtab.id())?;
+        Ok(())
+    }
+
+    pub fn get(&mut self, id: &Eid) -> Result<Vec<u8>> {
+        match self.memtab.get_address(id) {
+            Some(addr) => {
+                // empty address is a deletion mark
+                if addr.is_empty() {
+                    Err(Error::NotFound)
+                } else {
+                    Ok(addr.clone())
+                }
             }
+            None => self.lsmt.get_address(id),
+        }
+    }
+
+    pub fn insert(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
+        self.memtab.insert(id, addr);
+
+        if !self.memtab.is_full() {
+            return Ok(());
+        }
+
+        // extract young tab from memtable
+        let mut young = self.memtab.extract_young();
+
+        // push young tab to lsmt and save lsmt
+        self.lsmt.push_young(&mut young)?;
+        self.lsmt_armor.save_item(&mut self.lsmt)?;
+
+        // evict young tab from memtable
+        self.memtab.evict_young(&young);
+
+        Ok(())
+    }
+
+    #[inline]
+    pub fn delete(&mut self, id: &Eid) -> Result<()> {
+        self.insert(id, &[])
+    }
+
+    #[inline]
+    pub fn flush(&mut self) -> Result<()> {
+        if self.memtab.is_changed {
+            self.memtab_armor.save_item(&mut self.memtab)?;
+            self.memtab.is_changed = false;
         }
         Ok(())
     }
@@ -224,8 +768,102 @@ impl IndexMgr {
 impl Debug for IndexMgr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("IndexMgr")
-            .field("buckets", &self.buckets)
-            .field("hash_key", &self.hash_key)
+            .field("lsmt", &self.lsmt)
+            .field("memtab", &self.memtab)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate tempdir;
+
+    use bytes::{ByteOrder, LittleEndian};
+    use std::fs;
+    use std::path::PathBuf;
+
+    use self::tempdir::TempDir;
+    use super::*;
+    use base::init_env;
+
+    fn setup() -> (PathBuf, TempDir) {
+        init_env();
+        let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
+        let dir = tmpdir.path().to_path_buf();
+        //let dir = PathBuf::from("./tt");
+        if dir.exists() {
+            fs::remove_dir_all(&dir).unwrap();
+        }
+        (dir, tmpdir)
+    }
+
+    #[test]
+    fn index_manager() {
+        let (dir, _tmpdir) = setup();
+        let (crypto, key) = (Crypto::default(), Key::new_empty());
+        let mut idx_mgr = IndexMgr::new(&dir);
+        idx_mgr.set_crypto_ctx(crypto.clone(), key.clone());
+        idx_mgr.init().unwrap();
+
+        let mut ids = Vec::new();
+        let mut addrs = Vec::new();
+        let mut buf = vec![0u8; 4];
+        let buf2 = vec![42, 42, 42, 42];
+        let buf3 = vec![43, 43, 43, 43];
+        let cnt = 49152;
+
+        for i in 0..cnt {
+            let id = Eid::new();
+            LittleEndian::write_u32(&mut buf, i as u32);
+            idx_mgr.insert(&id, &buf).unwrap();
+            ids.push(id);
+            addrs.push(buf.clone());
+
+            // update an existing addr
+            if i == 8192 {
+                idx_mgr.insert(&ids[42], &buf2).unwrap();
+            }
+
+            // delete an existing addr
+            if i == 10000 {
+                idx_mgr.delete(&ids[44]).unwrap();
+                idx_mgr.delete(&ids[44]).unwrap();
+            }
+        }
+
+        // update another existing addr
+        idx_mgr.insert(&ids[43], &buf3).unwrap();
+
+        // delete an existing addr
+        idx_mgr.delete(&ids[45]).unwrap();
+        idx_mgr.delete(&ids[45]).unwrap();
+
+        // delete a non-existing addr
+        idx_mgr.delete(&Eid::new()).unwrap();
+
+        // verify
+        let dst = idx_mgr.get(&ids[42]).unwrap();
+        assert_eq!(dst[..], buf2[..]);
+        let dst = idx_mgr.get(&ids[43]).unwrap();
+        assert_eq!(dst[..], buf3[..]);
+        assert_eq!(idx_mgr.get(&ids[44]).unwrap_err(), Error::NotFound);
+        assert_eq!(idx_mgr.get(&ids[45]).unwrap_err(), Error::NotFound);
+
+        // flush index manager
+        idx_mgr.flush().unwrap();
+
+        // reopen index manager
+        drop(idx_mgr);
+        let mut idx_mgr = IndexMgr::new(&dir);
+        idx_mgr.set_crypto_ctx(crypto.clone(), key.clone());
+        idx_mgr.open().unwrap();
+
+        // verify again
+        let dst = idx_mgr.get(&ids[42]).unwrap();
+        assert_eq!(dst[..], buf2[..]);
+        let dst = idx_mgr.get(&ids[43]).unwrap();
+        assert_eq!(dst[..], buf3[..]);
+        assert_eq!(idx_mgr.get(&ids[44]).unwrap_err(), Error::NotFound);
+        assert_eq!(idx_mgr.get(&ids[45]).unwrap_err(), Error::NotFound);
     }
 }

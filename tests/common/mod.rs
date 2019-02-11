@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 extern crate tempdir;
 
-pub mod crypto;
 #[cfg(any(feature = "storage-faulty", feature = "storage-file"))]
 pub mod controller;
+pub mod crypto;
 #[cfg(any(feature = "storage-faulty", feature = "storage-file"))]
 pub mod fuzzer;
 

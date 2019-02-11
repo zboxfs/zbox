@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::fmt::{self, Debug};
 use std::path::{Path, PathBuf};
 
+use bytes::BufMut;
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
-use bytes::BufMut;
 
 use super::local_cache::LocalCache;
 use base::crypto::{Crypto, HashKey, Key};

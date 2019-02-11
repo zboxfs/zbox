@@ -1,12 +1,10 @@
-use http::{Response as HttpResponse, Uri};
-use http::header::{
-    HeaderMap, HeaderName, HeaderValue
-};
+use http::header::{HeaderMap, HeaderName, HeaderValue};
 use http::status::StatusCode;
+use http::{Response as HttpResponse, Uri};
 use std::io::{Cursor, Read};
 
-use web_sys::{XmlHttpRequest, XmlHttpRequestResponseType};
 use js_sys::Uint8Array;
+use web_sys::{XmlHttpRequest, XmlHttpRequestResponseType};
 
 use super::{Response, Transport};
 use error::{Error, Result};
@@ -19,7 +17,9 @@ fn create_response(xhr: XmlHttpRequest) -> Result<Response> {
     // check response status
     let ready_state = xhr.ready_state();
     let status = xhr.status().unwrap();
-    if ready_state != READY_STATE_DONE || (status != 200 && status != 204 && status != 404) {
+    if ready_state != READY_STATE_DONE
+        || (status != 200 && status != 204 && status != 404)
+    {
         return Err(Error::RequestError);
     }
 
@@ -31,14 +31,12 @@ fn create_response(xhr: XmlHttpRequest) -> Result<Response> {
     // extract response headers
     let headers_str = xhr.get_all_response_headers().unwrap();
     if !headers_str.is_empty() {
-        headers_str.trim_end()
-            .split("\r\n")
-            .for_each(|ent| {
-                let ent: Vec<&str> = ent.split(": ").collect();
-                let name = HeaderName::from_lowercase(ent[0].as_bytes()).unwrap();
-                let value = HeaderValue::from_str(ent[1]).unwrap();
-                builder.header(name, value);
-            });
+        headers_str.trim_end().split("\r\n").for_each(|ent| {
+            let ent: Vec<&str> = ent.split(": ").collect();
+            let name = HeaderName::from_lowercase(ent[0].as_bytes()).unwrap();
+            let value = HeaderValue::from_str(ent[1]).unwrap();
+            builder.header(name, value);
+        });
     }
 
     // extract response body as binary data
@@ -58,17 +56,26 @@ pub struct WasmTransport {
 
 impl WasmTransport {
     pub fn new(timeout: u32) -> Result<Self> {
-        Ok(WasmTransport { timeout: timeout * 1000 })
+        Ok(WasmTransport {
+            timeout: timeout * 1000,
+        })
     }
 
-    fn create_xhr(&self, method: &str, uri: &Uri, headers: &HeaderMap) -> XmlHttpRequest {
+    fn create_xhr(
+        &self,
+        method: &str,
+        uri: &Uri,
+        headers: &HeaderMap,
+    ) -> XmlHttpRequest {
         let xhr = XmlHttpRequest::new().unwrap();
-        xhr.open_with_async(method, &uri.to_string(), false).unwrap();
+        xhr.open_with_async(method, &uri.to_string(), false)
+            .unwrap();
         xhr.set_timeout(self.timeout);
         xhr.set_with_credentials(true);
         xhr.set_response_type(XmlHttpRequestResponseType::Arraybuffer);
         for (name, value) in headers.iter() {
-            xhr.set_request_header(name.as_str(), value.to_str().unwrap()).unwrap();
+            xhr.set_request_header(name.as_str(), value.to_str().unwrap())
+                .unwrap();
         }
         xhr
     }
@@ -99,4 +106,3 @@ impl Transport for WasmTransport {
         create_response(xhr)
     }
 }
-
