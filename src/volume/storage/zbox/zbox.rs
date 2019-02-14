@@ -254,6 +254,9 @@ impl IntoRef for ZboxStorage {}
 
 #[cfg(test)]
 mod tests {
+    extern crate tempdir;
+
+    use self::tempdir::TempDir;
 
     use super::*;
     use base::init_env;
@@ -336,6 +339,16 @@ mod tests {
 
     #[test]
     fn zbox_storage_file() {
-        do_test("accessKey456@repo456?cache_type=file&cache_size=1&base=./tt");
+        let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
+        let base = tmpdir.path().to_path_buf();
+        if base.exists() {
+            std::fs::remove_dir_all(&base).unwrap();
+        }
+        let uri = format!(
+            "accessKey456@repo456?cache_type=file&cache_size=1&base={}",
+            base.display()
+        );
+        println!("{}", uri);
+        do_test(&uri);
     }
 }

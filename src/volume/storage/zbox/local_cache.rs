@@ -700,7 +700,9 @@ pub type LocalCacheRef = Arc<RwLock<LocalCache>>;
 
 #[cfg(test)]
 mod tests {
+    extern crate tempdir;
 
+    use self::tempdir::TempDir;
     use super::*;
     use base::init_env;
 
@@ -836,11 +838,10 @@ mod tests {
 
     #[test]
     fn local_cache_file() {
-        let base = Path::new("./tt");
+        let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
+        let base = tmpdir.path().to_path_buf();
         if base.exists() {
-            vio::remove_dir_all(&base).unwrap();
-        } else {
-            vio::create_dir(&base).unwrap();
+            std::fs::remove_dir_all(&base).unwrap();
         }
         test_local_cache(CacheType::File, &base);
     }
