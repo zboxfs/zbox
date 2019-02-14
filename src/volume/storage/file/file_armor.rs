@@ -13,6 +13,7 @@ use base::utils::{ensure_parents_dir, remove_empty_parent_dir};
 use error::{Error, Result};
 use trans::Eid;
 use trans::Finish;
+use volume::storage::index_mgr::Accessor;
 use volume::{ArmAccess, Armor};
 
 // read/write frame size
@@ -183,12 +184,6 @@ impl<T> FileArmor<T> {
             _t: PhantomData,
         }
     }
-
-    #[inline]
-    pub fn set_crypto_ctx(&mut self, crypto: Crypto, key: Key) {
-        self.crypto = crypto;
-        self.key = key;
-    }
 }
 
 impl<'de, T: ArmAccess<'de> + Debug> Armor<'de> for FileArmor<T> {
@@ -226,5 +221,34 @@ impl<'de, T: ArmAccess<'de> + Debug> Armor<'de> for FileArmor<T> {
             Err(err) => return Err(Error::from(err)),
         }
         remove_empty_parent_dir(&path)
+    }
+}
+
+impl<'de, T> Accessor for FileArmor<T>
+where
+    T: ArmAccess<'de> + Debug + Sync + Send,
+    Self: Armor<'de, Item = T>,
+{
+    type Item = T;
+
+    #[inline]
+    fn set_crypto_ctx(&mut self, crypto: Crypto, key: Key) {
+        self.crypto = crypto;
+        self.key = key;
+    }
+
+    #[inline]
+    fn load(&self, id: &Eid) -> Result<Self::Item> {
+        self.load_item(id)
+    }
+
+    #[inline]
+    fn save(&self, item: &mut Self::Item) -> Result<()> {
+        self.save_item(item)
+    }
+
+    #[inline]
+    fn remove(&self, id: &Eid) -> Result<()> {
+        self.remove_all_arms(id)
     }
 }

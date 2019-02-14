@@ -1,7 +1,7 @@
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 
-use super::index::IndexMgr;
+use super::file_armor::FileArmor;
 use super::sector::SectorMgr;
 use super::vio;
 use base::crypto::{Crypto, Key};
@@ -9,6 +9,7 @@ use base::utils;
 use error::{Error, Result};
 use trans::Eid;
 use volume::address::Span;
+use volume::storage::index_mgr::{IndexMgr, Lsmt, MemTab, Tab};
 use volume::storage::Storable;
 
 /// File Storage
@@ -34,10 +35,17 @@ impl FileStorage {
     const SUBKEY_ID_SECTOR: u64 = 43;
 
     pub fn new(base: &Path) -> Self {
+        let idx_base = base.join(Self::INDEX_DIR);
+        let idx_mgr = IndexMgr::new(
+            Box::new(FileArmor::<Lsmt>::new(&idx_base)),
+            Box::new(FileArmor::<MemTab>::new(&idx_base)),
+            Box::new(FileArmor::<Tab>::new(&idx_base)),
+        );
+
         FileStorage {
             base: base.to_path_buf(),
             wal_base: base.join(Self::WAL_DIR),
-            idx_mgr: IndexMgr::new(&base.join(Self::INDEX_DIR)),
+            idx_mgr,
             sec_mgr: SectorMgr::new(&base.join(Self::DATA_DIR)),
         }
     }
@@ -201,6 +209,7 @@ impl Storable for FileStorage {
 mod tests {
     extern crate tempdir;
 
+    use bytes::{ByteOrder, LittleEndian};
     use std::fs;
     use std::time::Instant;
 
@@ -396,6 +405,84 @@ mod tests {
             fs.del_blocks(Span::new(idx - 4 + i * 4, 4)).unwrap();
             fs.put_blocks(Span::new(idx + i * 4, 4), &blks).unwrap();
         }
+    }
+
+    #[test]
+    fn index_manager() {
+        let (dir, _tmpdir) = setup();
+        let (crypto, key) = (Crypto::default(), Key::new_empty());
+        let mut idx_mgr = IndexMgr::new(
+            Box::new(FileArmor::<Lsmt>::new(&dir)),
+            Box::new(FileArmor::<MemTab>::new(&dir)),
+            Box::new(FileArmor::<Tab>::new(&dir)),
+        );
+        idx_mgr.set_crypto_ctx(crypto.clone(), key.clone());
+        idx_mgr.init().unwrap();
+
+        let mut ids = Vec::new();
+        let mut addrs = Vec::new();
+        let mut buf = vec![0u8; 4];
+        let buf2 = vec![42, 42, 42, 42];
+        let buf3 = vec![43, 43, 43, 43];
+        let cnt = 49152;
+
+        for i in 0..cnt {
+            let id = Eid::new();
+            LittleEndian::write_u32(&mut buf, i as u32);
+            idx_mgr.insert(&id, &buf).unwrap();
+            ids.push(id);
+            addrs.push(buf.clone());
+
+            // update an existing addr
+            if i == 8192 {
+                idx_mgr.insert(&ids[42], &buf2).unwrap();
+            }
+
+            // delete an existing addr
+            if i == 10000 {
+                idx_mgr.delete(&ids[44]).unwrap();
+                idx_mgr.delete(&ids[44]).unwrap();
+            }
+        }
+
+        // update another existing addr
+        idx_mgr.insert(&ids[43], &buf3).unwrap();
+
+        // delete an existing addr
+        idx_mgr.delete(&ids[45]).unwrap();
+        idx_mgr.delete(&ids[45]).unwrap();
+
+        // delete a non-existing addr
+        idx_mgr.delete(&Eid::new()).unwrap();
+
+        // verify
+        let dst = idx_mgr.get(&ids[42]).unwrap();
+        assert_eq!(dst[..], buf2[..]);
+        let dst = idx_mgr.get(&ids[43]).unwrap();
+        assert_eq!(dst[..], buf3[..]);
+        assert_eq!(idx_mgr.get(&ids[44]).unwrap_err(), Error::NotFound);
+        assert_eq!(idx_mgr.get(&ids[45]).unwrap_err(), Error::NotFound);
+
+        // flush index manager
+        idx_mgr.flush().unwrap();
+
+        // reopen index manager
+        drop(idx_mgr);
+        let mut idx_mgr = IndexMgr::new(
+            Box::new(FileArmor::<Lsmt>::new(&dir)),
+            Box::new(FileArmor::<MemTab>::new(&dir)),
+            Box::new(FileArmor::<Tab>::new(&dir)),
+        );
+        idx_mgr.set_crypto_ctx(crypto.clone(), key.clone());
+        idx_mgr.open().unwrap();
+
+        // verify again
+        let dst = idx_mgr.get(&ids[42]).unwrap();
+        assert_eq!(dst[..], buf2[..]);
+        let dst = idx_mgr.get(&ids[43]).unwrap();
+        assert_eq!(dst[..], buf3[..]);
+        assert_eq!(idx_mgr.get(&ids[44]).unwrap_err(), Error::NotFound);
+        assert_eq!(idx_mgr.get(&ids[45]).unwrap_err(), Error::NotFound);
     }
 
     #[test]

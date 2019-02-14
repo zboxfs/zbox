@@ -25,6 +25,9 @@ mod redis;
 #[cfg(feature = "storage-zbox")]
 mod zbox;
 
+#[cfg(any(feature = "storage-file", feature = "storage-zbox"))]
+mod index_mgr;
+
 use std::fmt::Debug;
 
 use base::crypto::{Crypto, Key};

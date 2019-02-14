@@ -14,6 +14,7 @@ use base::utils::{ensure_parents_dir, remove_empty_parent_dir};
 use error::{Error, Result};
 use trans::{Eid, Id};
 use volume::address::Span;
+use volume::storage::index_mgr::Accessor;
 use volume::{Arm, ArmAccess, Armor, Seq, BLK_SIZE};
 
 // how many blocks in a sector, must be 2^n and less than u16::MAX

@@ -1,5 +1,5 @@
 mod http_client;
-mod index;
+mod index_accessor;
 mod local_cache;
 mod sector;
 mod transport;

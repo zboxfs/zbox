@@ -2,19 +2,30 @@ use std::cmp::Ordering;
 use std::fmt::{self, Debug};
 use std::iter::FromIterator;
 use std::ops::Deref;
-use std::path::Path;
 
 use linked_hash_map::LinkedHashMap;
 
-use super::file_armor::FileArmor;
 use base::crypto::{Crypto, Key};
 use base::lru::{CountMeter, Lru, PinChecker};
 use error::{Error, Result};
 use trans::{Eid, Id};
-use volume::{Arm, ArmAccess, Armor, Seq};
+use volume::{Arm, ArmAccess, Seq};
+
+pub trait Accessor: Send + Sync {
+    type Item;
+
+    fn set_crypto_ctx(&mut self, crypto: Crypto, key: Key);
+    fn load(&self, id: &Eid) -> Result<Self::Item>;
+    fn save(&self, item: &mut Self::Item) -> Result<()>;
+    fn remove(&self, id: &Eid) -> Result<()>;
+}
+
+type LsmtArmor = Box<Accessor<Item = Lsmt>>;
+type MemTabArmor = Box<Accessor<Item = MemTab>>;
+type TabArmor = Box<Accessor<Item = Tab>>;
 
 #[derive(Clone, Default, Eq, Deserialize, Serialize)]
-struct TabItem((Eid, Vec<u8>));
+pub struct TabItem((Eid, Vec<u8>));
 
 impl TabItem {
     #[inline]
@@ -58,7 +69,7 @@ impl Debug for TabItem {
 }
 
 #[derive(Clone, Default, Deserialize, Serialize)]
-struct Tab {
+pub struct Tab {
     id: Eid,
     seq: u64,
     arm: Arm,
@@ -317,9 +328,9 @@ impl Level {
         self.tabs.remove(pos);
     }
 
-    fn clear(&mut self, tab_armor: &FileArmor<Tab>) -> Result<()> {
+    fn clear(&mut self, tab_armor: &TabArmor) -> Result<()> {
         for tab_info in self.tabs.iter() {
-            tab_armor.remove_all_arms(&tab_info.id)?;
+            tab_armor.remove(&tab_info.id)?;
         }
         self.tabs.clear();
         Ok(())
@@ -331,14 +342,11 @@ impl Level {
 // Inspired from LevelDB implementation.
 // https://github.com/google/leveldb/blob/master/doc/impl.md
 #[derive(Deserialize, Serialize)]
-struct Lsmt {
+pub struct Lsmt {
     id: Eid,
     seq: u64,
     arm: Arm,
     lvls: Vec<Level>,
-
-    #[serde(skip_serializing, skip_deserializing, default)]
-    tab_armor: FileArmor<Tab>,
 
     #[serde(skip_serializing, skip_deserializing, default)]
     tab_cache: Lru<Eid, Tab, CountMeter<Tab>, PinChecker<Tab>>,
@@ -348,44 +356,43 @@ impl Lsmt {
     const TAB_CNT_BASE: usize = 4;
     const TAB_CACHE_SIZE: usize = 4;
 
-    fn new(base: &Path) -> Self {
+    fn new() -> Self {
         Lsmt {
             id: Eid::new_empty(),
             seq: 0,
             arm: Arm::default(),
             lvls: vec![Level::new(0)],
-            tab_armor: FileArmor::new(base),
             tab_cache: Lru::new(Self::TAB_CACHE_SIZE),
         }
     }
 
-    #[inline]
-    fn set_crypto_ctx(&mut self, crypto: Crypto, key: Key) {
-        self.tab_armor.set_crypto_ctx(crypto, key);
-    }
-
-    fn open(&mut self, lsmt_armor: &FileArmor<Lsmt>) -> Result<()> {
-        let lsmt = lsmt_armor.load_item(&self.id)?;
+    fn open(&mut self, lsmt_armor: &LsmtArmor) -> Result<()> {
+        let lsmt = lsmt_armor.load(&self.id)?;
         self.seq = lsmt.seq;
         self.arm = lsmt.arm;
         self.lvls = lsmt.lvls;
         Ok(())
     }
 
-    fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
+    fn get_address(
+        &mut self,
+        id: &Eid,
+        tab_armor: &TabArmor,
+    ) -> Result<Vec<u8>> {
         for lvl_idx in 0..self.lvls.len() {
             let lvl = &self.lvls[lvl_idx];
 
             for tab_id in lvl.find_tabs_contain(id) {
                 if !self.tab_cache.contains_key(&tab_id) {
                     // load tab into cache
-                    let tab = self.tab_armor.load_item(&tab_id)?;
+                    let tab = tab_armor.load(&tab_id)?;
                     self.tab_cache.insert(tab_id.clone(), tab);
                 }
 
                 let tab = self.tab_cache.get_refresh(&tab_id).unwrap();
 
                 if let Some(addr) = tab.search(id) {
+                    // empty address is deletion mark
                     if addr.is_empty() {
                         return Err(Error::NotFound);
                     }
@@ -397,12 +404,16 @@ impl Lsmt {
     }
 
     // read all tabs in specified level
-    fn read_all_tabs_in_level(&self, lvl_num: usize) -> Result<Tab> {
+    fn read_all_tabs_in_level(
+        &self,
+        lvl_num: usize,
+        tab_armor: &TabArmor,
+    ) -> Result<Tab> {
         let lvl = &self.lvls[lvl_num];
         let mut ret = Tab::with_capacity(lvl.item_cnt());
 
         for tab_info in lvl.tabs.iter() {
-            let mut tab = self.tab_armor.load_item(&tab_info.id)?;
+            let mut tab = tab_armor.load(&tab_info.id)?;
             ret.append(&mut tab);
         }
 
@@ -416,10 +427,14 @@ impl Lsmt {
     }
 
     // read and combine specified tabs
-    fn combine_tabs(&self, tabs: &[TabInfo]) -> Result<Tab> {
+    fn combine_tabs(
+        &self,
+        tabs: &[TabInfo],
+        tab_armor: &TabArmor,
+    ) -> Result<Tab> {
         let mut ret = Tab::new();
         for tab_info in tabs.iter() {
-            let mut tab = self.tab_armor.load_item(&tab_info.id)?;
+            let mut tab = tab_armor.load(&tab_info.id)?;
             ret.append(&mut tab);
         }
         Ok(ret)
@@ -438,9 +453,9 @@ impl Lsmt {
     }
 
     // compact current level tab against next level
-    fn compact(&mut self, curr: usize) -> Result<()> {
+    fn compact(&mut self, curr: usize, tab_armor: &TabArmor) -> Result<()> {
         // combine all tabs in current level
-        let mut tab = self.read_all_tabs_in_level(curr)?;
+        let mut tab = self.read_all_tabs_in_level(curr, tab_armor)?;
 
         let next = curr + 1;
 
@@ -453,8 +468,8 @@ impl Lsmt {
                 tab.len()
             );
             // save merged tab and clear current level
-            self.tab_armor.save_item(&mut tab)?;
-            self.lvls[curr].clear(&self.tab_armor)?;
+            tab_armor.save(&mut tab)?;
+            self.lvls[curr].clear(tab_armor)?;
 
             // create the next level
             let mut new_lvl = Level::new(next);
@@ -469,12 +484,12 @@ impl Lsmt {
         // read overlapping tabs from next level and merge with the combined
         // tab from current level
         let overlap = self.find_overlapping(next, &tab);
-        let overlap_tab = self.combine_tabs(&overlap)?;
+        let overlap_tab = self.combine_tabs(&overlap, tab_armor)?;
         let merged = tab.merge(&overlap_tab);
 
         // remove overlapping tabs in next level
         for tab_info in overlap.iter() {
-            self.tab_armor.remove_all_arms(&tab_info.id)?;
+            tab_armor.remove(&tab_info.id)?;
             self.lvls[next].remove(&tab_info.id);
         }
 
@@ -482,20 +497,24 @@ impl Lsmt {
         let item_cap =
             Level::item_cap(next) / (Self::TAB_CNT_BASE * (next + 1));
         for mut tab in merged.divide(item_cap) {
-            self.tab_armor.save_item(&mut tab)?;
+            tab_armor.save(&mut tab)?;
             self.lvls[next].push(&tab);
         }
 
         // clear current level
-        self.lvls[curr].clear(&self.tab_armor)?;
+        self.lvls[curr].clear(tab_armor)?;
 
         Ok(())
     }
 
     // add young tab to lsmt
-    fn push_young(&mut self, young: &mut Tab) -> Result<()> {
+    fn push_young(
+        &mut self,
+        young: &mut Tab,
+        tab_armor: &TabArmor,
+    ) -> Result<()> {
         // save young tab and push young tab to level 0
-        self.tab_armor.save_item(young)?;
+        tab_armor.save(young)?;
         self.lvls[0].push(young);
 
         // iterate all levels and try to do compaction
@@ -503,7 +522,7 @@ impl Lsmt {
         for curr in 0..lvl_cnt {
             // if current level is full then do compaction
             if self.lvls[curr].is_full() {
-                self.compact(curr)?;
+                self.compact(curr, tab_armor)?;
             }
         }
 
@@ -560,7 +579,7 @@ impl Debug for Lsmt {
 
 // memory table
 #[derive(Deserialize, Serialize)]
-struct MemTab {
+pub struct MemTab {
     id: Eid,
     seq: u64,
     arm: Arm,
@@ -674,45 +693,54 @@ impl Debug for MemTab {
 // Index manager
 pub struct IndexMgr {
     lsmt: Lsmt,
-    lsmt_armor: FileArmor<Lsmt>,
     memtab: MemTab,
-    memtab_armor: FileArmor<MemTab>,
+    lsmt_armor: LsmtArmor,
+    memtab_armor: MemTabArmor,
+    tab_armor: TabArmor,
 }
 
 impl IndexMgr {
-    // lsmt and memtab subkey ids
+    // subkey ids
     const SUBKEY_ID_LSMT: u64 = 17;
     const SUBKEY_ID_MEMTAB: u64 = 18;
+    const SUBKEY_ID_TAB: u64 = 19;
 
-    pub fn new(base: &Path) -> Self {
+    pub fn new(
+        lsmt_armor: LsmtArmor,
+        memtab_armor: MemTabArmor,
+        tab_armor: TabArmor,
+    ) -> Self {
         IndexMgr {
-            lsmt: Lsmt::new(base),
-            lsmt_armor: FileArmor::new(base),
+            lsmt: Lsmt::new(),
             memtab: MemTab::new(),
-            memtab_armor: FileArmor::new(base),
+            lsmt_armor,
+            memtab_armor,
+            tab_armor,
         }
     }
 
     pub fn set_crypto_ctx(&mut self, crypto: Crypto, key: Key) {
         let sub_key = key.derive(Self::SUBKEY_ID_LSMT);
         *self.lsmt.id_mut() = Eid::from_slice(sub_key.derive(0).as_slice());
-        self.lsmt.set_crypto_ctx(crypto.clone(), sub_key.clone());
         self.lsmt_armor.set_crypto_ctx(crypto.clone(), sub_key);
 
         let sub_key = key.derive(Self::SUBKEY_ID_MEMTAB);
         *self.memtab.id_mut() = Eid::from_slice(sub_key.derive(0).as_slice());
         self.memtab_armor.set_crypto_ctx(crypto.clone(), sub_key);
+
+        let sub_key = key.derive(Self::SUBKEY_ID_TAB);
+        self.tab_armor.set_crypto_ctx(crypto.clone(), sub_key);
     }
 
     pub fn init(&mut self) -> Result<()> {
-        self.lsmt_armor.save_item(&mut self.lsmt)?;
-        self.memtab_armor.save_item(&mut self.memtab)?;
+        self.lsmt_armor.save(&mut self.lsmt)?;
+        self.memtab_armor.save(&mut self.memtab)?;
         Ok(())
     }
 
     pub fn open(&mut self) -> Result<()> {
         self.lsmt.open(&self.lsmt_armor)?;
-        self.memtab = self.memtab_armor.load_item(self.memtab.id())?;
+        self.memtab = self.memtab_armor.load(self.memtab.id())?;
         Ok(())
     }
 
@@ -726,7 +754,7 @@ impl IndexMgr {
                     Ok(addr.clone())
                 }
             }
-            None => self.lsmt.get_address(id),
+            None => self.lsmt.get_address(id, &self.tab_armor),
         }
     }
 
@@ -741,8 +769,8 @@ impl IndexMgr {
         let mut young = self.memtab.extract_young();
 
         // push young tab to lsmt and save lsmt
-        self.lsmt.push_young(&mut young)?;
-        self.lsmt_armor.save_item(&mut self.lsmt)?;
+        self.lsmt.push_young(&mut young, &self.tab_armor)?;
+        self.lsmt_armor.save(&mut self.lsmt)?;
 
         // evict young tab from memtable
         self.memtab.evict_young(&young);
@@ -758,7 +786,7 @@ impl IndexMgr {
     #[inline]
     pub fn flush(&mut self) -> Result<()> {
         if self.memtab.is_changed {
-            self.memtab_armor.save_item(&mut self.memtab)?;
+            self.memtab_armor.save(&mut self.memtab)?;
             self.memtab.is_changed = false;
         }
         Ok(())
@@ -771,99 +799,5 @@ impl Debug for IndexMgr {
             .field("lsmt", &self.lsmt)
             .field("memtab", &self.memtab)
             .finish()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    extern crate tempdir;
-
-    use bytes::{ByteOrder, LittleEndian};
-    use std::fs;
-    use std::path::PathBuf;
-
-    use self::tempdir::TempDir;
-    use super::*;
-    use base::init_env;
-
-    fn setup() -> (PathBuf, TempDir) {
-        init_env();
-        let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
-        let dir = tmpdir.path().to_path_buf();
-        //let dir = PathBuf::from("./tt");
-        if dir.exists() {
-            fs::remove_dir_all(&dir).unwrap();
-        }
-        (dir, tmpdir)
-    }
-
-    #[test]
-    fn index_manager() {
-        let (dir, _tmpdir) = setup();
-        let (crypto, key) = (Crypto::default(), Key::new_empty());
-        let mut idx_mgr = IndexMgr::new(&dir);
-        idx_mgr.set_crypto_ctx(crypto.clone(), key.clone());
-        idx_mgr.init().unwrap();
-
-        let mut ids = Vec::new();
-        let mut addrs = Vec::new();
-        let mut buf = vec![0u8; 4];
-        let buf2 = vec![42, 42, 42, 42];
-        let buf3 = vec![43, 43, 43, 43];
-        let cnt = 49152;
-
-        for i in 0..cnt {
-            let id = Eid::new();
-            LittleEndian::write_u32(&mut buf, i as u32);
-            idx_mgr.insert(&id, &buf).unwrap();
-            ids.push(id);
-            addrs.push(buf.clone());
-
-            // update an existing addr
-            if i == 8192 {
-                idx_mgr.insert(&ids[42], &buf2).unwrap();
-            }
-
-            // delete an existing addr
-            if i == 10000 {
-                idx_mgr.delete(&ids[44]).unwrap();
-                idx_mgr.delete(&ids[44]).unwrap();
-            }
-        }
-
-        // update another existing addr
-        idx_mgr.insert(&ids[43], &buf3).unwrap();
-
-        // delete an existing addr
-        idx_mgr.delete(&ids[45]).unwrap();
-        idx_mgr.delete(&ids[45]).unwrap();
-
-        // delete a non-existing addr
-        idx_mgr.delete(&Eid::new()).unwrap();
-
-        // verify
-        let dst = idx_mgr.get(&ids[42]).unwrap();
-        assert_eq!(dst[..], buf2[..]);
-        let dst = idx_mgr.get(&ids[43]).unwrap();
-        assert_eq!(dst[..], buf3[..]);
-        assert_eq!(idx_mgr.get(&ids[44]).unwrap_err(), Error::NotFound);
-        assert_eq!(idx_mgr.get(&ids[45]).unwrap_err(), Error::NotFound);
-
-        // flush index manager
-        idx_mgr.flush().unwrap();
-
-        // reopen index manager
-        drop(idx_mgr);
-        let mut idx_mgr = IndexMgr::new(&dir);
-        idx_mgr.set_crypto_ctx(crypto.clone(), key.clone());
-        idx_mgr.open().unwrap();
-
-        // verify again
-        let dst = idx_mgr.get(&ids[42]).unwrap();
-        assert_eq!(dst[..], buf2[..]);
-        let dst = idx_mgr.get(&ids[43]).unwrap();
-        assert_eq!(dst[..], buf3[..]);
-        assert_eq!(idx_mgr.get(&ids[44]).unwrap_err(), Error::NotFound);
-        assert_eq!(idx_mgr.get(&ids[45]).unwrap_err(), Error::NotFound);
     }
 }

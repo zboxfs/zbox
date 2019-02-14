@@ -4,6 +4,7 @@ use std::fmt::{self, Debug};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::{Arc, RwLock};
 
 use linked_hash_map::LinkedHashMap;
 use rmp_serde::{Deserializer, Serializer};
@@ -664,6 +665,13 @@ impl LocalCache {
         Ok(())
     }
 
+    #[inline]
+    pub fn del_index(&mut self, rel_path: &Path) -> Result<()> {
+        self.idx_cache.del(rel_path, CacheControl::NoCache)?;
+        self.is_changed = true;
+        Ok(())
+    }
+
     pub fn flush(&mut self) -> Result<()> {
         if self.is_changed {
             self.write_meta()?;
@@ -685,6 +693,10 @@ impl Debug for LocalCache {
             .finish()
     }
 }
+
+impl IntoRef for LocalCache {}
+
+pub type LocalCacheRef = Arc<RwLock<LocalCache>>;
 
 #[cfg(test)]
 mod tests {

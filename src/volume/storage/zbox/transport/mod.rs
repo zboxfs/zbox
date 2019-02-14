@@ -72,10 +72,12 @@ pub trait Transport: Send + Sync {
 pub struct DummyTransport;
 
 impl Transport for DummyTransport {
+    #[inline]
     fn get(&self, _uri: &Uri, _headers: &HeaderMap) -> Result<Response> {
         unimplemented!()
     }
 
+    #[inline]
     fn put(
         &mut self,
         _uri: &Uri,
@@ -85,6 +87,7 @@ impl Transport for DummyTransport {
         unimplemented!()
     }
 
+    #[inline]
     fn delete(&mut self, _url: &Uri, _headers: &HeaderMap) -> Result<Response> {
         unimplemented!()
     }

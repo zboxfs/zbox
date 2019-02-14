@@ -7,7 +7,7 @@ use bytes::BufMut;
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
-use super::local_cache::LocalCache;
+use super::local_cache::{LocalCache, LocalCacheRef};
 use base::crypto::{Crypto, HashKey, Key};
 use error::{Error, Result};
 use volume::address::Span;
@@ -151,25 +151,29 @@ pub struct SectorMgr {
     // sector recycle map
     rmap: RecycleMap,
 
+    local_cache: LocalCacheRef,
+
     crypto: Crypto,
     key: Key,
     hash_key: HashKey,
 }
 
 impl SectorMgr {
-    pub fn new() -> Self {
+    pub fn new(local_cache: &LocalCacheRef) -> Self {
         SectorMgr {
             sec: vec![0u8; SECTOR_SIZE],
             sec_base: 0,
             sec_top: 0,
             sec_idx: 0,
             rmap: RecycleMap::default(),
+            local_cache: local_cache.clone(),
             crypto: Crypto::default(),
             key: Key::new_empty(),
             hash_key: HashKey::new_empty(),
         }
     }
 
+    #[inline]
     pub fn set_crypto_ctx(&mut self, crypto: Crypto, key: Key) {
         self.crypto = crypto;
         self.hash_key = key.derive(0);
@@ -178,22 +182,21 @@ impl SectorMgr {
     }
 
     #[inline]
-    pub fn init(&mut self, local_cache: &mut LocalCache) -> Result<()> {
-        self.rmap.save(&self.crypto, &self.key, local_cache)
+    pub fn init(&mut self) -> Result<()> {
+        let mut local_cache = self.local_cache.write().unwrap();
+        self.rmap.save(&self.crypto, &self.key, &mut local_cache)
     }
 
     #[inline]
-    pub fn open(&mut self, local_cache: &mut LocalCache) -> Result<()> {
-        self.rmap = RecycleMap::load(&self.crypto, &self.key, local_cache)?;
+    pub fn open(&mut self) -> Result<()> {
+        let mut local_cache = self.local_cache.write().unwrap();
+        self.rmap =
+            RecycleMap::load(&self.crypto, &self.key, &mut local_cache)?;
         Ok(())
     }
 
-    pub fn get_blocks(
-        &mut self,
-        dst: &mut [u8],
-        span: Span,
-        local_cache: &mut LocalCache,
-    ) -> Result<()> {
+    pub fn get_blocks(&mut self, dst: &mut [u8], span: Span) -> Result<()> {
+        let mut local_cache = self.local_cache.write().unwrap();
         let mut read = 0;
 
         for sec_span in span.divide_by(BLKS_PER_SECTOR) {
@@ -226,12 +229,7 @@ impl SectorMgr {
         Ok(())
     }
 
-    pub fn put_blocks(
-        &mut self,
-        span: Span,
-        mut blks: &[u8],
-        local_cache: &mut LocalCache,
-    ) -> Result<()> {
+    pub fn put_blocks(&mut self, span: Span, mut blks: &[u8]) -> Result<()> {
         for sec_span in span.divide_by(BLKS_PER_SECTOR) {
             let sec_idx = sec_span.begin / BLKS_PER_SECTOR;
             let offset = (sec_span.begin % BLKS_PER_SECTOR) * BLK_SIZE;
@@ -241,6 +239,7 @@ impl SectorMgr {
             // from local cache. This only happend during first-time call.
             if offset > self.sec_top {
                 assert_eq!(self.sec_idx, 0);
+                let mut local_cache = self.local_cache.write().unwrap();
                 let rel_path = sector_rel_path(sec_idx, &self.hash_key);
                 local_cache.get(
                     &rel_path,
@@ -262,7 +261,7 @@ impl SectorMgr {
 
             // if sector buffer is full, flush it to local cache
             if self.sec_top >= SECTOR_SIZE {
-                self.flush(local_cache)?;
+                self.flush()?;
             }
         }
 
@@ -270,17 +269,16 @@ impl SectorMgr {
     }
 
     #[inline]
-    pub fn del_blocks(
-        &mut self,
-        span: Span,
-        local_cache: &mut LocalCache,
-    ) -> Result<()> {
-        self.rmap.del_blocks(span, local_cache)
+    pub fn del_blocks(&mut self, span: Span) -> Result<()> {
+        let mut local_cache = self.local_cache.write().unwrap();
+        self.rmap.del_blocks(span, &mut local_cache)
     }
 
-    pub fn flush(&mut self, local_cache: &mut LocalCache) -> Result<()> {
+    pub fn flush(&mut self) -> Result<()> {
+        let mut local_cache = self.local_cache.write().unwrap();
+
         // save recycle map
-        self.rmap.save(&self.crypto, &self.key, local_cache)?;
+        self.rmap.save(&self.crypto, &self.key, &mut local_cache)?;
 
         if self.sec_base == self.sec_top {
             return Ok(());
@@ -317,7 +315,7 @@ impl Debug for SectorMgr {
 mod tests {
 
     use super::*;
-    use base::init_env;
+    use base::{init_env, IntoRef};
     use volume::storage::zbox::local_cache::CacheType;
 
     #[test]
@@ -332,7 +330,10 @@ mod tests {
             &repo_id,
             &access_key,
         ).unwrap();
-        let mut sec_mgr = SectorMgr::new();
+        cache.connect().unwrap();
+        cache.init().unwrap();
+
+        let mut sec_mgr = SectorMgr::new(&cache.into_ref());
         let blks = vec![1u8; 2 * BLK_SIZE];
         let blks2 = vec![2u8; 14 * BLK_SIZE];
         let blks3 = vec![3u8; 18 * BLK_SIZE];
@@ -340,34 +341,31 @@ mod tests {
         let span2 = Span::new(2, 14);
         let span3 = Span::new(16, 18);
 
-        cache.connect().unwrap();
-        cache.init().unwrap();
-
-        sec_mgr.put_blocks(span, &blks, &mut cache).unwrap();
+        sec_mgr.put_blocks(span, &blks).unwrap();
 
         let mut dst = vec![0u8; blks.len()];
-        sec_mgr.get_blocks(&mut dst, span, &mut cache).unwrap();
+        sec_mgr.get_blocks(&mut dst, span).unwrap();
         assert_eq!(&dst, &blks);
 
-        sec_mgr.put_blocks(span2, &blks2, &mut cache).unwrap();
-        sec_mgr.flush(&mut cache).unwrap();
+        sec_mgr.put_blocks(span2, &blks2).unwrap();
+        sec_mgr.flush().unwrap();
 
         let mut dst = vec![0u8; blks.len()];
-        sec_mgr.get_blocks(&mut dst, span, &mut cache).unwrap();
+        sec_mgr.get_blocks(&mut dst, span).unwrap();
         assert_eq!(&dst, &blks);
 
         let mut dst = vec![0u8; blks2.len()];
-        sec_mgr.get_blocks(&mut dst, span2, &mut cache).unwrap();
+        sec_mgr.get_blocks(&mut dst, span2).unwrap();
         assert_eq!(&dst, &blks2);
 
-        sec_mgr.del_blocks(span, &mut cache).unwrap();
+        sec_mgr.del_blocks(span).unwrap();
         assert_eq!(
-            sec_mgr.get_blocks(&mut dst, span, &mut cache).unwrap_err(),
+            sec_mgr.get_blocks(&mut dst, span).unwrap_err(),
             Error::NotFound
         );
-        sec_mgr.del_blocks(span2, &mut cache).unwrap();
+        sec_mgr.del_blocks(span2).unwrap();
 
-        sec_mgr.put_blocks(span3, &blks3, &mut cache).unwrap();
-        sec_mgr.flush(&mut cache).unwrap();
+        sec_mgr.put_blocks(span3, &blks3).unwrap();
+        sec_mgr.flush().unwrap();
     }
 }

@@ -1,13 +1,14 @@
 use std::path::{Path, PathBuf};
 
-use super::index::IndexMgr;
-use super::local_cache::{CacheType, LocalCache};
+use super::index_accessor::IndexAccessor;
+use super::local_cache::{CacheType, LocalCache, LocalCacheRef};
 use super::sector::SectorMgr;
 use base::crypto::{Crypto, Key};
 use base::IntoRef;
 use error::{Error, Result};
 use trans::Eid;
 use volume::address::Span;
+use volume::storage::index_mgr::{IndexMgr, Lsmt, MemTab, Tab};
 use volume::storage::Storable;
 
 // parse uri
@@ -78,7 +79,7 @@ fn parse_uri(mut uri: &str) -> Result<(&str, &str, CacheType, usize, PathBuf)> {
 #[derive(Debug)]
 pub struct ZboxStorage {
     wal_base: PathBuf,
-    local_cache: LocalCache,
+    local_cache: LocalCacheRef,
     sec_mgr: SectorMgr,
     idx_mgr: IndexMgr,
 }
@@ -104,11 +105,15 @@ impl ZboxStorage {
         // create local cache
         let local_cache = LocalCache::new(
             cache_type, cache_size, &base, repo_id, access_key,
-        )?;
+        )?.into_ref();
 
         // create sector manager and index manager
-        let sec_mgr = SectorMgr::new();
-        let idx_mgr = IndexMgr::new();
+        let sec_mgr = SectorMgr::new(&local_cache);
+        let idx_mgr = IndexMgr::new(
+            Box::new(IndexAccessor::<Lsmt>::new(&local_cache)),
+            Box::new(IndexAccessor::<MemTab>::new(&local_cache)),
+            Box::new(IndexAccessor::<Tab>::new(&local_cache)),
+        );
 
         Ok(ZboxStorage {
             wal_base: PathBuf::from(Self::WAL_DIR),
@@ -120,8 +125,11 @@ impl ZboxStorage {
 
     // set crypto context for componenets
     fn set_crypto_ctx(&mut self, crypto: Crypto, key: Key) {
-        let subkey = key.derive(Self::SUBKEY_ID_LOCAL_CACHE);
-        self.local_cache.set_crypto_ctx(crypto.clone(), subkey);
+        {
+            let subkey = key.derive(Self::SUBKEY_ID_LOCAL_CACHE);
+            let mut local_cache = self.local_cache.write().unwrap();
+            local_cache.set_crypto_ctx(crypto.clone(), subkey);
+        }
 
         let subkey = key.derive(Self::SUBKEY_ID_SEC_MGR);
         self.sec_mgr.set_crypto_ctx(crypto.clone(), subkey);
@@ -134,93 +142,111 @@ impl ZboxStorage {
 impl Storable for ZboxStorage {
     #[inline]
     fn exists(&self) -> Result<bool> {
-        self.local_cache.repo_exists()
+        let local_cache = self.local_cache.read().unwrap();
+        local_cache.repo_exists()
     }
 
     #[inline]
     fn connect(&mut self) -> Result<()> {
-        self.local_cache.connect()
+        let mut local_cache = self.local_cache.write().unwrap();
+        local_cache.connect()
     }
 
     fn init(&mut self, crypto: Crypto, key: Key) -> Result<()> {
         self.set_crypto_ctx(crypto, key);
-        self.local_cache.init()?;
-        self.sec_mgr.init(&mut self.local_cache)?;
+        {
+            let mut local_cache = self.local_cache.write().unwrap();
+            local_cache.init()?;
+        }
+        self.sec_mgr.init()?;
+        self.idx_mgr.init()?;
         Ok(())
     }
 
     fn open(&mut self, crypto: Crypto, key: Key) -> Result<()> {
         self.set_crypto_ctx(crypto, key);
-        self.local_cache.open()?;
-        self.sec_mgr.open(&mut self.local_cache)
+        {
+            let mut local_cache = self.local_cache.write().unwrap();
+            local_cache.open()?;
+        }
+        self.sec_mgr.open()?;
+        self.idx_mgr.open()?;
+        Ok(())
     }
 
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
         let rel_path =
             Path::new(Self::SUPER_BLK_STEM).with_extension(suffix.to_string());
-        self.local_cache.get_pinned(&rel_path)
+        let mut local_cache = self.local_cache.write().unwrap();
+        local_cache.get_pinned(&rel_path)
     }
 
     fn put_super_block(&mut self, super_blk: &[u8], suffix: u64) -> Result<()> {
         let rel_path =
             Path::new(Self::SUPER_BLK_STEM).with_extension(&suffix.to_string());
-        self.local_cache.put_pinned(&rel_path, super_blk)
+        let mut local_cache = self.local_cache.write().unwrap();
+        local_cache.put_pinned(&rel_path, super_blk)
     }
 
     #[inline]
     fn get_wal(&mut self, id: &Eid) -> Result<Vec<u8>> {
         let rel_path = id.to_path_buf(&self.wal_base);
-        self.local_cache.get_pinned(&rel_path)
+        let mut local_cache = self.local_cache.write().unwrap();
+        local_cache.get_pinned(&rel_path)
     }
 
     #[inline]
     fn put_wal(&mut self, id: &Eid, wal: &[u8]) -> Result<()> {
         let rel_path = id.to_path_buf(&self.wal_base);
-        self.local_cache.put_pinned(&rel_path, wal)
+        let mut local_cache = self.local_cache.write().unwrap();
+        local_cache.put_pinned(&rel_path, wal)
     }
 
     #[inline]
     fn del_wal(&mut self, id: &Eid) -> Result<()> {
         let rel_path = id.to_path_buf(&self.wal_base);
-        self.local_cache.del_pinned(&rel_path)
+        let mut local_cache = self.local_cache.write().unwrap();
+        local_cache.del_pinned(&rel_path)
     }
 
     #[inline]
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
-        self.idx_mgr.get_address(id, &mut self.local_cache)
+        self.idx_mgr.get(id)
     }
 
     #[inline]
     fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
-        self.idx_mgr.put_address(id, addr, &mut self.local_cache)
+        self.idx_mgr.insert(id, addr)
     }
 
     #[inline]
     fn del_address(&mut self, id: &Eid) -> Result<()> {
-        self.idx_mgr.del_address(id, &mut self.local_cache)
+        self.idx_mgr.delete(id)
     }
 
     #[inline]
     fn get_blocks(&mut self, dst: &mut [u8], span: Span) -> Result<()> {
         assert_eq!(dst.len(), span.bytes_len());
-        self.sec_mgr.get_blocks(dst, span, &mut self.local_cache)
+        self.sec_mgr.get_blocks(dst, span)
     }
 
     #[inline]
     fn put_blocks(&mut self, span: Span, blks: &[u8]) -> Result<()> {
         assert_eq!(blks.len(), span.bytes_len());
-        self.sec_mgr.put_blocks(span, blks, &mut self.local_cache)
+        self.sec_mgr.put_blocks(span, blks)
     }
 
     #[inline]
     fn del_blocks(&mut self, span: Span) -> Result<()> {
-        self.sec_mgr.del_blocks(span, &mut self.local_cache)
+        self.sec_mgr.del_blocks(span)
     }
 
+    #[inline]
     fn flush(&mut self) -> Result<()> {
-        self.sec_mgr.flush(&mut self.local_cache)?;
-        self.idx_mgr.flush(&mut self.local_cache)?;
-        self.local_cache.flush()
+        self.sec_mgr.flush()?;
+        self.idx_mgr.flush()?;
+        let mut local_cache = self.local_cache.write().unwrap();
+        local_cache.flush()
     }
 }
 

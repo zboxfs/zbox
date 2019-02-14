@@ -417,7 +417,7 @@ mod tests {
         assert_eq!(Reader::new(&id, &vol).unwrap_err(), Error::NotFound);
     }
 
-    #[cfg(feature = "storage-file")]
+    #[cfg(any(feature = "storage-file", feature = "storage-zbox"))]
     fn reopen_test(pwd: &str, payload: &[u8], vol: VolumeRef) {
         let id = Eid::new();
         let buf = [1, 2, 3];
