@@ -127,7 +127,7 @@ impl Testable for Tester {
         ctlgrp: &mut ControlGroup,
     ) {
         let node = ctlgrp.0[step.node_idx].clone();
-        //println!("=== node: {:?}, step: {:?}", node, step);
+        //println!("===> node: {:?}, step: {:?}", node, step);
 
         match step.action {
             Action::New => {
@@ -193,9 +193,10 @@ impl Testable for Tester {
                         }
                     }
                     FileType::Dir => {
-                        let result = skip_faulty!(
-                            fuzzer.repo_handle.repo.create_dir(&path)
-                        );
+                        let result = skip_faulty!(fuzzer
+                            .repo_handle
+                            .repo
+                            .create_dir(&path));
 
                         // if the dir already exists, the action should fail
                         if ctlgrp.has_node(&path) {
@@ -229,9 +230,10 @@ impl Testable for Tester {
                     );
                 } else {
                     // compare directory
-                    let result = skip_faulty!(
-                        fuzzer.repo_handle.repo.read_dir(&node.path)
-                    );
+                    let result = skip_faulty!(fuzzer
+                        .repo_handle
+                        .repo
+                        .read_dir(&node.path));
                     let children = result.unwrap();
                     let mut cmp_grp: Vec<&Path> =
                         children.iter().map(|c| c.path()).collect();
@@ -242,11 +244,9 @@ impl Testable for Tester {
             }
 
             Action::Update => {
-                let result = skip_faulty!(
-                    OpenOptions::new()
-                        .write(true)
-                        .open(&mut fuzzer.repo_handle.repo, &node.path)
-                );
+                let result = skip_faulty!(OpenOptions::new()
+                    .write(true)
+                    .open(&mut fuzzer.repo_handle.repo, &node.path));
                 if node.is_dir() {
                     assert_eq!(result.unwrap_err(), Error::IsDir);
                     return;
@@ -273,12 +273,10 @@ impl Testable for Tester {
             }
 
             Action::Truncate => {
-                let result = skip_faulty!(
-                    OpenOptions::new()
-                        .read(true)
-                        .write(true)
-                        .open(&mut fuzzer.repo_handle.repo, &node.path)
-                );
+                let result = skip_faulty!(OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(&mut fuzzer.repo_handle.repo, &node.path));
                 if node.is_dir() {
                     assert_eq!(result.unwrap_err(), Error::IsDir);
                     return;
@@ -303,9 +301,10 @@ impl Testable for Tester {
 
             Action::Delete => {
                 if node.is_dir() {
-                    let result = skip_faulty!(
-                        fuzzer.repo_handle.repo.remove_dir(&node.path)
-                    );
+                    let result = skip_faulty!(fuzzer
+                        .repo_handle
+                        .repo
+                        .remove_dir(&node.path));
                     if node.is_root() {
                         assert_eq!(result.unwrap_err(), Error::IsRoot);
                     } else {
@@ -320,9 +319,10 @@ impl Testable for Tester {
                     }
                 } else {
                     // remove file and do the same to control group
-                    let _ = skip_faulty!(
-                        fuzzer.repo_handle.repo.remove_file(&node.path)
-                    );
+                    let _ = skip_faulty!(fuzzer
+                        .repo_handle
+                        .repo
+                        .remove_file(&node.path));
                     ctlgrp.del(&node.path);
                 }
             }
@@ -335,9 +335,10 @@ impl Testable for Tester {
                     return;
                 }
 
-                let result = skip_faulty!(
-                    fuzzer.repo_handle.repo.remove_dir_all(&node.path)
-                );
+                let result = skip_faulty!(fuzzer
+                    .repo_handle
+                    .repo
+                    .remove_dir_all(&node.path));
                 if node.is_root() {
                     result.unwrap();
                     ctlgrp.0.retain(|n| n.is_root());
@@ -351,9 +352,10 @@ impl Testable for Tester {
 
             Action::Rename => {
                 if node.is_root() {
-                    let result = skip_faulty!(
-                        fuzzer.repo_handle.repo.rename(&node.path, "/xxx")
-                    );
+                    let result = skip_faulty!(fuzzer
+                        .repo_handle
+                        .repo
+                        .rename(&node.path, "/xxx"));
                     assert_eq!(result.unwrap_err(), Error::InvalidArgument);
                 } else {
                     let new_path = node.path.parent().unwrap().join(&step.name);
@@ -373,9 +375,10 @@ impl Testable for Tester {
 
                 let tgt = &ctlgrp[step.tgt_idx].clone();
                 if tgt.is_root() {
-                    let result = skip_faulty!(
-                        fuzzer.repo_handle.repo.rename(&node.path, &tgt.path)
-                    );
+                    let result = skip_faulty!(fuzzer
+                        .repo_handle
+                        .repo
+                        .rename(&node.path, &tgt.path));
                     assert_eq!(result.unwrap_err(), Error::IsRoot);
                     return;
                 }
@@ -403,9 +406,10 @@ impl Testable for Tester {
 
                 let tgt = &ctlgrp[step.tgt_idx].clone();
 
-                let result = skip_faulty!(
-                    fuzzer.repo_handle.repo.copy(&node.path, &tgt.path)
-                );
+                let result = skip_faulty!(fuzzer
+                    .repo_handle
+                    .repo
+                    .copy(&node.path, &tgt.path));
 
                 if node.is_dir() || tgt.is_dir() {
                     assert_eq!(result.unwrap_err(), Error::NotFile);
@@ -463,5 +467,5 @@ fn fuzz_test() {
 fn fuzz_test_rerun() {
     let tester = Tester {};
     // copy batch number from std output and replace it below
-    Fuzzer::rerun("1548762508", Box::new(tester));
+    Fuzzer::rerun("1550214900", Box::new(tester));
 }

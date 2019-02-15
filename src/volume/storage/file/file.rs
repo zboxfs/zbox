@@ -169,11 +169,6 @@ impl Storable for FileStorage {
     }
 
     #[inline]
-    fn flush_wal_deletion(&mut self) -> Result<()> {
-        Ok(())
-    }
-
-    #[inline]
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
         self.idx_mgr.get(id)
     }

@@ -130,7 +130,7 @@ pub struct HttpClient {
     retry_cnt: u64,
     headers: Headers,
     transport: Box<Transport>,
-    bulk: Vec<PathBuf>,
+    del_bulk: Vec<PathBuf>,
 }
 
 impl HttpClient {
@@ -185,7 +185,7 @@ impl HttpClient {
             retry_cnt: 0,
             headers: Headers::new(),
             transport,
-            bulk: Vec::new(),
+            del_bulk: Vec::new(),
         })
     }
 
@@ -391,20 +391,26 @@ impl HttpClient {
         Ok(())
     }
 
+    #[inline]
+    pub fn del(&mut self, rel_path: &Path) {
+        self.del_bulk.push(rel_path.to_path_buf());
+        self.set_updated();
+    }
+
     // send bulk delelte
-    fn send_bulk_del_req(&mut self) -> Result<()> {
-        if self.bulk.is_empty() {
+    fn send_bulk_del_req(&mut self, bulk: &[PathBuf]) -> Result<()> {
+        if bulk.is_empty() {
             return Ok(());
         }
 
-        debug!("bulk del {:?} wals", self.bulk.len());
+        debug!("bulk del {:?} objects", bulk.len());
 
         // make bulk deletion uri
         let uri = self.make_uri(Self::BULK_URI)?;
 
         // serialize body as json bytes
         let mut map = HashMap::new();
-        map.insert("paths".to_owned(), self.bulk.clone());
+        map.insert("paths".to_owned(), bulk.clone());
         let buf = serde_json::to_vec(&map)?;
 
         let headers = self
@@ -426,27 +432,23 @@ impl HttpClient {
                 }
             })?;
 
-        self.bulk.clear();
-
         Ok(())
     }
 
     #[inline]
-    pub fn del(&mut self, rel_path: &Path) {
-        self.bulk.push(rel_path.to_path_buf());
-        self.set_updated();
-    }
-
-    pub fn flush_wal_deletion(&mut self) -> Result<()> {
-        self.send_bulk_del_req().or_else(|err| {
+    pub fn flush_deletion(&mut self) -> Result<()> {
+        let bulk = self.del_bulk.clone();
+        self.send_bulk_del_req(&bulk).or_else(|err| {
             // try reopen remote session once if it is expired
             if err == Error::HttpStatus(StatusCode::UNAUTHORIZED) {
                 self.open_session()?;
-                self.send_bulk_del_req()
+                self.send_bulk_del_req(&bulk)
             } else {
                 Err(err)
             }
-        })
+        })?;
+        self.del_bulk.clear();
+        Ok(())
     }
 }
 
@@ -460,6 +462,7 @@ impl Debug for HttpClient {
             .field("update_seq", &self.update_seq)
             .field("ttl", &self.ttl)
             .field("retry_cnt", &self.retry_cnt)
+            .field("del_bulk", &self.del_bulk)
             .finish()
     }
 }
@@ -476,7 +479,7 @@ impl Default for HttpClient {
             retry_cnt: 0,
             headers: Headers::new(),
             transport: Box::new(DummyTransport),
-            bulk: Vec::new(),
+            del_bulk: Vec::new(),
         }
     }
 }
@@ -549,7 +552,7 @@ mod tests {
         // test delete
         client.del(&rel_path);
 
-        client.flush_wal_deletion().unwrap();
+        client.flush_deletion().unwrap();
 
         // close session and open it again
         drop(client);

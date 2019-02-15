@@ -82,8 +82,6 @@ impl Controller {
         let sample = context.samples[idx];
         match sample {
             _ if sample <= context.threshold => {
-                //println!("faulty: raise error {}", context.sample_seq);
-                //if context.sample_seq == 810 { panic!("xxx"); }
                 Err(IoError::new(ErrorKind::Other, "Faulty error"))
             }
             _ => Ok(()),
@@ -176,11 +174,6 @@ impl Storable for FaultyStorage {
         let mut inner = self.inner.write().unwrap();
         let ms = inner.get_refresh(&self.loc).unwrap();
         ms.del_wal(id)
-    }
-
-    #[inline]
-    fn flush_wal_deletion(&mut self) -> Result<()> {
-        Ok(())
     }
 
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {

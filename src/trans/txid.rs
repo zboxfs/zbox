@@ -13,7 +13,7 @@ use base::crypto::{Crypto, HashKey};
 use error::{Error, Result};
 
 // per-thread txid
-thread_local!{
+thread_local! {
     // per-thread tranaction ID, with initial value 0
     static TXID: RefCell<u64> = RefCell::new(0);
 }

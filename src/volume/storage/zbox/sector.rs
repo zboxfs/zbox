@@ -86,7 +86,8 @@ impl RecycleMap {
                     }
                 }
                 false
-            }).unwrap_or(false)
+            })
+            .unwrap_or(false)
     }
 
     fn remove_deleted(&mut self, sec_idx: usize, mut span: Span) {
@@ -329,7 +330,8 @@ mod tests {
             Path::new(""),
             &repo_id,
             &access_key,
-        ).unwrap();
+        )
+        .unwrap();
         cache.connect().unwrap();
         cache.init().unwrap();
 

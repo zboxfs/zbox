@@ -709,7 +709,8 @@ impl Fuzzer {
                             }
                         }
                         println!("[{}]: Finished.", worker);
-                    }).unwrap(),
+                    })
+                    .unwrap(),
             );
         }
         for w in workers {
@@ -793,9 +794,10 @@ impl Fuzzer {
             while let Some(nd) = ctlgrp.0.get(pos) {
                 match nd.path.strip_prefix(&node.path) {
                     Ok(p) => {
-                        if p.components().count() == 1 && children
-                            .binary_search_by(|c| c.path.cmp(&nd.path))
-                            .is_err()
+                        if p.components().count() == 1
+                            && children
+                                .binary_search_by(|c| c.path.cmp(&nd.path))
+                                .is_err()
                         {
                             children.push(nd.clone());
                         }

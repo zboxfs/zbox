@@ -105,7 +105,8 @@ impl ZboxStorage {
         // create local cache
         let local_cache = LocalCache::new(
             cache_type, cache_size, &base, repo_id, access_key,
-        )?.into_ref();
+        )?
+        .into_ref();
 
         // create sector manager and index manager
         let sec_mgr = SectorMgr::new(&local_cache);
@@ -207,12 +208,6 @@ impl Storable for ZboxStorage {
         let rel_path = id.to_path_buf(&self.wal_base);
         let mut local_cache = self.local_cache.write().unwrap();
         local_cache.del_pinned(&rel_path)
-    }
-
-    #[inline]
-    fn flush_wal_deletion(&mut self) -> Result<()> {
-        let mut local_cache = self.local_cache.write().unwrap();
-        local_cache.flush_wal_deletion()
     }
 
     #[inline]

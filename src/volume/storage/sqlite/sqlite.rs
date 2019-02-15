@@ -372,11 +372,6 @@ impl Storable for SqliteStorage {
         run_dml(stmt)
     }
 
-    #[inline]
-    fn flush_wal_deletion(&mut self) -> Result<()> {
-        Ok(())
-    }
-
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
         let stmt = self.stmts[5];
         reset_stmt(stmt)?;

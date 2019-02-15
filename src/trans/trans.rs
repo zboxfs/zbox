@@ -119,12 +119,6 @@ impl Trans {
             ent.commit(&vol)?;
         }
 
-        // flush volume
-        {
-            let mut vol = vol.write().unwrap();
-            vol.flush()?;
-        }
-
         Ok(self.wal.clone())
     }
 
@@ -151,11 +145,7 @@ impl Trans {
         self.wal.clean_aborted(vol)?;
 
         // remove wal
-        self.wal_armor.remove_all_arms(self.wal.id())?;
-
-        // flush volume
-        let mut vol = vol.write().unwrap();
-        vol.flush()
+        self.wal_armor.remove_all_arms(self.wal.id())
     }
 }
 

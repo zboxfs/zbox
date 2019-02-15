@@ -325,7 +325,8 @@ impl Debug for Segment {
             f,
             "Segment(len: {}, used: {}, data_id: {:?}, [\n",
             self.len, self.used, self.data_id
-        ).unwrap();
+        )
+        .unwrap();
         if self.chunks.len() > 10 {
             for val in self.chunks[..3].iter() {
                 Debug::fmt(val, f).unwrap();

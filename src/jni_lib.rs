@@ -335,7 +335,8 @@ pub extern "system" fn Java_io_zbox_fs_Repo_jniInfo<'a>(
             "valueOf",
             "(Ljava/lang/String;)Lio/zbox/fs/OpsLimit;",
             &[JValue::Object(*ops_limit)],
-        ).unwrap();
+        )
+        .unwrap();
 
     let mem_str = format!("{:?}", info.mem_limit()).to_uppercase();
     let mem_limit = env.new_string(mem_str).unwrap();
@@ -345,7 +346,8 @@ pub extern "system" fn Java_io_zbox_fs_Repo_jniInfo<'a>(
             "valueOf",
             "(Ljava/lang/String;)Lio/zbox/fs/MemLimit;",
             &[JValue::Object(*mem_limit)],
-        ).unwrap();
+        )
+        .unwrap();
 
     let cipher_str = format!("{:?}", info.cipher()).to_uppercase();
     let cipher = env.new_string(cipher_str).unwrap();
@@ -355,26 +357,30 @@ pub extern "system" fn Java_io_zbox_fs_Repo_jniInfo<'a>(
             "valueOf",
             "(Ljava/lang/String;)Lio/zbox/fs/Cipher;",
             &[JValue::Object(*cipher)],
-        ).unwrap();
+        )
+        .unwrap();
 
     env.set_field(
         info_obj,
         "volumeId",
         "[B",
         JValue::Object(JObject::from(vol_id)),
-    ).unwrap();
+    )
+    .unwrap();
     env.set_field(
         info_obj,
         "version",
         "Ljava/lang/String;",
         JValue::Object(JObject::from(ver)),
-    ).unwrap();
+    )
+    .unwrap();
     env.set_field(
         info_obj,
         "uri",
         "Ljava/lang/String;",
         JValue::Object(JObject::from(uri)),
-    ).unwrap();
+    )
+    .unwrap();
     env.set_field(info_obj, "opsLimit", "Lio/zbox/fs/OpsLimit;", ops_obj)
         .unwrap();
     env.set_field(info_obj, "memLimit", "Lio/zbox/fs/MemLimit;", mem_obj)
@@ -386,31 +392,36 @@ pub extern "system" fn Java_io_zbox_fs_Repo_jniInfo<'a>(
         "compress",
         "Z",
         JValue::Bool(info.compress() as u8),
-    ).unwrap();
+    )
+    .unwrap();
     env.set_field(
         info_obj,
         "versionLimit",
         "I",
         JValue::Int(info.version_limit() as i32),
-    ).unwrap();
+    )
+    .unwrap();
     env.set_field(
         info_obj,
         "dedupChunk",
         "Z",
         JValue::Bool(info.dedup_chunk() as u8),
-    ).unwrap();
+    )
+    .unwrap();
     env.set_field(
         info_obj,
         "isReadOnly",
         "Z",
         JValue::Bool(info.is_read_only() as u8),
-    ).unwrap();
+    )
+    .unwrap();
     env.set_field(
         info_obj,
         "createdAt",
         "J",
         JValue::Long(time_to_secs(info.created_at())),
-    ).unwrap();
+    )
+    .unwrap();
 
     info_obj
 }
@@ -598,7 +609,8 @@ fn metadata_to_jobject<'a>(env: &JNIEnv<'a>, meta: Metadata) -> JObject<'a> {
             "valueOf",
             "(Ljava/lang/String;)Lio/zbox/fs/FileType;",
             &[JValue::Object(*ftype)],
-        ).unwrap();
+        )
+        .unwrap();
 
     env.set_field(meta_obj, "fileType", "Lio/zbox/fs/FileType;", ftype_obj)
         .unwrap();
@@ -609,19 +621,22 @@ fn metadata_to_jobject<'a>(env: &JNIEnv<'a>, meta: Metadata) -> JObject<'a> {
         "currVersion",
         "I",
         JValue::Int(meta.curr_version() as i32),
-    ).unwrap();
+    )
+    .unwrap();
     env.set_field(
         meta_obj,
         "createdAt",
         "J",
         JValue::Long(time_to_secs(meta.created_at())),
-    ).unwrap();
+    )
+    .unwrap();
     env.set_field(
         meta_obj,
         "modifiedAt",
         "J",
         JValue::Long(time_to_secs(meta.modified_at())),
-    ).unwrap();
+    )
+    .unwrap();
 
     env.delete_local_ref(*ftype).unwrap();
     env.delete_local_ref(ftype_obj.l().unwrap()).unwrap();
@@ -647,7 +662,8 @@ pub extern "system" fn Java_io_zbox_fs_Repo_jniReadDir(
                     ents.len() as i32,
                     "io/zbox/fs/DirEntry",
                     JObject::null(),
-                ).unwrap();
+                )
+                .unwrap();
 
             for (i, ent) in ents.iter().enumerate() {
                 let ent_obj =
@@ -662,19 +678,22 @@ pub extern "system" fn Java_io_zbox_fs_Repo_jniReadDir(
                     "path",
                     "Ljava/lang/String;",
                     JValue::Object(JObject::from(path_str)),
-                ).unwrap();
+                )
+                .unwrap();
                 env.set_field(
                     ent_obj,
                     "fileName",
                     "Ljava/lang/String;",
                     JValue::Object(JObject::from(name_str)),
-                ).unwrap();
+                )
+                .unwrap();
                 env.set_field(
                     ent_obj,
                     "metadata",
                     "Lio/zbox/fs/Metadata;",
                     JValue::Object(JObject::from(meta_obj)),
-                ).unwrap();
+                )
+                .unwrap();
 
                 env.set_object_array_element(objs, i as i32, ent_obj)
                     .unwrap();
@@ -726,7 +745,8 @@ fn versions_to_jobjects(
                     vers.len() as i32,
                     "io/zbox/fs/Version",
                     JObject::null(),
-                ).unwrap();
+                )
+                .unwrap();
 
             for (i, ver) in vers.iter().enumerate() {
                 let ver_obj =
@@ -737,19 +757,22 @@ fn versions_to_jobjects(
                     "num",
                     "J",
                     JValue::Long(ver.num() as i64),
-                ).unwrap();
+                )
+                .unwrap();
                 env.set_field(
                     ver_obj,
                     "len",
                     "J",
                     JValue::Long(ver.len() as i64),
-                ).unwrap();
+                )
+                .unwrap();
                 env.set_field(
                     ver_obj,
                     "createdAt",
                     "J",
                     JValue::Long(time_to_secs(ver.created_at())),
-                ).unwrap();
+                )
+                .unwrap();
 
                 env.set_object_array_element(objs, i as i32, ver_obj)
                     .unwrap();

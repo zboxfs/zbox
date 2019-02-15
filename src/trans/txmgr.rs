@@ -39,7 +39,7 @@ impl TxMgr {
     /// Open transaction manager
     pub fn open(walq_id: &Eid, vol: &VolumeRef) -> Result<Self> {
         let mut txmgr = TxMgr::new(walq_id, vol);
-        txmgr.walq_mgr.open(walq_id, vol)?;
+        txmgr.walq_mgr.open(walq_id)?;
         Ok(txmgr)
     }
 
@@ -51,10 +51,9 @@ impl TxMgr {
         }
 
         let mut tm = txmgr.write().unwrap();
-        let vol = tm.vol.clone();
 
         // try to redo abort tx if any tx failed abortion before,
-        tm.walq_mgr.hot_redo_abort(&vol)?;
+        tm.walq_mgr.hot_redo_abort()?;
 
         // get next txid, here we marked current thread as in tx
         let txid = tm.walq_mgr.next_txid();
@@ -69,7 +68,7 @@ impl TxMgr {
         })?;
 
         // create a new transaction and add it to transaction manager
-        let tx = Trans::new(txid, &vol).into_ref();
+        let tx = Trans::new(txid, &tm.vol).into_ref();
         tm.txs.insert(txid, tx.clone());
 
         // start the transaction
@@ -126,7 +125,7 @@ impl TxMgr {
             // commit tx, if any errors then abort the tx
             match tx
                 .commit(&self.vol)
-                .and_then(|wal| self.walq_mgr.commit_trans(wal, &self.vol))
+                .and_then(|wal| self.walq_mgr.commit_trans(wal))
             {
                 Ok(_) => {
                     tx.complete_commit();
@@ -315,7 +314,8 @@ mod tests {
             a = Obj::new(val).into_cow(&tm)?;
             Obj::ensure(&a, val, Arm::Right);
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
         Obj::ensure(&a, val, Arm::Right);
 
         // tx #2, new and update
@@ -326,7 +326,8 @@ mod tests {
             a.val = val2;
             b = Obj::new(val).into_cow(&tm)?;
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
         Obj::ensure(&a, val2, Arm::Left);
         Obj::ensure(&b, val, Arm::Right);
 
@@ -342,7 +343,8 @@ mod tests {
             let b = b_cow.make_mut()?;
             b.val = val2;
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
         Obj::ensure(&b, val2, Arm::Left);
 
         // tx #4, recycle tx#2
@@ -352,7 +354,8 @@ mod tests {
             let b = b_cow.make_mut()?;
             b.val = val;
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
         Obj::ensure(&b, val, Arm::Right);
 
         // tx #5, recyle tx#3
@@ -362,7 +365,8 @@ mod tests {
             let b = b_cow.make_mut()?;
             b.val = val2;
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
         Obj::ensure(&b, val2, Arm::Left);
 
         // more txs
@@ -373,7 +377,8 @@ mod tests {
                 let b = b_cow.make_mut()?;
                 b.val = val2 + i;
                 Ok(())
-            }).unwrap();
+            })
+            .unwrap();
             let arm = if i % 2 == 0 { Arm::Right } else { Arm::Left };
             Obj::ensure(&b, val2 + i, arm);
         }
@@ -391,7 +396,8 @@ mod tests {
             tx.run(|| {
                 a = Obj::new(val).into_cow(&tm)?;
                 Err(Error::NotFound)
-            }).unwrap_err(),
+            })
+            .unwrap_err(),
             Error::NotFound
         );
         {
@@ -407,7 +413,8 @@ mod tests {
                 let mut a_cow = a.write().unwrap();
                 a_cow.make_del()?;
                 Ok(())
-            }).unwrap_err(),
+            })
+            .unwrap_err(),
             Error::InUse
         );
         {
@@ -420,7 +427,8 @@ mod tests {
         tx.run_all(|| {
             a = Obj::new(val).into_cow(&tm)?;
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]

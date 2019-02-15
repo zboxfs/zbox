@@ -93,7 +93,6 @@ impl Wal {
 
     // recylce a wal
     fn recyle(&self, wal_armor: &VolumeWalArmor<Self>) -> Result<()> {
-        debug!("recycle tx#{}", self.txid);
         for ent in self.entries.values() {
             match ent.action {
                 Action::New | Action::Update => {} // do nothing
@@ -206,6 +205,9 @@ struct WalQueue {
 
     #[serde(skip_serializing, skip_deserializing, default)]
     allocator: AllocatorRef,
+
+    #[serde(skip_serializing, skip_deserializing, default)]
+    vol: VolumeRef,
 }
 
 impl WalQueue {
@@ -227,6 +229,7 @@ impl WalQueue {
             aborting: HashMap::new(),
             wal_armor: VolumeWalArmor::new(vol),
             allocator,
+            vol: vol.clone(),
         }
     }
 
@@ -254,6 +257,7 @@ impl WalQueue {
     #[inline]
     fn open(&mut self, vol: &VolumeRef) {
         self.wal_armor = VolumeWalArmor::new(vol);
+        self.vol = vol.clone();
     }
 
     #[inline]
@@ -262,7 +266,7 @@ impl WalQueue {
         self.doing.insert(txid);
     }
 
-    fn commit_trans(&mut self, wal: Wal, vol: &VolumeRef) -> Result<()> {
+    fn commit_trans(&mut self, wal: Wal) -> Result<()> {
         // recycle the retired trans
         while self.done.len() >= Self::COMMITTED_QUEUE_SIZE {
             {
@@ -271,6 +275,7 @@ impl WalQueue {
                 let retiree_id = Wal::derive_id(*retiree_txid);
 
                 // load the retired wal
+                debug!("recycle tx#{}", retiree_txid);
                 match self.wal_armor.load_item(&retiree_id) {
                     Ok(retiree) => {
                         // recycle and remove the wal
@@ -292,9 +297,7 @@ impl WalQueue {
         self.doing.remove(&wal.txid);
         self.done.push_back(wal.txid);
 
-        // flush deleted wal in volume
-        let mut vol = vol.write().unwrap();
-        vol.flush_wal_deletion()
+        Ok(())
     }
 
     #[inline]
@@ -309,12 +312,12 @@ impl WalQueue {
     }
 
     // hot redo failed abort
-    fn hot_redo_abort(&mut self, vol: &VolumeRef) -> Result<()> {
+    fn hot_redo_abort(&mut self) -> Result<()> {
         let mut completed = Vec::new();
 
         for wal in self.aborting.values() {
             debug!("hot redo abort tx#{}", wal.txid);
-            wal.clean_aborted(vol)?;
+            wal.clean_aborted(&self.vol)?;
             completed.push(wal.txid);
         }
 
@@ -327,14 +330,14 @@ impl WalQueue {
     }
 
     // cold redo failed abort
-    fn cold_redo_abort(&mut self, vol: &VolumeRef) -> Result<()> {
+    fn cold_redo_abort(&mut self) -> Result<()> {
         let mut completed = Vec::new();
 
         for txid in &self.doing {
             debug!("cold redo abort tx#{}", txid);
             let wal_id = Wal::derive_id(*txid);
             match self.wal_armor.load_item(&wal_id) {
-                Ok(wal) => wal.clean_aborted(vol)?,
+                Ok(wal) => wal.clean_aborted(&self.vol)?,
                 Err(ref err) if *err == Error::NotFound => {}
                 Err(err) => return Err(err),
             }
@@ -412,6 +415,8 @@ pub struct WalQueueMgr {
 
     // block allocator
     allocator: AllocatorRef,
+
+    vol: VolumeRef,
 }
 
 impl WalQueueMgr {
@@ -426,13 +431,14 @@ impl WalQueueMgr {
             walq_backup: None,
             walq_armor: VolumeWalArmor::new(vol),
             allocator,
+            vol: vol.clone(),
         }
     }
 
-    pub fn open(&mut self, walq_id: &Eid, vol: &VolumeRef) -> Result<()> {
+    pub fn open(&mut self, walq_id: &Eid) -> Result<()> {
         // load wal queue
         self.walq = self.walq_armor.load_item(walq_id)?;
-        self.walq.open(vol);
+        self.walq.open(&self.vol);
 
         // restore watermarks
         let (txid_wmark, blk_wmark) = self.walq.watermarks();
@@ -445,7 +451,7 @@ impl WalQueueMgr {
         // now redo abort tx if any
         if self.walq.has_doing() {
             self.backup_walq();
-            self.walq.cold_redo_abort(vol).or_else(|err| {
+            self.walq.cold_redo_abort().or_else(|err| {
                 // if failed, restore the walq backup and return the
                 // original error
                 debug!("cold redo abort failed: {:?}", err);
@@ -505,13 +511,20 @@ impl WalQueueMgr {
         self.save_walq()
     }
 
-    pub fn commit_trans(&mut self, wal: Wal, vol: &VolumeRef) -> Result<()> {
+    pub fn commit_trans(&mut self, wal: Wal) -> Result<()> {
         self.backup_walq();
-        self.walq.commit_trans(wal, vol).or_else(|err| {
-            // if commit failed, restore the walq backup
-            self.restore_walq();
-            Err(err)
-        })?;
+        self.walq
+            .commit_trans(wal)
+            .and_then(|_| {
+                // flush volume
+                let mut vol = self.vol.write().unwrap();
+                vol.flush()
+            })
+            .or_else(|err| {
+                // if commit failed, restore the walq backup
+                self.restore_walq();
+                Err(err)
+            })?;
         self.save_walq()
     }
 
@@ -523,20 +536,40 @@ impl WalQueueMgr {
     pub fn end_abort(&mut self, txid: Txid) -> Result<()> {
         self.backup_walq();
         self.walq.end_abort(txid);
+
+        // flush volume
+        let result = {
+            let mut vol = self.vol.write().unwrap();
+            vol.flush()
+        };
+        if let Err(err) = result {
+            // restore the walq backup
+            self.restore_walq();
+            return Err(err);
+        }
+
         self.save_walq()
     }
 
-    pub fn hot_redo_abort(&mut self, vol: &VolumeRef) -> Result<()> {
+    pub fn hot_redo_abort(&mut self) -> Result<()> {
         if !self.walq.has_abort() {
             return Ok(());
         }
 
         self.backup_walq();
-        self.walq.hot_redo_abort(vol).or_else(|err| {
-            // if failed, restore the walq backup
-            self.restore_walq();
-            Err(err)
-        })?;
+        self.walq
+            .hot_redo_abort()
+            .and_then(|_| {
+                // flush volume
+                let mut vol = self.vol.write().unwrap();
+                vol.flush()
+            })
+            .or_else(|err| {
+                // if failed, restore the walq backup
+                self.restore_walq();
+                Err(err)
+            })?;
+
         self.save_walq().and_then(|_| {
             debug!("hot abort completed");
             Ok(())

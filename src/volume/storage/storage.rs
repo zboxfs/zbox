@@ -1,6 +1,6 @@
 use std::cmp::min;
 use std::error::Error as StdError;
-use std::fmt::{self, Debug};
+use std::fmt::{self, Debug, Display};
 use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write};
 use std::sync::{Arc, RwLock};
 
@@ -270,12 +270,6 @@ impl Storage {
         Ok(())
     }
 
-    // flush deleted wal in underlying storage
-    #[inline]
-    pub fn flush_wal_deletion(&mut self) -> Result<()> {
-        self.depot.flush_wal_deletion()
-    }
-
     // flush underlying storage
     #[inline]
     pub fn flush(&mut self) -> Result<()> {
@@ -303,6 +297,12 @@ impl Debug for Storage {
             .field("depot", &self.depot)
             .field("allocator", &self.allocator)
             .finish()
+    }
+}
+
+impl Display for Storage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Storage({:?})", self.depot)
     }
 }
 
@@ -454,7 +454,8 @@ impl Read for Reader {
                     .get_blocks(
                         &mut self.frame[read..read + read_len],
                         loc_span.span,
-                    ).map_err(|err| {
+                    )
+                    .map_err(|err| {
                         if err == Error::NotFound {
                             IoError::new(
                                 ErrorKind::NotFound,
@@ -894,7 +895,8 @@ mod tests {
         init_env();
         let mut storage = Storage::new(
             "zbox://accessKey456@repo456?cache_type=mem&cache_size=1",
-        ).unwrap();
+        )
+        .unwrap();
         storage.connect().unwrap();
         storage.init(Cost::default(), Cipher::default()).unwrap();
         test_depot(storage.into_ref());
@@ -989,7 +991,8 @@ mod tests {
                 .get_blocks(
                     &mut buf,
                     Span::new(frm_idx * BLKS_PER_FRAME, BLKS_PER_FRAME),
-                ).unwrap();
+                )
+                .unwrap();
             crypto.decrypt_to(&mut dst, &buf, &key).unwrap();
         }
         let read_time = now.elapsed();

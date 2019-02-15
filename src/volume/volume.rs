@@ -117,7 +117,7 @@ impl Volume {
         self.info.cipher = super_blk.head.cipher;
         self.info.ctime = super_blk.body.ctime;
 
-        debug!("volume opened");
+        debug!("volume opened: {}", *storage);
 
         Ok(super_blk.body.payload.clone())
     }
@@ -180,12 +180,6 @@ impl Volume {
     pub fn del(&mut self, id: &Eid) -> Result<()> {
         let mut storage = self.storage.write().unwrap();
         storage.del(id)
-    }
-
-    #[inline]
-    pub fn flush_wal_deletion(&mut self) -> Result<()> {
-        let mut storage = self.storage.write().unwrap();
-        storage.flush_wal_deletion()
     }
 
     #[inline]

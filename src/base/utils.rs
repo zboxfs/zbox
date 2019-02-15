@@ -79,9 +79,11 @@ pub fn ensure_parents_dir(path: &std::path::Path) -> Result<()> {
 pub fn remove_empty_parent_dir(path: &std::path::Path) -> Result<()> {
     for parent in path.ancestors().skip(1) {
         match std::fs::read_dir(parent) {
-            Ok(dirs) => if dirs.count() > 0 {
-                break;
-            },
+            Ok(dirs) => {
+                if dirs.count() > 0 {
+                    break;
+                }
+            }
             Err(ref err) if err.kind() == std::io::ErrorKind::NotFound => break,
             Err(err) => return Err(Error::from(err)),
         }

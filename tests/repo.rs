@@ -50,13 +50,11 @@ fn repo_oper() {
     // case #3: open repo in read-only mode
     let path = base.clone() + "/repo3";
     {
-        assert!(
-            RepoOpener::new()
-                .create(true)
-                .read_only(true)
-                .open(&path, &pwd)
-                .is_err()
-        );
+        assert!(RepoOpener::new()
+            .create(true)
+            .read_only(true)
+            .open(&path, &pwd)
+            .is_err());
         RepoOpener::new().create(true).open(&path, &pwd).unwrap();
     }
     let mut repo = RepoOpener::new().read_only(true).open(&path, &pwd).unwrap();
@@ -77,7 +75,8 @@ fn repo_oper() {
             &new_pwd,
             OpsLimit::Moderate,
             MemLimit::Interactive,
-        ).unwrap();
+        )
+        .unwrap();
         let info = repo.info().unwrap();
         assert_eq!(info.ops_limit(), OpsLimit::Moderate);
         assert_eq!(info.mem_limit(), MemLimit::Interactive);

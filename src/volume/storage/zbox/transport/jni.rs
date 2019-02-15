@@ -19,7 +19,8 @@ fn create_url_param<'a>(env: &JNIEnv<'a>, uri: &Uri) -> JValue<'a> {
             "java/net/URL",
             "(Ljava/lang/String;)V",
             &[JValue::Object(url_str.as_obj())],
-        ).unwrap();
+        )
+        .unwrap();
     JValue::Object(url_obj)
 }
 
@@ -38,7 +39,8 @@ fn create_headers_param<'a>(
             "put",
             "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
             &[JValue::Object(*name_str), JValue::Object(*value_str)],
-        ).unwrap();
+        )
+        .unwrap();
 
         env.delete_local_ref(*name_str).unwrap();
         env.delete_local_ref(*value_str).unwrap();

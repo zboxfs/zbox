@@ -672,14 +672,11 @@ impl LocalCache {
         Ok(())
     }
 
-    pub fn flush_wal_deletion(&mut self) -> Result<()> {
-        let mut client = self.client.write().unwrap();
-        client.flush_wal_deletion()
-    }
-
     pub fn flush(&mut self) -> Result<()> {
         if self.is_changed {
             self.write_meta()?;
+            let mut client = self.client.write().unwrap();
+            client.flush_deletion()?;
             self.is_changed = false;
         }
         Ok(())

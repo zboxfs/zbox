@@ -172,7 +172,8 @@ pub trait Armor<'de> {
             wtr.write_all(&buf[..])?;
             wtr.finish()?;
             Ok(())
-        })().or_else(|err| {
+        })()
+        .or_else(|err| {
             // if save item failed, revert its arm back
             item.arm_mut().toggle();
             Err(err)

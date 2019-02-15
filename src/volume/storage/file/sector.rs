@@ -350,12 +350,12 @@ impl SectorMgr {
                 let is_shrinkable = {
                     let sec = self.open_sector(sec_idx, false)?;
                     sec.curr_size = SECTOR_SIZE;
-                    sec.actual_size = BLK_SIZE * sec
-                        .blk_map
-                        .iter()
-                        .filter(|b| **b != BLK_DELETE_MARK)
-                        .count()
-                        as usize;
+                    sec.actual_size = BLK_SIZE
+                        * sec
+                            .blk_map
+                            .iter()
+                            .filter(|b| **b != BLK_DELETE_MARK)
+                            .count() as usize;
                     sec.is_shrinkable()
                 };
 

@@ -56,16 +56,12 @@ pub trait Storable: Debug + Send + Sync {
     fn put_super_block(&mut self, super_blk: &[u8], suffix: u64) -> Result<()>;
 
     // wal read/write, must not buffered
-    // update no need to be atomic, but must gurantee any successful
-    // update is persistent
-    // Note: wal deletion can be buffered
+    // update no need to be atomic, but must gurantee any successful update
+    // is persistent.
+    // Note: wal deletion doesn't need to be persistent and can be buffered
     fn get_wal(&mut self, id: &Eid) -> Result<Vec<u8>>;
     fn put_wal(&mut self, id: &Eid, wal: &[u8]) -> Result<()>;
     fn del_wal(&mut self, id: &Eid) -> Result<()>;
-
-    // flush possibly buffered wal deletion to storage
-    // storage must gurantee write is persistent
-    fn flush_wal_deletion(&mut self) -> Result<()>;
 
     // address read/write, can be buffered
     // storage doesn't need to gurantee update is persistent
@@ -79,7 +75,7 @@ pub trait Storable: Debug + Send + Sync {
     fn put_blocks(&mut self, span: Span, blks: &[u8]) -> Result<()>;
     fn del_blocks(&mut self, span: Span) -> Result<()>;
 
-    // flush possibly buffered address and block to storage
+    // flush possibly buffered wal, address and block to storage,
     // storage must gurantee write is persistent
     fn flush(&mut self) -> Result<()>;
 }
@@ -91,27 +87,27 @@ pub struct DummyStorage;
 impl Storable for DummyStorage {
     #[inline]
     fn exists(&self) -> Result<bool> {
-        Ok(false)
+        unimplemented!()
     }
 
     #[inline]
     fn connect(&mut self) -> Result<()> {
-        Ok(())
+        unimplemented!()
     }
 
     #[inline]
     fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
-        Ok(())
+        unimplemented!()
     }
 
     #[inline]
     fn open(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
-        Ok(())
+        unimplemented!()
     }
 
     #[inline]
     fn get_super_block(&mut self, _suffix: u64) -> Result<Vec<u8>> {
-        Ok(Vec::new())
+        unimplemented!()
     }
 
     #[inline]
@@ -120,61 +116,56 @@ impl Storable for DummyStorage {
         _super_blk: &[u8],
         _suffix: u64,
     ) -> Result<()> {
-        Ok(())
+        unimplemented!()
     }
 
     #[inline]
     fn get_wal(&mut self, _id: &Eid) -> Result<Vec<u8>> {
-        Ok(Vec::new())
+        unimplemented!()
     }
 
     #[inline]
     fn put_wal(&mut self, _id: &Eid, _wal: &[u8]) -> Result<()> {
-        Ok(())
+        unimplemented!()
     }
 
     #[inline]
     fn del_wal(&mut self, _id: &Eid) -> Result<()> {
-        Ok(())
-    }
-
-    #[inline]
-    fn flush_wal_deletion(&mut self) -> Result<()> {
-        Ok(())
+        unimplemented!()
     }
 
     #[inline]
     fn get_address(&mut self, _id: &Eid) -> Result<Vec<u8>> {
-        Ok(Vec::new())
+        unimplemented!()
     }
 
     #[inline]
     fn put_address(&mut self, _id: &Eid, _addr: &[u8]) -> Result<()> {
-        Ok(())
+        unimplemented!()
     }
 
     #[inline]
     fn del_address(&mut self, _id: &Eid) -> Result<()> {
-        Ok(())
+        unimplemented!()
     }
 
     #[inline]
     fn get_blocks(&mut self, _dst: &mut [u8], _span: Span) -> Result<()> {
-        Ok(())
+        unimplemented!()
     }
 
     #[inline]
     fn put_blocks(&mut self, _span: Span, _blks: &[u8]) -> Result<()> {
-        Ok(())
+        unimplemented!()
     }
 
     #[inline]
     fn del_blocks(&mut self, _span: Span) -> Result<()> {
-        Ok(())
+        unimplemented!()
     }
 
     #[inline]
     fn flush(&mut self) -> Result<()> {
-        Ok(())
+        unimplemented!()
     }
 }
