@@ -387,10 +387,10 @@ impl CacheArea {
         self.evict(rel_path, obj.len(), true)
     }
 
-    fn del(&mut self, rel_path: &Path, cache_ctl: CacheControl) -> Result<()> {
+    fn del(&mut self, rel_path: &Path) -> Result<()> {
         // remove from remote first
         let mut client = self.client.write().unwrap();
-        client.del(rel_path, cache_ctl)?;
+        client.del(rel_path);
 
         match self.cache_type {
             CacheType::Mem => {
@@ -653,23 +653,28 @@ impl LocalCache {
 
     #[inline]
     pub fn del(&mut self, rel_path: &Path) -> Result<()> {
-        self.cache.del(rel_path, CacheControl::Long)?;
+        self.cache.del(rel_path)?;
         self.is_changed = true;
         Ok(())
     }
 
     #[inline]
     pub fn del_pinned(&mut self, rel_path: &Path) -> Result<()> {
-        self.cache.del(rel_path, CacheControl::NoCache)?;
+        self.cache.del(rel_path)?;
         self.is_changed = true;
         Ok(())
     }
 
     #[inline]
     pub fn del_index(&mut self, rel_path: &Path) -> Result<()> {
-        self.idx_cache.del(rel_path, CacheControl::NoCache)?;
+        self.idx_cache.del(rel_path)?;
         self.is_changed = true;
         Ok(())
+    }
+
+    pub fn flush_wal_deletion(&mut self) -> Result<()> {
+        let mut client = self.client.write().unwrap();
+        client.flush_wal_deletion()
     }
 
     pub fn flush(&mut self) -> Result<()> {

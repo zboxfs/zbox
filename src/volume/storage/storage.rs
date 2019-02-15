@@ -270,6 +270,12 @@ impl Storage {
         Ok(())
     }
 
+    // flush deleted wal in underlying storage
+    #[inline]
+    pub fn flush_wal_deletion(&mut self) -> Result<()> {
+        self.depot.flush_wal_deletion()
+    }
+
     // flush underlying storage
     #[inline]
     pub fn flush(&mut self) -> Result<()> {

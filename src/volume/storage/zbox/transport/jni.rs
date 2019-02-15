@@ -192,18 +192,18 @@ impl Transport for JniTransport {
             slice::from_raw_parts(body.as_ptr() as *const i8, body.len())
         };
 
-        // create body byte array parameter
-        let param_body = env.new_byte_array(body.len() as i32).unwrap();
-        env.set_byte_array_region(param_body, 0, buf).unwrap();
-        let param_body = JValue::Object(JObject::from(param_body));
+        // create byte array body
+        let body = env.new_byte_array(body.len() as i32).unwrap();
+        env.set_byte_array_region(body, 0, buf).unwrap();
+        let body = JValue::Object(JObject::from(body));
 
         // call put() on Java side
-        let resp_obj = do_request(&env, uri, headers, "put", Some(param_body))?;
+        let resp_obj = do_request(&env, uri, headers, "put", Some(body))?;
 
         let status = get_response_status(&env, resp_obj);
 
         // clear local reference
-        env.delete_local_ref(param_body.l().unwrap()).unwrap();
+        env.delete_local_ref(body.l().unwrap()).unwrap();
         env.delete_local_ref(resp_obj).unwrap();
 
         // create response
@@ -215,7 +215,36 @@ impl Transport for JniTransport {
 
         // call delete() on Java side
         let resp_obj = do_request(&env, uri, headers, "delete", None)?;
+        let status = get_response_status(&env, resp_obj);
 
+        // clear local reference
+        env.delete_local_ref(resp_obj).unwrap();
+
+        // create response
+        create_response(status, Vec::new())
+    }
+
+    fn delete_bulk(
+        &mut self,
+        uri: &Uri,
+        headers: &HeaderMap,
+        body: &[u8],
+    ) -> Result<Response> {
+        let env = self.get_jni_env()?;
+
+        // convert Vec<u8> to Vec<i8>
+        let buf: &[i8] = unsafe {
+            slice::from_raw_parts(body.as_ptr() as *const i8, body.len())
+        };
+
+        // create byte array body
+        let body = env.new_byte_array(buf.len() as i32).unwrap();
+        env.set_byte_array_region(body, 0, buf).unwrap();
+        let body = JValue::Object(JObject::from(body));
+
+        // call delete_bulk() on Java side
+        let resp_obj =
+            do_request(&env, uri, headers, "delete_bulk", Some(body))?;
         let status = get_response_status(&env, resp_obj);
 
         // clear local reference

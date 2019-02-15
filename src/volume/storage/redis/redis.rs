@@ -142,6 +142,11 @@ impl Storable for RedisStorage {
         self.del(&key)
     }
 
+    #[inline]
+    fn flush_wal_deletion(&mut self) -> Result<()> {
+        Ok(())
+    }
+
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
         let key = addr_key(id);
         self.get_bytes(&key)

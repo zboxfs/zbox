@@ -262,7 +262,7 @@ impl WalQueue {
         self.doing.insert(txid);
     }
 
-    fn commit_trans(&mut self, wal: Wal) -> Result<()> {
+    fn commit_trans(&mut self, wal: Wal, vol: &VolumeRef) -> Result<()> {
         // recycle the retired trans
         while self.done.len() >= Self::COMMITTED_QUEUE_SIZE {
             {
@@ -292,7 +292,9 @@ impl WalQueue {
         self.doing.remove(&wal.txid);
         self.done.push_back(wal.txid);
 
-        Ok(())
+        // flush deleted wal in volume
+        let mut vol = vol.write().unwrap();
+        vol.flush_wal_deletion()
     }
 
     #[inline]
@@ -503,9 +505,9 @@ impl WalQueueMgr {
         self.save_walq()
     }
 
-    pub fn commit_trans(&mut self, wal: Wal) -> Result<()> {
+    pub fn commit_trans(&mut self, wal: Wal, vol: &VolumeRef) -> Result<()> {
         self.backup_walq();
-        self.walq.commit_trans(wal).or_else(|err| {
+        self.walq.commit_trans(wal, vol).or_else(|err| {
             // if commit failed, restore the walq backup
             self.restore_walq();
             Err(err)

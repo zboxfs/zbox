@@ -1,7 +1,8 @@
+use std::collections::HashMap;
 use std::convert::AsRef;
 use std::fmt::{self, Debug, Display};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 use http::header::{self, HeaderMap, HeaderName, HeaderValue};
@@ -93,6 +94,15 @@ impl Headers {
         self
     }
 
+    #[inline]
+    fn json(mut self) -> Self {
+        self.map.insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
+        self
+    }
+
     fn put_range(mut self, begin: usize, end: usize) -> Self {
         let header = HeaderName::from_static("zbox-range");
         let value =
@@ -120,11 +130,15 @@ pub struct HttpClient {
     retry_cnt: u64,
     headers: Headers,
     transport: Box<Transport>,
+    bulk: Vec<PathBuf>,
 }
 
 impl HttpClient {
     // remote root url
     const ROOT_URL: &'static str = "https://data.zbox.io/";
+
+    // bulk request uri
+    const BULK_URI: &'static str = "bulk";
 
     // default timeout, in secnods
     const DEFAULT_TIMEOUT: u32 = 30;
@@ -138,6 +152,7 @@ impl HttpClient {
                     Self::DEFAULT_TIMEOUT,
                 )?)
             }
+
             #[cfg(feature = "storage-zbox-native")]
             {
                 Box::new(super::transport::native::NativeTransport::new(
@@ -170,6 +185,7 @@ impl HttpClient {
             retry_cnt: 0,
             headers: Headers::new(),
             transport,
+            bulk: Vec::new(),
         })
     }
 
@@ -375,19 +391,30 @@ impl HttpClient {
         Ok(())
     }
 
-    // send del request
-    fn send_del_req(
-        &mut self,
-        uri: &Uri,
-        cache_ctl: CacheControl,
-    ) -> Result<()> {
+    // send bulk delelte
+    fn send_bulk_del_req(&mut self) -> Result<()> {
+        if self.bulk.is_empty() {
+            return Ok(());
+        }
+
+        debug!("bulk del {:?} wals", self.bulk.len());
+
+        // make bulk deletion uri
+        let uri = self.make_uri(Self::BULK_URI)?;
+
+        // serialize body as json bytes
+        let mut map = HashMap::new();
+        map.insert("paths".to_owned(), self.bulk.clone());
+        let buf = serde_json::to_vec(&map)?;
+
         let headers = self
             .headers
             .clone()
             .bearer_auth(&self.session_token)
-            .cache_control(cache_ctl);
+            .cache_control(CacheControl::NoCache)
+            .json();
         self.transport
-            .delete(uri, headers.as_ref())?
+            .delete_bulk(&uri, headers.as_ref(), &buf)?
             .error_for_status()
             .map(|_| ())
             .or_else(|err| {
@@ -397,31 +424,29 @@ impl HttpClient {
                 } else {
                     Err(err)
                 }
-            })
+            })?;
+
+        self.bulk.clear();
+
+        Ok(())
     }
 
-    pub fn del(
-        &mut self,
-        rel_path: &Path,
-        cache_ctl: CacheControl,
-    ) -> Result<()> {
-        debug!("del {:?}", rel_path);
+    #[inline]
+    pub fn del(&mut self, rel_path: &Path) {
+        self.bulk.push(rel_path.to_path_buf());
+        self.set_updated();
+    }
 
-        let uri = self.make_uri(rel_path)?;
-
-        self.send_del_req(&uri, cache_ctl).or_else(|err| {
+    pub fn flush_wal_deletion(&mut self) -> Result<()> {
+        self.send_bulk_del_req().or_else(|err| {
             // try reopen remote session once if it is expired
             if err == Error::HttpStatus(StatusCode::UNAUTHORIZED) {
                 self.open_session()?;
-                self.send_del_req(&uri, cache_ctl)
+                self.send_bulk_del_req()
             } else {
                 Err(err)
             }
-        })?;
-
-        self.set_updated();
-
-        Ok(())
+        })
     }
 }
 
@@ -451,6 +476,7 @@ impl Default for HttpClient {
             retry_cnt: 0,
             headers: Headers::new(),
             transport: Box::new(DummyTransport),
+            bulk: Vec::new(),
         }
     }
 }
@@ -521,7 +547,9 @@ mod tests {
         assert_eq!(client.open_session().unwrap_err(), Error::Opened);
 
         // test delete
-        client.del(&rel_path, CacheControl::NoCache).unwrap();
+        client.del(&rel_path);
+
+        client.flush_wal_deletion().unwrap();
 
         // close session and open it again
         drop(client);

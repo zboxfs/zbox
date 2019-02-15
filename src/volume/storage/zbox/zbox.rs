@@ -210,6 +210,12 @@ impl Storable for ZboxStorage {
     }
 
     #[inline]
+    fn flush_wal_deletion(&mut self) -> Result<()> {
+        let mut local_cache = self.local_cache.write().unwrap();
+        local_cache.flush_wal_deletion()
+    }
+
+    #[inline]
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
         self.idx_mgr.get(id)
     }
@@ -348,7 +354,6 @@ mod tests {
             "accessKey456@repo456?cache_type=file&cache_size=1&base={}",
             base.display()
         );
-        println!("{}", uri);
         do_test(&uri);
     }
 }

@@ -183,6 +183,12 @@ impl Volume {
     }
 
     #[inline]
+    pub fn flush_wal_deletion(&mut self) -> Result<()> {
+        let mut storage = self.storage.write().unwrap();
+        storage.flush_wal_deletion()
+    }
+
+    #[inline]
     pub fn flush(&mut self) -> Result<()> {
         let mut storage = self.storage.write().unwrap();
         storage.flush()

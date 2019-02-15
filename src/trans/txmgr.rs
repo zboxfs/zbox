@@ -126,7 +126,7 @@ impl TxMgr {
             // commit tx, if any errors then abort the tx
             match tx
                 .commit(&self.vol)
-                .and_then(|wal| self.walq_mgr.commit_trans(wal))
+                .and_then(|wal| self.walq_mgr.commit_trans(wal, &self.vol))
             {
                 Ok(_) => {
                     tx.complete_commit();

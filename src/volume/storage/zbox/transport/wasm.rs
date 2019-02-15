@@ -105,4 +105,16 @@ impl Transport for WasmTransport {
         xhr.send().unwrap();
         create_response(xhr)
     }
+
+    fn delete_bulk(
+        &mut self,
+        uri: &Uri,
+        headers: &HeaderMap,
+        body: &[u8],
+    ) -> Result<Response> {
+        let xhr = self.create_xhr("DELETE", uri, headers);
+        let buf = unsafe { Uint8Array::view(body) };
+        xhr.send_with_opt_buffer_source(Some(&buf)).unwrap();
+        create_response(xhr)
+    }
 }

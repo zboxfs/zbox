@@ -65,7 +65,15 @@ pub trait Transport: Send + Sync {
     ) -> Result<Response>;
 
     // HTTP DELETE request
-    fn delete(&mut self, url: &Uri, headers: &HeaderMap) -> Result<Response>;
+    fn delete(&mut self, uri: &Uri, headers: &HeaderMap) -> Result<Response>;
+
+    // HTTP bulk DELETE request
+    fn delete_bulk(
+        &mut self,
+        uri: &Uri,
+        headers: &HeaderMap,
+        body: &[u8],
+    ) -> Result<Response>;
 }
 
 /// Dummy transport
@@ -88,7 +96,17 @@ impl Transport for DummyTransport {
     }
 
     #[inline]
-    fn delete(&mut self, _url: &Uri, _headers: &HeaderMap) -> Result<Response> {
+    fn delete(&mut self, _uri: &Uri, _headers: &HeaderMap) -> Result<Response> {
+        unimplemented!()
+    }
+
+    #[inline]
+    fn delete_bulk(
+        &mut self,
+        _uri: &Uri,
+        _headers: &HeaderMap,
+        _body: &[u8],
+    ) -> Result<Response> {
         unimplemented!()
     }
 }

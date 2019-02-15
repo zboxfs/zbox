@@ -178,6 +178,11 @@ impl Storable for FaultyStorage {
         ms.del_wal(id)
     }
 
+    #[inline]
+    fn flush_wal_deletion(&mut self) -> Result<()> {
+        Ok(())
+    }
+
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
         self.ctlr.make_random_error()?;
 

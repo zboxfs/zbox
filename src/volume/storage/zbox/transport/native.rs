@@ -66,4 +66,19 @@ impl Transport for NativeTransport {
             .send()?;
         create_response(resp)
     }
+
+    fn delete_bulk(
+        &mut self,
+        uri: &Uri,
+        headers: &HeaderMap,
+        body: &[u8],
+    ) -> Result<Response> {
+        let resp = self
+            .client
+            .delete(&uri.to_string())
+            .headers(headers.clone())
+            .body(body.to_owned())
+            .send()?;
+        create_response(resp)
+    }
 }

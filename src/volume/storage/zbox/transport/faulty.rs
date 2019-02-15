@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::io::{Cursor, Read};
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use http::header::HeaderName;
@@ -90,7 +91,6 @@ impl Transport for FaultyTransport {
         }
 
         match store.map.get(uri) {
-            //Some(body) => create_response(StatusCode::OK, body.clone()),
             Some(body) => create_response(StatusCode::OK, body.clone()),
             None => create_response(StatusCode::NOT_FOUND, Vec::new()),
         }
@@ -122,6 +122,25 @@ impl Transport for FaultyTransport {
     fn delete(&mut self, uri: &Uri, _headers: &HeaderMap) -> Result<Response> {
         let mut store = STORE.lock().unwrap();
         store.map.remove(uri);
+        store.update();
+        create_ok_response()
+    }
+
+    fn delete_bulk(
+        &mut self,
+        _uri: &Uri,
+        _headers: &HeaderMap,
+        body: &[u8],
+    ) -> Result<Response> {
+        let mut store = STORE.lock().unwrap();
+        let map: HashMap<String, Vec<PathBuf>> =
+            serde_json::from_slice(body).unwrap();
+        for list in map.values() {
+            for uri in list {
+                let uri = uri.to_str().unwrap().parse::<Uri>().unwrap();
+                store.map.remove(&uri);
+            }
+        }
         store.update();
         create_ok_response()
     }

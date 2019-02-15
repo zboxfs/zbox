@@ -83,6 +83,11 @@ impl Storable for MemStorage {
         Ok(())
     }
 
+    #[inline]
+    fn flush_wal_deletion(&mut self) -> Result<()> {
+        Ok(())
+    }
+
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
         self.addr_map
             .get(id)
