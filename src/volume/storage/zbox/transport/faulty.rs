@@ -114,7 +114,7 @@ impl Transport for FaultyTransport {
                 val.truncate(offset);
                 val.extend_from_slice(body);
             })
-            .or_insert(body.to_owned());
+            .or_insert_with(|| body.to_owned());
 
         store.update();
         create_ok_response()

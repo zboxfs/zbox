@@ -227,7 +227,7 @@ impl SectorMgr {
                         return Err(Error::NotFound);
                     }
                 }
-                Err(err) => return Err(Error::from(err)),
+                Err(err) => return Err(err),
             }
         }
 
@@ -289,7 +289,7 @@ impl SectorMgr {
                 {
                     return Err(Error::NotFound);
                 }
-                insec_idx as u64 * BLK_SIZE as u64
+                u64::from(insec_idx) * BLK_SIZE as u64
             };
 
             // read blocks bytes

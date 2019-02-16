@@ -46,7 +46,7 @@ impl Span {
             return ret;
         }
 
-        let mut span = self.clone();
+        let mut span = *self;
         let mut at = span.begin + size - span.begin % size;
         while at < span.end() {
             let split = span.split_to(at);
@@ -131,7 +131,7 @@ impl Addr {
         let mut blk_cnt = 0;
 
         for loc_span in self.list.iter() {
-            let mut loc_span = loc_span.clone();
+            let mut loc_span = *loc_span;
             loc_span.offset = frm_idx * FRAME_SIZE + blk_cnt * BLK_SIZE;
 
             loop {

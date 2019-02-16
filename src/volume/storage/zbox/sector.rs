@@ -19,8 +19,8 @@ const BLKS_PER_SECTOR: usize = 16;
 // sector size
 const SECTOR_SIZE: usize = BLKS_PER_SECTOR * BLK_SIZE;
 
-const BASE_DIR: &'static str = "data";
-const RECYCLE_FILE: &'static str = "recycle";
+const BASE_DIR: &str = "data";
+const RECYCLE_FILE: &str = "recycle";
 
 // make sector relative path from its index
 fn sector_rel_path(sec_idx: usize, hash_key: &HashKey) -> PathBuf {
@@ -52,7 +52,7 @@ impl RecycleMap {
     ) -> Result<()> {
         for mut sec_span in span.divide_by(BLKS_PER_SECTOR) {
             let sec_idx = sec_span.begin / BLKS_PER_SECTOR;
-            let mut dmap = self.map.get(&sec_idx).map(|v| *v).unwrap_or(0);
+            let mut dmap = self.map.get(&sec_idx).cloned().unwrap_or(0);
 
             // mark blocks as deleted in sector
             sec_span.begin %= BLKS_PER_SECTOR;
@@ -92,7 +92,7 @@ impl RecycleMap {
 
     fn remove_deleted(&mut self, sec_idx: usize, mut span: Span) {
         span.begin %= BLKS_PER_SECTOR;
-        let mut dmap = self.map.get(&sec_idx).map(|v| *v).unwrap_or(0);
+        let mut dmap = self.map.get(&sec_idx).cloned().unwrap_or(0);
         if dmap == 0 {
             return;
         }

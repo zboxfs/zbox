@@ -175,7 +175,7 @@ impl Storable for FileStorage {
 
     #[inline]
     fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
-        assert!(addr.len() > 0);
+        assert!(!addr.is_empty());
         self.idx_mgr.insert(id, addr)
     }
 

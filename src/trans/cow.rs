@@ -177,28 +177,32 @@ where
 
     fn inner_by(&self, arm: Arm) -> &T {
         match arm {
-            Arm::Left => match self.left {
-                Some(ref inner) => return inner,
-                None => {}
-            },
-            Arm::Right => match self.right {
-                Some(ref inner) => return inner,
-                None => {}
-            },
+            Arm::Left => {
+                if let Some(ref inner) = self.left {
+                    return inner;
+                }
+            }
+            Arm::Right => {
+                if let Some(ref inner) = self.right {
+                    return inner;
+                }
+            }
         }
         panic!("Cow is empty");
     }
 
     fn inner_mut_by(&mut self, arm: Arm) -> &mut T {
         match arm {
-            Arm::Left => match self.left {
-                Some(ref mut inner) => return inner,
-                None => {}
-            },
-            Arm::Right => match self.right {
-                Some(ref mut inner) => return inner,
-                None => {}
-            },
+            Arm::Left => {
+                if let Some(ref mut inner) = self.left {
+                    return inner;
+                }
+            }
+            Arm::Right => {
+                if let Some(ref mut inner) = self.right {
+                    return inner;
+                }
+            }
         }
         panic!("Cow is empty");
     }
@@ -339,7 +343,7 @@ where
 {
     #[inline]
     fn action(&self) -> Action {
-        self.action.clone().unwrap()
+        self.action.unwrap()
     }
 
     fn commit(&mut self, vol: &VolumeRef) -> Result<()> {
@@ -385,14 +389,13 @@ where
 
     fn complete_commit(&mut self) {
         match self.action {
-            Some(action) => match action {
-                Action::Update => {
+            Some(action) => {
+                if let Action::Update = action {
                     // toggle arm and discard the old inner object
                     self.arm.toggle();
                     self.other_mut().take();
                 }
-                _ => {}
-            },
+            }
             None => unreachable!(),
         }
         self.txid = None;
@@ -401,13 +404,12 @@ where
 
     fn abort(&mut self) {
         match self.action {
-            Some(action) => match action {
-                Action::Update => {
+            Some(action) => {
+                if let Action::Update = action {
                     // discard the new inner object
                     self.other_mut().take();
                 }
-                _ => {}
-            },
+            }
             None => unreachable!(),
         }
         self.txid = None;
@@ -465,10 +467,12 @@ where
     }
 }
 
+type CowLru<T> = Lru<Eid, CowRef<T>, CountMeter<CowRef<T>>, CowPinChecker>;
+
 /// Cow LRU cache
 #[derive(Debug, Clone, Default)]
 pub struct CowCache<T: Cowable> {
-    lru: Arc<RwLock<Lru<Eid, CowRef<T>, CountMeter<CowRef<T>>, CowPinChecker>>>,
+    lru: Arc<RwLock<CowLru<T>>>,
     txmgr: TxMgrRef,
 }
 

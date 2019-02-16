@@ -206,7 +206,7 @@ impl<T: Sized> SafeBox<T> {
         assert!(pos < self.len());
         let len = min(self.len() - pos, buf_len);
         unsafe {
-            ptr::copy(buf, self.as_mut_ptr().offset(pos as isize), len);
+            ptr::copy(buf, self.as_mut_ptr().add(pos), len);
         }
     }
 }
@@ -222,7 +222,7 @@ impl<T: Sized> fmt::Debug for SafeBox<T> {
         write!(f, "SafeBox(")?;
         unsafe {
             for i in 0..min(4, self.len()) {
-                write!(f, "{:x}", *self.as_ptr().offset(i as isize))?;
+                write!(f, "{:x}", *self.as_ptr().add(i))?;
             }
         }
         if self.len() > 4 {
@@ -553,7 +553,7 @@ impl Cost {
         }
     }
 
-    pub fn to_u8(&self) -> u8 {
+    pub fn to_u8(self) -> u8 {
         let ops_limit = match self.ops_limit {
             OpsLimit::Interactive => 0u8,
             OpsLimit::Moderate => 1u8,
@@ -1008,7 +1008,7 @@ impl Crypto {
         let result = match self.cipher {
             Cipher::Xchacha => unsafe {
                 (self.enc_fn)(
-                    p_ctxt.offset(nonce_size as isize),
+                    p_ctxt.add(nonce_size),
                     &mut clen as *mut u64,
                     msg.as_ptr() as *const u8,
                     msg.len() as u64,
@@ -1023,7 +1023,7 @@ impl Crypto {
                 let (subnonce, subkey) = self.extend_nonce(nonce.as_ptr(), key);
                 unsafe {
                     (self.enc_fn)(
-                        p_ctxt.offset(nonce_size as isize),
+                        p_ctxt.add(nonce_size),
                         &mut clen as *mut u64,
                         msg.as_ptr() as *const u8,
                         msg.len() as u64,
@@ -1096,7 +1096,7 @@ impl Crypto {
                     msg.as_mut_ptr(),
                     &mut msglen as *mut u64,
                     ptr::null(),
-                    ctxt.as_ptr().offset(nonce_size as isize),
+                    ctxt.as_ptr().add(nonce_size),
                     (ctxt.len() - nonce_size) as u64,
                     ad.as_ptr() as *const u8,
                     ad.len() as u64,
@@ -1111,7 +1111,7 @@ impl Crypto {
                         msg.as_mut_ptr(),
                         &mut msglen as *mut u64,
                         ptr::null(),
-                        ctxt.as_ptr().offset(nonce_size as isize),
+                        ctxt.as_ptr().add(nonce_size),
                         (ctxt.len() - nonce_size) as u64,
                         ad.as_ptr() as *const u8,
                         ad.len() as u64,

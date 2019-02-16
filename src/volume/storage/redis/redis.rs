@@ -74,7 +74,7 @@ impl RedisStorage {
         match self.conn {
             Some(ref conn) => {
                 let conn = conn.lock().unwrap();
-                let _ = conn.set(key, val)?;
+                conn.set(key, val)?;
                 Ok(())
             }
             None => unreachable!(),
@@ -85,7 +85,7 @@ impl RedisStorage {
         match self.conn {
             Some(ref conn) => {
                 let conn = conn.lock().unwrap();
-                let _ = conn.del(key)?;
+                conn.del(key)?;
                 Ok(())
             }
             None => unreachable!(),

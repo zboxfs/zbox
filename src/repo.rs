@@ -274,7 +274,7 @@ impl RepoOpener {
 /// [`new`]: struct.OpenOptions.html#method.new
 /// [`open`]: struct.OpenOptions.html#method.open
 /// [`Result`]: type.Result.html
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct OpenOptions {
     read: bool,
     write: bool,
@@ -291,16 +291,9 @@ impl OpenOptions {
     ///
     /// All options are initially set to false, except for `read`.
     pub fn new() -> Self {
-        OpenOptions {
-            read: true,
-            write: false,
-            append: false,
-            truncate: false,
-            create: false,
-            create_new: false,
-            version_limit: None,
-            dedup_chunk: None,
-        }
+        let mut opt = Self::default();
+        opt.read = true;
+        opt
     }
 
     /// Sets the option for read access.
@@ -659,13 +652,13 @@ impl Repo {
             volume_id: meta.vol_info.id.clone(),
             ver: meta.vol_info.ver.clone(),
             uri: meta.vol_info.uri.clone(),
-            cost: meta.vol_info.cost.clone(),
-            cipher: meta.vol_info.cipher.clone(),
+            cost: meta.vol_info.cost,
+            cipher: meta.vol_info.cipher,
             compress: meta.vol_info.compress,
             version_limit: meta.opts.version_limit,
             dedup_chunk: meta.opts.dedup_chunk,
             read_only: meta.read_only,
-            ctime: meta.vol_info.ctime.clone(),
+            ctime: meta.vol_info.ctime,
         })
     }
 

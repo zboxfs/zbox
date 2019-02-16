@@ -17,6 +17,87 @@ use trans::{Eid, Finish};
 use volume::address::Addr;
 use volume::{Allocator, AllocatorRef, BLKS_PER_FRAME, BLK_SIZE, FRAME_SIZE};
 
+// parse storage part in uri
+fn parse_uri(uri: &str) -> Result<Box<Storable>> {
+    if !uri.is_ascii() {
+        return Err(Error::InvalidUri);
+    }
+
+    // extract storage string
+    let idx = uri.find("://").ok_or(Error::InvalidUri)?;
+    let part = &uri[..idx];
+
+    match part {
+        "mem" => {
+            #[cfg(feature = "storage-mem")]
+            {
+                Ok(Box::new(super::mem::MemStorage::new()))
+            }
+            #[cfg(not(feature = "storage-mem"))]
+            {
+                Err(Error::InvalidUri)
+            }
+        }
+        "file" => {
+            #[cfg(feature = "storage-file")]
+            {
+                let path = std::path::Path::new(&uri[idx + 3..]);
+                let depot = super::file::FileStorage::new(path);
+                Ok(Box::new(depot))
+            }
+            #[cfg(not(feature = "storage-file"))]
+            {
+                Err(Error::InvalidUri)
+            }
+        }
+        "sqlite" => {
+            #[cfg(feature = "storage-sqlite")]
+            {
+                let depot = super::sqlite::SqliteStorage::new(&uri[idx + 3..]);
+                Ok(Box::new(depot))
+            }
+            #[cfg(not(feature = "storage-sqlite"))]
+            {
+                Err(Error::InvalidUri)
+            }
+        }
+        "redis" => {
+            #[cfg(feature = "storage-redis")]
+            {
+                let depot = super::redis::RedisStorage::new(&uri[idx + 3..])?;
+                Ok(Box::new(depot))
+            }
+            #[cfg(not(feature = "storage-redis"))]
+            {
+                Err(Error::InvalidUri)
+            }
+        }
+        "faulty" => {
+            #[cfg(feature = "storage-faulty")]
+            {
+                let depot = super::faulty::FaultyStorage::new(&uri[idx + 3..]);
+                Ok(Box::new(depot))
+            }
+            #[cfg(not(feature = "storage-faulty"))]
+            {
+                Err(Error::InvalidUri)
+            }
+        }
+        "zbox" => {
+            #[cfg(feature = "storage-zbox")]
+            {
+                let depot = super::zbox::ZboxStorage::new(&uri[idx + 3..])?;
+                Ok(Box::new(depot))
+            }
+            #[cfg(not(feature = "storage-zbox"))]
+            {
+                Err(Error::InvalidUri)
+            }
+        }
+        _ => Err(Error::InvalidUri),
+    }
+}
+
 // frame cache meter, measured by frame byte size
 #[derive(Debug, Default)]
 struct FrameCacheMeter;
@@ -60,71 +141,7 @@ impl Storage {
     const ADDRESS_CACHE_SIZE: usize = 64;
 
     pub fn new(uri: &str) -> Result<Self> {
-        let depot: Box<Storable> = if uri.starts_with("mem://") {
-            #[cfg(feature = "storage-mem")]
-            {
-                let depot = super::mem::MemStorage::new();
-                Box::new(depot)
-            }
-            #[cfg(not(feature = "storage-mem"))]
-            {
-                return Err(Error::InvalidUri);
-            }
-        } else if uri.starts_with("file://") {
-            #[cfg(feature = "storage-file")]
-            {
-                let path = std::path::Path::new(&uri[7..]);
-                let depot = super::file::FileStorage::new(path);
-                Box::new(depot)
-            }
-            #[cfg(not(feature = "storage-file"))]
-            {
-                return Err(Error::InvalidUri);
-            }
-        } else if uri.starts_with("sqlite://") {
-            #[cfg(feature = "storage-sqlite")]
-            {
-                let depot = super::sqlite::SqliteStorage::new(&uri[9..]);
-                Box::new(depot)
-            }
-            #[cfg(not(feature = "storage-sqlite"))]
-            {
-                return Err(Error::InvalidUri);
-            }
-        } else if uri.starts_with("redis://") {
-            #[cfg(feature = "storage-redis")]
-            {
-                let depot = super::redis::RedisStorage::new(&uri[8..])?;
-                Box::new(depot)
-            }
-            #[cfg(not(feature = "storage-redis"))]
-            {
-                return Err(Error::InvalidUri);
-            }
-        } else if uri.starts_with("faulty://") {
-            #[cfg(feature = "storage-faulty")]
-            {
-                let depot = super::faulty::FaultyStorage::new(&uri[9..]);
-                Box::new(depot)
-            }
-            #[cfg(not(feature = "storage-faulty"))]
-            {
-                return Err(Error::InvalidUri);
-            }
-        } else if uri.starts_with("zbox://") {
-            #[cfg(feature = "storage-zbox")]
-            {
-                let depot = super::zbox::ZboxStorage::new(&uri[7..])?;
-                Box::new(depot)
-            }
-            #[cfg(not(feature = "storage-zbox"))]
-            {
-                return Err(Error::InvalidUri);
-            }
-        } else {
-            return Err(Error::InvalidUri);
-        };
-
+        let depot: Box<Storable> = parse_uri(uri)?;
         let frame_cache = Lru::new(Self::FRAME_CACHE_SIZE);
 
         Ok(Storage {

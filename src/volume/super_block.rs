@@ -159,7 +159,7 @@ impl SuperBlk {
                     } else if left.body.seq < right.body.seq {
                         Ok(right)
                     } else {
-                        return Err(Error::InvalidSuperBlk);
+                        Err(Error::InvalidSuperBlk)
                     }
                 }
                 Err(ref err) if *err == Error::NotFound => Ok(left),
@@ -170,7 +170,7 @@ impl SuperBlk {
                     warn!("super block right arm is corrupted");
                     Ok(left)
                 }
-                Err(err) => return Err(err),
+                Err(err) => Err(err),
             },
             Err(ref err) if *err == Error::NotFound => right_arm,
             Err(ref err)
@@ -179,7 +179,7 @@ impl SuperBlk {
                 warn!("super block left arm is corrupted");
                 right_arm
             }
-            Err(err) => return Err(err),
+            Err(err) => Err(err),
         }
     }
 }

@@ -196,15 +196,16 @@ impl MerkleTree {
             .clone_from_slice(&old_leaves[..]);
 
         // copy in leave nodes
-        &self.nodes[overlap_begin..overlap_begin + leaves.nodes.len()]
+        self.nodes[overlap_begin..overlap_begin + leaves.nodes.len()]
             .clone_from_slice(&leaves.nodes[..]);
 
         // re-hash head and tail overlapping pieces
-        let mut head_is_rehashed = false;
-        if align_piece_offset(leaves.offset) != 0 {
+        let head_is_rehashed = if align_piece_offset(leaves.offset) != 0 {
             self.nodes[overlap_begin] = piece_hash(leaves.offset, rdr)?;
-            head_is_rehashed = true;
-        }
+            true
+        } else {
+            false
+        };
         if align_piece_offset(overlap_end_offset) != 0
             && !(overlap_begin == overlap_end - 1 && head_is_rehashed)
         {
@@ -296,7 +297,7 @@ impl MerkleTree {
             let src_begin = parent(old_begin, old_begin, old_lvl_node_cnt);
             let src_end = parent(old_end - 1, old_begin, old_lvl_node_cnt) + 1;
             assert_eq!(dst_end - dst_begin, src_end - src_begin);
-            &new.nodes[dst_begin..dst_end]
+            new.nodes[dst_begin..dst_end]
                 .clone_from_slice(&self.nodes[src_begin..src_end]);
 
             // re-hash the last node

@@ -5,14 +5,14 @@ use std::ptr;
 
 // taken from pcompress implementation
 // https://github.com/moinakg/pcompress
-const PRIME: u64 = 153191u64;
-const MASK: u64 = 0xffffffffffu64;
+const PRIME: u64 = 153_191u64;
+const MASK: u64 = 0x00ff_ffff_ffffu64;
 const MIN_SIZE: usize = 16 * 1024; // minimal chunk size, 16k
 const AVG_SIZE: usize = 32 * 1024; // average chunk size, 32k
 const MAX_SIZE: usize = 64 * 1024; // maximum chunk size, 64k
 
 // Irreducible polynomial for Rabin modulus, from pcompress
-const FP_POLY: u64 = 0xbfe6b8a5bf378d83u64;
+const FP_POLY: u64 = 0xbfe6_b8a5_bf37_8d83u64;
 
 // since we will skip MIN_SIZE when sliding window, it only
 // needs to target (AVG_SIZE - MIN_SIZE) cut length,
@@ -143,7 +143,7 @@ impl<W: Write + Seek> Write for Chunker<W> {
 
             // calculate Rabin rolling hash
             self.roll_hash = (self.roll_hash * PRIME) & MASK;
-            self.roll_hash += ch as u64;
+            self.roll_hash += u64::from(ch);
             self.roll_hash = self.roll_hash.wrapping_sub(pushed_out) & MASK;
 
             // forward circle window
@@ -194,7 +194,7 @@ impl<W: Write + Seek> Write for Chunker<W> {
         let p = self.pos - self.chunk_len;
         if p < self.buf_clen {
             self.chunk_len = self.buf_clen - p;
-            self.dst.write(&self.buf[p..(p + self.chunk_len)])?;
+            let _ = self.dst.write(&self.buf[p..(p + self.chunk_len)])?;
         }
 
         // reset chunker

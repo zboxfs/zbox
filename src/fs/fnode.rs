@@ -1,3 +1,5 @@
+#![allow(clippy::module_inception)]
+
 use std::cmp::min;
 use std::collections::VecDeque;
 use std::fmt::{self, Debug};
@@ -29,13 +31,13 @@ pub enum FileType {
 
 impl FileType {
     /// Test whether this file type represents a regular file.
-    pub fn is_file(&self) -> bool {
-        *self == FileType::File
+    pub fn is_file(self) -> bool {
+        self == FileType::File
     }
 
     /// Test whether this file type represents a directory.
-    pub fn is_dir(&self) -> bool {
-        *self == FileType::Dir
+    pub fn is_dir(self) -> bool {
+        self == FileType::Dir
     }
 }
 
@@ -77,7 +79,7 @@ impl ChildEntry {
 pub struct Version {
     num: usize,      // version number
     content_id: Eid, // content id
-    len: usize,
+    content_len: usize,
     ctime: Time,
 }
 
@@ -86,7 +88,7 @@ impl Version {
         Version {
             num,
             content_id: content_id.clone(),
-            len,
+            content_len: len,
             ctime: Time::now(),
         }
     }
@@ -99,8 +101,8 @@ impl Version {
     }
 
     /// Returns the byte length of this version of content.
-    pub fn len(&self) -> usize {
-        self.len
+    pub fn content_len(&self) -> usize {
+        self.content_len
     }
 
     /// Returns the creation time of this version of content.
@@ -120,7 +122,7 @@ impl Version {
 #[derive(Debug, Copy, Clone)]
 pub struct Metadata {
     ftype: FileType,
-    len: usize,
+    content_len: usize,
     curr_version: usize,
     ctime: Time,
     mtime: Time,
@@ -144,8 +146,8 @@ impl Metadata {
 
     /// Returns the size of the current version of file, in bytes, this
     /// metadata is for.
-    pub fn len(&self) -> usize {
-        self.len
+    pub fn content_len(&self) -> usize {
+        self.content_len
     }
 
     /// Returns current version number of file listed in this metadata.
@@ -302,7 +304,7 @@ impl Fnode {
     pub fn metadata(&self) -> Metadata {
         Metadata {
             ftype: self.ftype,
-            len: self.curr_len(),
+            content_len: self.curr_len(),
             curr_version: self.curr_ver_num(),
             ctime: self.ctime,
             mtime: self.mtime,
@@ -313,7 +315,7 @@ impl Fnode {
     #[inline]
     pub fn curr_len(&self) -> usize {
         match self.ftype {
-            FileType::File => self.curr_ver().len,
+            FileType::File => self.curr_ver().content_len(),
             FileType::Dir => 0,
         }
     }
@@ -387,7 +389,7 @@ impl Fnode {
 
     #[inline]
     pub fn has_child(&self, name: &str) -> bool {
-        self.kids.iter().position(|ref c| c.name == name).is_some()
+        self.kids.iter().any(|ref c| c.name == name)
     }
 
     #[inline]
@@ -499,7 +501,7 @@ impl Fnode {
                 par.kids.remove(child_idx);
                 Ok(())
             }
-            None => return Err(Error::IsRoot),
+            None => Err(Error::IsRoot),
         }
     }
 

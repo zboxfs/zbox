@@ -181,7 +181,7 @@ impl Node {
     pub fn compare_file_content(&self, repo: &mut Repo) -> Result<()> {
         let mut f = repo.open_file(&self.path)?;
         let meta = f.metadata()?;
-        assert_eq!(meta.len(), self.data.len());
+        assert_eq!(meta.content_len(), self.data.len());
         let mut dst = Vec::new();
         f.read_to_end(&mut dst)?;
         assert_eq!(&dst[..], &self.data[..]);
@@ -381,7 +381,7 @@ impl Step {
     // write data to file at random position
     pub fn write_to_file(&self, f: &mut File, data: &[u8]) -> Result<()> {
         let meta = f.metadata()?;
-        let file_size = meta.len();
+        let file_size = meta.content_len();
         assert!(self.file_pos <= file_size);
         f.seek(SeekFrom::Start(self.file_pos as u64))?;
         f.write_all(&data[..])?;

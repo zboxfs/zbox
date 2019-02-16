@@ -96,7 +96,7 @@ impl IntoRef for SegData {}
 impl Transable for SegData {
     #[inline]
     fn action(&self) -> Action {
-        self.action.clone().unwrap()
+        self.action.unwrap()
     }
 
     fn commit(&mut self, _vol: &VolumeRef) -> Result<()> {
@@ -321,9 +321,9 @@ impl Segment {
 
 impl Debug for Segment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
+        writeln!(
             f,
-            "Segment(len: {}, used: {}, data_id: {:?}, [\n",
+            "Segment(len: {}, used: {}, data_id: {:?}, [",
             self.len, self.used, self.data_id
         )
         .unwrap();

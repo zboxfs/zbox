@@ -170,7 +170,7 @@ impl CacheArea {
                 // clean the download if it is failed
                 drop(file);
                 if vio::remove_file(local_path)
-                    .map_err(|err| Error::from(err))
+                    .map_err(Error::from)
                     .and_then(|_| utils::remove_empty_parent_dir(local_path))
                     .is_err()
                 {
@@ -237,7 +237,7 @@ impl CacheArea {
 
         match self.cache_type {
             CacheType::Mem => {
-                let obj = self.mem_store.get(rel_path).unwrap();
+                let obj = &self.mem_store[rel_path];
                 let len = dst.len();
                 dst.copy_from_slice(&obj[offset..offset + len]);
             }
@@ -264,7 +264,7 @@ impl CacheArea {
 
         match self.cache_type {
             CacheType::Mem => {
-                let obj = self.mem_store.get(rel_path).unwrap();
+                let obj = &self.mem_store[rel_path];
                 Ok(obj.to_owned())
             }
             CacheType::File => {

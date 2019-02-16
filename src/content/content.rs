@@ -99,8 +99,8 @@ impl Content {
     // build reference between content and segment
     #[inline]
     pub fn link(&self, store: &StoreRef) -> Result<()> {
-        let mut store = store.write().unwrap();
-        self.ents.link(&mut store)
+        let store = store.read().unwrap();
+        self.ents.link(&store)
     }
 
     // remove reference between content and segment
@@ -169,7 +169,7 @@ impl Reader {
 
 impl Read for Reader {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
-        if buf.len() == 0 {
+        if buf.is_empty() {
             return Ok(0);
         }
 
@@ -309,7 +309,7 @@ impl Write for Writer {
         let hash = Crypto::hash(chunk);
 
         // update merkel tree
-        self.mtree_wtr.write(chunk)?;
+        let _ = self.mtree_wtr.write(chunk)?;
 
         // if duplicate chunk is found,
         if let Some(ref loc) = self.chk_map.get_refresh(&hash) {

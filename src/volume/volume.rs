@@ -154,7 +154,7 @@ impl Volume {
         let mut ret = self.info.clone();
 
         // mask secrets in uri
-        if let Some(end) = ret.uri.find("@") {
+        if let Some(end) = ret.uri.find('@') {
             let begin = ret.uri.find("://").unwrap() + 3;
             ret.uri.replace_range(begin..end, "***");
         }
@@ -334,7 +334,7 @@ impl Finish for Writer {
         match self.inner {
             InnerWriter::Compress(inner) => {
                 let (mut wtr, result) = inner.finish();
-                result.map_err(|err| Error::from(err))?;
+                result.map_err(Error::from)?;
                 wtr.finish()
             }
             InnerWriter::NoCompress(inner) => inner.finish(),

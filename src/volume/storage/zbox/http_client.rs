@@ -25,7 +25,7 @@ impl CacheControl {
     const MAX_AGE: u64 = 31_536_000;
 
     #[inline]
-    fn to_header_value(&self) -> HeaderValue {
+    fn to_header_value(self) -> HeaderValue {
         HeaderValue::from_str(&self.to_string()).unwrap()
     }
 }
@@ -221,7 +221,7 @@ impl HttpClient {
             .transport
             .get(&uri, headers.as_ref())?
             .error_for_status()?;
-        let result: RepoExistsResp = resp.to_json()?;
+        let result: RepoExistsResp = resp.as_json()?;
         Ok(result.result)
     }
 
@@ -251,7 +251,7 @@ impl HttpClient {
                     err
                 }
             })?;
-        let result: SessionOpenResp = resp.to_json()?;
+        let result: SessionOpenResp = resp.as_json()?;
 
         // if we're re-opening session, but the local update sequence is not
         // equal to remote update sequence, this could happen when remote
@@ -410,7 +410,7 @@ impl HttpClient {
 
         // serialize body as json bytes
         let mut map = HashMap::new();
-        map.insert("paths".to_owned(), bulk.clone());
+        map.insert("paths".to_owned(), bulk.to_vec());
         let buf = serde_json::to_vec(&map)?;
 
         let headers = self

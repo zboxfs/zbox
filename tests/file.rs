@@ -77,7 +77,7 @@ fn file_read_write_st() {
 
         let meta = f.metadata().unwrap();
         let hist = f.history().unwrap();
-        assert_eq!(meta.len(), buf2.len());
+        assert_eq!(meta.content_len(), buf2.len());
         assert_eq!(meta.curr_version(), 3);
         assert_eq!(hist.len(), 3);
     }
@@ -97,7 +97,7 @@ fn file_read_write_st() {
 
         let meta = f.metadata().unwrap();
         let hist = f.history().unwrap();
-        assert_eq!(meta.len(), buf.len() + buf2.len());
+        assert_eq!(meta.content_len(), buf.len() + buf2.len());
         assert_eq!(meta.curr_version(), 4);
         assert_eq!(hist.len(), 4);
     }
@@ -113,7 +113,7 @@ fn file_read_write_st() {
         verify_content(&mut f, &buf2[..3]);
 
         let meta = f.metadata().unwrap();
-        assert_eq!(meta.len(), 3);
+        assert_eq!(meta.content_len(), 3);
         assert_eq!(meta.curr_version(), 5);
     }
 
@@ -131,7 +131,7 @@ fn file_read_write_st() {
         verify_content(&mut f, &combo);
 
         let meta = f.metadata().unwrap();
-        assert_eq!(meta.len(), 5);
+        assert_eq!(meta.content_len(), 5);
         assert_eq!(meta.curr_version(), 6);
     }
 
@@ -144,7 +144,7 @@ fn file_read_write_st() {
         f.set_len(0).unwrap();
 
         let meta = f.metadata().unwrap();
-        assert_eq!(meta.len(), 0);
+        assert_eq!(meta.content_len(), 0);
         assert_eq!(meta.curr_version(), 7);
     }
 
@@ -214,7 +214,7 @@ fn file_read_write_st() {
         verify_content(&mut f, &buf3);
 
         let meta = f.metadata().unwrap();
-        assert_eq!(meta.len(), buf3.len());
+        assert_eq!(meta.content_len(), buf3.len());
         assert_eq!(f.history().unwrap().len(), 1);
     }
 
@@ -233,7 +233,7 @@ fn file_read_write_st() {
 
         let meta = f.metadata().unwrap();
         let history = f.history().unwrap();
-        assert_eq!(meta.len(), buf3.len());
+        assert_eq!(meta.content_len(), buf3.len());
         assert_eq!(history.len(), 2);
 
         let ver_num = history.last().unwrap().num();
@@ -533,19 +533,19 @@ fn file_truncate() {
             .unwrap();
 
         let meta = f.metadata().unwrap();
-        assert_eq!(meta.len(), 0);
+        assert_eq!(meta.content_len(), 0);
         assert_eq!(meta.curr_version(), 3);
 
         // write some data
         f.write_once(&buf[..]).unwrap();
         let meta = f.metadata().unwrap();
-        assert_eq!(meta.len(), 3);
+        assert_eq!(meta.content_len(), 3);
         assert_eq!(meta.curr_version(), 4);
 
         // then truncate again
         f.set_len(0).unwrap();
         let meta = f.metadata().unwrap();
-        assert_eq!(meta.len(), 0);
+        assert_eq!(meta.content_len(), 0);
         assert_eq!(meta.curr_version(), 5);
     }
 }

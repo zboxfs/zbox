@@ -265,12 +265,12 @@ impl TabInfo {
 
     #[inline]
     fn contains(&self, id: &Eid) -> bool {
-        &self.begin <= id && id <= &self.end
+        self.begin <= *id && *id <= self.end
     }
 
     #[inline]
     fn is_overlapping(&self, begin: &Eid, end: &Eid) -> bool {
-        !(end < &self.begin || &self.end < begin)
+        !(*end < self.begin || self.end < *begin)
     }
 }
 
@@ -448,7 +448,7 @@ impl Lsmt {
         lvl.tabs
             .iter()
             .filter(|t| t.is_overlapping(begin.id(), end.id()))
-            .map(|t| t.clone())
+            .cloned()
             .collect()
     }
 

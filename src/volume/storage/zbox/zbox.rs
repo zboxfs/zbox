@@ -71,7 +71,7 @@ fn parse_uri(mut uri: &str) -> Result<(&str, &str, CacheType, usize, PathBuf)> {
         repo_id,
         cache_type.unwrap(),
         cache_size.unwrap(),
-        base.unwrap_or(PathBuf::from("")),
+        base.unwrap_or_else(|| PathBuf::from("")),
     ))
 }
 

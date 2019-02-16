@@ -39,7 +39,7 @@ where
 {
     pub fn new(capacity: usize) -> Self {
         Lru {
-            capacity: capacity,
+            capacity,
             used: 0,
             map: LinkedHashMap::new(),
             meter: M::default(),

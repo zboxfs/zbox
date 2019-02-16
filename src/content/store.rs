@@ -136,7 +136,7 @@ impl Store {
         let ent = self
             .content_map
             .entry(content.hash().clone())
-            .or_insert_with(|| ContentMapEntry::new());
+            .or_insert_with(ContentMapEntry::new);
         ent.inc_ref()?;
         if ent.content_id.is_empty() {
             // no duplication found

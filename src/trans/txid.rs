@@ -29,7 +29,7 @@ impl Txid {
     }
 
     #[inline]
-    pub fn val(&self) -> u64 {
+    pub fn val(self) -> u64 {
         self.0
     }
 
@@ -51,7 +51,7 @@ impl Txid {
 
     #[inline]
     pub fn current_or_empty() -> Self {
-        Txid::current().unwrap_or(Txid::new_empty())
+        Txid::current().unwrap_or_else(|_| Txid::new_empty())
     }
 
     pub fn reset_current() {
@@ -66,7 +66,7 @@ impl Txid {
     }
 
     /// Derive an eid from txid
-    pub fn derive_id(&self, hash_key: &HashKey) -> Eid {
+    pub fn derive_id(self, hash_key: &HashKey) -> Eid {
         let mut buf = Vec::new();
         buf.put_u64_le(self.0);
         let hash = Crypto::hash_with_key(&buf, hash_key);

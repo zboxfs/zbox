@@ -18,7 +18,7 @@ pub enum Arm {
 }
 
 impl Arm {
-    fn to_eid(&self, id: &Eid) -> Eid {
+    fn to_eid(self, id: &Eid) -> Eid {
         // serialize arm
         let mut arm_buf = Vec::new();
         self.serialize(&mut Serializer::new(&mut arm_buf)).unwrap();
@@ -32,13 +32,13 @@ impl Arm {
     }
 
     #[inline]
-    fn to_both_eid(id: &Eid) -> (Eid, Eid) {
+    fn both_eid(id: &Eid) -> (Eid, Eid) {
         (Arm::Left.to_eid(id), Arm::Right.to_eid(id))
     }
 
     #[inline]
-    pub fn other(&self) -> Self {
-        match *self {
+    pub fn other(self) -> Self {
+        match self {
             Arm::Left => Arm::Right,
             Arm::Right => Arm::Left,
         }
@@ -49,7 +49,7 @@ impl Arm {
         *self = self.other();
     }
 
-    pub fn remove_arm(&self, id: &Eid, vol: &VolumeRef) -> Result<()> {
+    pub fn remove_arm(self, id: &Eid, vol: &VolumeRef) -> Result<()> {
         let mut vol = vol.write().unwrap();
         let arm_id = self.to_eid(id);
         vol.del(&arm_id)
@@ -57,7 +57,7 @@ impl Arm {
 
     pub fn remove_all(id: &Eid, vol: &VolumeRef) -> Result<()> {
         let mut vol = vol.write().unwrap();
-        let (left_arm_id, right_arm_id) = Arm::to_both_eid(id);
+        let (left_arm_id, right_arm_id) = Arm::both_eid(id);
         vol.del(&left_arm_id).and(vol.del(&right_arm_id))
     }
 }
@@ -108,6 +108,7 @@ pub trait Armor<'de> {
     }
 
     // try to load both left and right arms
+    #[allow(clippy::type_complexity)]
     fn load_arms(
         &self,
         id: &Eid,
@@ -188,7 +189,7 @@ pub trait Armor<'de> {
 
     // Remove all arms without order, this deletion cannot be recovered.
     fn remove_all_arms(&self, id: &Eid) -> Result<()> {
-        let (left_arm_id, right_arm_id) = Arm::to_both_eid(id);
+        let (left_arm_id, right_arm_id) = Arm::both_eid(id);
         self.del_arm(&left_arm_id).and(self.del_arm(&right_arm_id))
     }
 }

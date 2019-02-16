@@ -53,7 +53,7 @@ impl Storable for MemStorage {
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
         self.super_blk_map
             .get(&suffix)
-            .map(|b| b.clone())
+            .cloned()
             .ok_or(Error::NotFound)
     }
 
@@ -84,10 +84,7 @@ impl Storable for MemStorage {
     }
 
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
-        self.addr_map
-            .get(id)
-            .map(|addr| addr.clone())
-            .ok_or(Error::NotFound)
+        self.addr_map.get(id).cloned().ok_or(Error::NotFound)
     }
 
     #[inline]

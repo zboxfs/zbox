@@ -38,7 +38,7 @@ impl Response {
         Ok(self)
     }
 
-    pub fn to_json<T: DeserializeOwned>(&mut self) -> Result<T> {
+    pub fn as_json<T: DeserializeOwned>(&mut self) -> Result<T> {
         let body = self.inner.body_mut();
         let mut buf = Vec::new();
         body.read_to_end(&mut buf)?;

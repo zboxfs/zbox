@@ -38,13 +38,15 @@ struct ErrorContext {
 }
 
 // controller for random error generation
+#[derive(Default)]
 pub struct Controller {}
 
 impl Controller {
     const ERR_SAMPLE_SIZE: usize = 256;
 
+    #[inline]
     pub fn new() -> Self {
-        Controller {}
+        Self::default()
     }
 
     pub fn turn_on(&self) {

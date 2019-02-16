@@ -18,7 +18,7 @@ use fs::{Metadata, Version};
 use repo::{OpenOptions, Repo, RepoOpener};
 
 // field name in Java class to hold its Rust object
-const RUST_OBJ_FIELD: &'static str = "rustObj";
+const RUST_OBJ_FIELD: &str = "rustObj";
 
 // field name in Java class to identify Rust object
 // 100 - RepoOpener
@@ -26,7 +26,7 @@ const RUST_OBJ_FIELD: &'static str = "rustObj";
 // 102 - OpenOptions
 // 103 - File
 // 104 - VersionReader
-const RUST_OBJID_FIELD: &'static str = "rustObjId";
+const RUST_OBJID_FIELD: &str = "rustObjId";
 
 lazy_static! {
     // global JVM pointer
@@ -398,7 +398,7 @@ pub extern "system" fn Java_io_zbox_fs_Repo_jniInfo<'a>(
         info_obj,
         "versionLimit",
         "I",
-        JValue::Int(info.version_limit() as i32),
+        JValue::Int(i32::from(info.version_limit())),
     )
     .unwrap();
     env.set_field(
@@ -614,8 +614,13 @@ fn metadata_to_jobject<'a>(env: &JNIEnv<'a>, meta: Metadata) -> JObject<'a> {
 
     env.set_field(meta_obj, "fileType", "Lio/zbox/fs/FileType;", ftype_obj)
         .unwrap();
-    env.set_field(meta_obj, "len", "J", JValue::Long(meta.len() as i64))
-        .unwrap();
+    env.set_field(
+        meta_obj,
+        "contentLen",
+        "J",
+        JValue::Long(meta.content_len() as i64),
+    )
+    .unwrap();
     env.set_field(
         meta_obj,
         "currVersion",
@@ -691,7 +696,7 @@ pub extern "system" fn Java_io_zbox_fs_Repo_jniReadDir(
                     ent_obj,
                     "metadata",
                     "Lio/zbox/fs/Metadata;",
-                    JValue::Object(JObject::from(meta_obj)),
+                    JValue::Object(meta_obj),
                 )
                 .unwrap();
 
@@ -761,9 +766,9 @@ fn versions_to_jobjects(
                 .unwrap();
                 env.set_field(
                     ver_obj,
-                    "len",
+                    "contentLen",
                     "J",
-                    JValue::Long(ver.len() as i64),
+                    JValue::Long(ver.content_len() as i64),
                 )
                 .unwrap();
                 env.set_field(
@@ -1074,7 +1079,7 @@ pub extern "system" fn Java_io_zbox_fs_File_jniCurrVersion(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_zbox_fs_File_jniVersionReader<'a, 'b>(
+pub extern "system" fn Java_io_zbox_fs_File_jniVersionReader<'a>(
     env: JNIEnv<'a>,
     obj: JObject,
     ver_num: jlong,

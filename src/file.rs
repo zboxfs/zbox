@@ -445,7 +445,7 @@ impl File {
         }
 
         // re-create reader if there is an existing reader
-        if !self.rdr.is_none() {
+        if self.rdr.is_some() {
             self.renew_reader()?;
         }
 
@@ -510,7 +510,7 @@ impl File {
         })?;
 
         // re-create reader if there is an existing reader
-        if !self.rdr.is_none() {
+        if self.rdr.is_some() {
             self.renew_reader()?;
         }
 
