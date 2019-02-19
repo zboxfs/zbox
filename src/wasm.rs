@@ -340,7 +340,7 @@ impl From<ZboxMetadata> for Metadata {
             fileType: md.file_type().into(),
             isFile: md.is_file(),
             isDir: md.is_dir(),
-            len: md.len(),
+            len: md.content_len(),
             currVersion: md.curr_version(),
             createdAt: time_to_u64(md.created_at()),
             modifiedAt: time_to_u64(md.modified_at()),
@@ -378,7 +378,7 @@ impl From<&ZboxVersion> for Version {
     fn from(ver: &ZboxVersion) -> Self {
         Version {
             num: ver.num(),
-            len: ver.len(),
+            len: ver.content_len(),
             createdAt: time_to_u64(ver.created_at()),
         }
     }
