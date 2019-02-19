@@ -1,15 +1,13 @@
 use std::collections::HashMap;
 use std::convert::AsRef;
 use std::fmt::{self, Debug, Display};
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
 
 use http::header::{self, HeaderMap, HeaderName, HeaderValue};
 use http::{Error as HttpError, HttpTryFrom, StatusCode, Uri};
 
 use super::transport::{DummyTransport, Response, Transport};
-use base::{IntoRef, Version};
+use base::Version;
 use error::{Error, Result};
 
 // remote object cache control
@@ -27,6 +25,17 @@ impl CacheControl {
     #[inline]
     fn to_header_value(self) -> HeaderValue {
         HeaderValue::from_str(&self.to_string()).unwrap()
+    }
+}
+
+impl From<bool> for CacheControl {
+    #[inline]
+    fn from(is_pinned: bool) -> Self {
+        if is_pinned {
+            CacheControl::NoCache
+        } else {
+            CacheControl::Long
+        }
     }
 }
 
@@ -328,20 +337,15 @@ impl HttpClient {
         rel_path: &Path,
         cache_ctl: CacheControl,
     ) -> Result<Vec<u8>> {
+        // if the object is already in deletion bulk
+        if self.del_bulk.iter().any(|p| p == rel_path) {
+            return Err(Error::NotFound);
+        }
+
         let mut resp = self.get_response(rel_path, cache_ctl)?;
         let mut buf: Vec<u8> = Vec::new();
         resp.copy_to(&mut buf)?;
         Ok(buf)
-    }
-
-    pub fn get_to<W: Write>(
-        &mut self,
-        rel_path: &Path,
-        w: &mut W,
-        cache_ctl: CacheControl,
-    ) -> Result<usize> {
-        let mut resp = self.get_response(rel_path, cache_ctl)?;
-        resp.copy_to(w).map(|copied| copied as usize)
     }
 
     // send put request
@@ -373,6 +377,11 @@ impl HttpClient {
     ) -> Result<()> {
         debug!("put {:?}, offset {}, len {}", rel_path, offset, body.len());
 
+        // if the object is already in deletion bulk, we need to remove it
+        if let Some(idx) = self.del_bulk.iter().position(|p| p == rel_path) {
+            self.del_bulk.remove(idx);
+        }
+
         let uri = self.make_uri(rel_path)?;
 
         self.send_put_req(&uri, offset, cache_ctl, body)
@@ -392,9 +401,10 @@ impl HttpClient {
     }
 
     #[inline]
-    pub fn del(&mut self, rel_path: &Path) {
+    pub fn del(&mut self, rel_path: &Path) -> Result<()> {
         self.del_bulk.push(rel_path.to_path_buf());
         self.set_updated();
+        Ok(())
     }
 
     // send bulk delelte
@@ -436,7 +446,7 @@ impl HttpClient {
     }
 
     #[inline]
-    pub fn flush_deletion(&mut self) -> Result<()> {
+    pub fn flush(&mut self) -> Result<()> {
         let bulk = self.del_bulk.clone();
         self.send_bulk_del_req(&bulk).or_else(|err| {
             // try reopen remote session once if it is expired
@@ -501,10 +511,6 @@ impl Drop for HttpClient {
     }
 }
 
-impl IntoRef for HttpClient {}
-
-pub type HttpClientRef = Arc<RwLock<HttpClient>>;
-
 #[cfg(test)]
 mod tests {
 
@@ -550,9 +556,9 @@ mod tests {
         assert_eq!(client.open_session().unwrap_err(), Error::Opened);
 
         // test delete
-        client.del(&rel_path);
+        client.del(&rel_path).unwrap();
 
-        client.flush_deletion().unwrap();
+        client.flush().unwrap();
 
         // close session and open it again
         drop(client);

@@ -113,7 +113,7 @@ impl RecycleMap {
         local_cache: &mut LocalCache,
     ) -> Result<Self> {
         let rel_path = Path::new(RECYCLE_FILE);
-        let buf = local_cache.get_pinned(&rel_path)?;
+        let buf = local_cache.get(&rel_path)?;
         let buf = crypto.decrypt(&buf, key)?;
         let mut de = Deserializer::new(&buf[..]);
         let ret: Self = Deserialize::deserialize(&mut de)?;
@@ -222,7 +222,11 @@ impl SectorMgr {
 
             // otherwise get it from local cache
             let rel_path = sector_rel_path(sec_idx, &self.hash_key);
-            local_cache.get(&rel_path, offset, &mut dst[read..read + len])?;
+            local_cache.get_to(
+                &rel_path,
+                offset,
+                &mut dst[read..read + len],
+            )?;
 
             read += len;
         }
@@ -242,7 +246,7 @@ impl SectorMgr {
                 assert_eq!(self.sec_idx, 0);
                 let mut local_cache = self.local_cache.write().unwrap();
                 let rel_path = sector_rel_path(sec_idx, &self.hash_key);
-                local_cache.get(
+                local_cache.get_to(
                     &rel_path,
                     self.sec_top,
                     &mut self.sec[self.sec_top..offset],

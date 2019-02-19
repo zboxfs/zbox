@@ -179,7 +179,7 @@ impl Storable for ZboxStorage {
         let rel_path =
             Path::new(Self::SUPER_BLK_STEM).with_extension(suffix.to_string());
         let mut local_cache = self.local_cache.write().unwrap();
-        local_cache.get_pinned(&rel_path)
+        local_cache.get(&rel_path)
     }
 
     fn put_super_block(&mut self, super_blk: &[u8], suffix: u64) -> Result<()> {
@@ -193,7 +193,7 @@ impl Storable for ZboxStorage {
     fn get_wal(&mut self, id: &Eid) -> Result<Vec<u8>> {
         let rel_path = id.to_path_buf(&self.wal_base);
         let mut local_cache = self.local_cache.write().unwrap();
-        local_cache.get_pinned(&rel_path)
+        local_cache.get(&rel_path)
     }
 
     #[inline]
@@ -207,7 +207,7 @@ impl Storable for ZboxStorage {
     fn del_wal(&mut self, id: &Eid) -> Result<()> {
         let rel_path = id.to_path_buf(&self.wal_base);
         let mut local_cache = self.local_cache.write().unwrap();
-        local_cache.del_pinned(&rel_path)
+        local_cache.del(&rel_path)
     }
 
     #[inline]
@@ -342,9 +342,9 @@ mod tests {
     fn zbox_storage_file() {
         let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
         let base = tmpdir.path().to_path_buf();
-        if base.exists() {
-            std::fs::remove_dir_all(&base).unwrap();
-        }
+        /*if base.exists() {*/
+        /*std::fs::remove_dir_all(&base).unwrap();*/
+        /*}*/
         let uri = format!(
             "accessKey456@repo456?cache_type=file&cache_size=1&base={}",
             base.display()

@@ -47,7 +47,7 @@ where
     fn load(&self, id: &Eid) -> Result<Self::Item> {
         let mut local_cache = self.local_cache.write().unwrap();
         let rel_path = id.to_path_buf(Self::DIR_NAME);
-        let buf = local_cache.get_index(&rel_path)?;
+        let buf = local_cache.get(&rel_path)?;
         let buf = self.crypto.decrypt(&buf, &self.key)?;
         let mut de = Deserializer::new(&buf[..]);
         let ret: Self::Item = Deserialize::deserialize(&mut de)?;
@@ -60,12 +60,12 @@ where
         let mut buf = Vec::new();
         item.serialize(&mut Serializer::new(&mut buf)).unwrap();
         let buf = self.crypto.encrypt(&buf, &self.key)?;
-        local_cache.put_index(&rel_path, &buf)
+        local_cache.put_pinned(&rel_path, &buf)
     }
 
     fn remove(&self, id: &Eid) -> Result<()> {
         let mut local_cache = self.local_cache.write().unwrap();
         let rel_path = id.to_path_buf(Self::DIR_NAME);
-        local_cache.del_index(&rel_path)
+        local_cache.del(&rel_path)
     }
 }
