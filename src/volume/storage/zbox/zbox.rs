@@ -1,3 +1,4 @@
+use std::fmt::{self, Debug};
 use std::path::{Path, PathBuf};
 
 use super::index_accessor::IndexAccessor;
@@ -76,7 +77,6 @@ fn parse_uri(mut uri: &str) -> Result<(&str, &str, CacheType, usize, PathBuf)> {
 }
 
 /// Zbox Storage
-#[derive(Debug)]
 pub struct ZboxStorage {
     wal_base: PathBuf,
     local_cache: LocalCacheRef,
@@ -248,6 +248,13 @@ impl Storable for ZboxStorage {
         self.idx_mgr.flush()?;
         let mut local_cache = self.local_cache.write().unwrap();
         local_cache.flush()
+    }
+}
+
+impl Debug for ZboxStorage {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("ZboxStorage").finish()
     }
 }
 

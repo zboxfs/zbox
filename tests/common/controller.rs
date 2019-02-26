@@ -1,5 +1,5 @@
 // random error controller
-#[cfg(feature = "storage-faulty")]
+#[cfg(any(feature = "storage-faulty", feature = "storage-zbox-faulty"))]
 pub mod imp {
     use std::fmt::{self, Debug};
 
@@ -43,7 +43,7 @@ pub mod imp {
     }
 }
 
-#[cfg(not(feature = "storage-faulty"))]
+#[cfg(not(any(feature = "storage-faulty", feature = "storage-zbox-faulty")))]
 #[allow(dead_code)]
 pub mod imp {
     use super::super::crypto;

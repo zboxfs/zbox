@@ -9,6 +9,7 @@ use http::{HeaderMap, Response as HttpResponse, Uri};
 
 use super::{Response, Transport};
 use error::Result;
+use volume::storage::faulty_ctl::Controller;
 
 lazy_static! {
     // static store
@@ -17,7 +18,6 @@ lazy_static! {
     };
 }
 
-// convert reqwest response to response
 fn create_response(status: StatusCode, body: Vec<u8>) -> Result<Response> {
     let mut builder = HttpResponse::builder();
     builder.status(status);
@@ -40,29 +40,39 @@ struct StaticStore {
 }
 
 impl StaticStore {
+    #[inline]
     fn update(&mut self) {
         if !self.is_updated {
             self.update_seq += 1;
+            self.is_updated = true;
         }
     }
 }
 
-pub struct FaultyTransport;
+pub struct FaultyTransport {
+    ctlr: Controller,
+}
 
 impl FaultyTransport {
     pub fn new(_timeout: u32) -> Result<Self> {
-        Ok(FaultyTransport {})
+        Ok(FaultyTransport {
+            ctlr: Controller::new(),
+        })
     }
 }
 
 impl Transport for FaultyTransport {
     fn get(&self, uri: &Uri, _headers: &HeaderMap) -> Result<Response> {
+        self.ctlr.make_random_error()?;
+
         let mut store = STORE.lock().unwrap();
 
         if uri.path().ends_with("/open") {
             if store.is_opened {
-                return create_response(StatusCode::CONFLICT, Vec::new());
+                //return create_response(StatusCode::CONFLICT, Vec::new());
             }
+
+            // fixed response body
             let body = format!(
                 r#"{{
                 "status":"OK",
@@ -73,6 +83,7 @@ impl Transport for FaultyTransport {
                 store.update_seq
             );
             store.is_opened = true;
+            store.is_updated = false;
             return create_response(StatusCode::OK, body.into_bytes());
         }
 
@@ -102,25 +113,42 @@ impl Transport for FaultyTransport {
         headers: &HeaderMap,
         body: &[u8],
     ) -> Result<Response> {
-        let mut store = STORE.lock().unwrap();
+        self.ctlr.make_random_error()?;
 
-        let header = HeaderName::from_static("zbox-offset");
-        let offset = headers.get(&header).unwrap();
-        let offset: usize = offset.to_str().unwrap().parse().unwrap();
+        let mut store = STORE.lock().unwrap();
+        let header = HeaderName::from_static("zbox-range");
+        let range = headers.get(&header).unwrap();
+        let range = range.to_str().unwrap();
+        let idx = range.find('-').unwrap();
+        let begin: usize = range[..idx].parse().unwrap();
+        let end: usize = range[idx + 1..].parse().unwrap();
+        assert_eq!(end - begin + 1, body.len());
+
         store
             .map
             .entry(uri.to_owned())
             .and_modify(|val| {
-                val.truncate(offset);
+                // set new length for the value, fill gap with constant 42
+                val.resize(begin, 42);
                 val.extend_from_slice(body);
             })
-            .or_insert_with(|| body.to_owned());
+            .or_insert_with(|| {
+                if begin == 0 {
+                    body.to_owned()
+                } else {
+                    let mut buf = vec![42u8; begin]; // gap buffer
+                    buf.extend_from_slice(body);
+                    buf
+                }
+            });
 
         store.update();
         create_ok_response()
     }
 
     fn delete(&mut self, uri: &Uri, _headers: &HeaderMap) -> Result<Response> {
+        self.ctlr.make_random_error()?;
+
         let mut store = STORE.lock().unwrap();
         store.map.remove(uri);
         store.update();
@@ -129,17 +157,24 @@ impl Transport for FaultyTransport {
 
     fn delete_bulk(
         &mut self,
-        _uri: &Uri,
+        uri: &Uri,
         _headers: &HeaderMap,
         body: &[u8],
     ) -> Result<Response> {
+        self.ctlr.make_random_error()?;
+
+        let base = uri.to_string();
+        let idx = base.find("bulk").unwrap();
+        let base = &base[..idx].to_string();
+
         let mut store = STORE.lock().unwrap();
         let map: HashMap<String, Vec<PathBuf>> =
             serde_json::from_slice(body).unwrap();
         for list in map.values() {
             for uri in list {
-                let uri = uri.to_str().unwrap().parse::<Uri>().unwrap();
-                store.map.remove(&uri);
+                let url = base.to_owned() + uri.to_str().unwrap();
+                let url = url.parse::<Uri>().unwrap();
+                store.map.remove(&url);
             }
         }
         store.update();

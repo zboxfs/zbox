@@ -64,7 +64,7 @@ storage-zbox = ["http", "serde_json"]
 
 [dependencies]
 bytes = "0.4.10"
-cfg-if = "0.1"
+cfg-if = "0.1.6"
 env_logger = "0.6.0"
 log = "0.4.6"
 #lz4 = "1.23.1"
@@ -75,12 +75,12 @@ serde_derive = "1.0.80"
 lazy_static = { version = "1.2.0", optional = true }
 libsqlite3-sys = { version = "0.10.0", optional = true }
 redis = { version = "0.9.1", optional = true }
-http  = { version = "0.1.14", optional = true }
+http  = { version = "0.1.16", optional = true }
 serde_json = { version = "1.0.33", optional = true }
 reqwest  = { version = "0.9.5", optional = true }
 jni = { version = "0.10.2", optional = true }
-wasm-bindgen = { version = "0.2", features = ["serde-serialize"], optional = true }
-js-sys = { version = "0.3", optional = true }
+wasm-bindgen = { version = "0.2.37", features = ["serde-serialize"], optional = true }
+js-sys = { version = "0.3.14", optional = true }
 wee_alloc = { version = "0.4.2", optional = true }
 wasm-logger = { version = "0.1.1", optional = true }
 
@@ -92,14 +92,14 @@ features = ["serde_impl"]
 android_logger = "0.7.0"
 
 [dependencies.web-sys]
-version = "0.3"
+version = "0.3.14"
 optional = true
 features = [ "Crypto", "WorkerGlobalScope", "XmlHttpRequest", "XmlHttpRequestResponseType", "Blob"]
 
 [dev-dependencies]
 tempdir = "0.3.7"
-rand = "0.6"
-rand_xorshift = "0.1"
+rand = "0.6.5"
+rand_xorshift = "0.1.1"
 
 [build-dependencies]
 pkg-config = "0.3.14"

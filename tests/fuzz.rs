@@ -1,4 +1,8 @@
-#![cfg(any(feature = "storage-faulty", feature = "storage-file"))]
+#![cfg(any(
+    feature = "storage-faulty",
+    feature = "storage-file",
+    feature = "storage-zbox-faulty"
+))]
 
 #[macro_use]
 extern crate cfg_if;
@@ -18,7 +22,9 @@ use zbox::{Error, OpenOptions, Repo, RepoOpener, Result};
 // check if the error is caused by the faulty storage
 macro_rules! is_faulty_err {
     ($x:expr) => {
-        if cfg!(feature = "storage-faulty") {
+        if cfg!(feature = "storage-faulty")
+            || cfg!(feature = "storage-zbox-faulty")
+        {
             match $x {
                 Err(ref err) if err.description() == "Faulty error" => true,
                 _ => false,
@@ -34,7 +40,9 @@ macro_rules! is_faulty_err {
 macro_rules! skip_faulty {
     ($x:expr) => {{
         let result = $x;
-        if cfg!(feature = "storage-faulty") {
+        if cfg!(feature = "storage-faulty")
+            || cfg!(feature = "storage-zbox-faulty")
+        {
             if let Err(ref err) = result {
                 if err.description() == "Faulty error" {
                     return;
@@ -126,7 +134,7 @@ impl Testable for Tester {
         step: &Step,
         ctlgrp: &mut ControlGroup,
     ) {
-        let node = ctlgrp.0[step.node_idx].clone();
+        let node = ctlgrp[step.node_idx].clone();
         //println!("===> node: {:?}, step: {:?}", node, step);
 
         match step.action {
@@ -331,7 +339,9 @@ impl Testable for Tester {
                 // NOTE: DeleteAll is not a atomic operation, it is hard to
                 // replicate the action to control group, so we have to skip
                 // this test for faulty storage test.
-                if cfg!(feature = "storage-faulty") {
+                if cfg!(feature = "storage-faulty")
+                    || cfg!(feature = "storage-zbox-faulty")
+                {
                     return;
                 }
 
@@ -400,7 +410,9 @@ impl Testable for Tester {
                 // NOTE: DeleteAll is not a atomic operation, it is hard to
                 // replicate the action to control group, so we have to skip
                 // this test for faulty storage test.
-                if cfg!(feature = "storage-faulty") {
+                if cfg!(feature = "storage-faulty")
+                    || cfg!(feature = "storage-zbox-faulty")
+                {
                     return;
                 }
 
@@ -446,17 +458,9 @@ fn fuzz_test() {
     let rounds = 50; // number of rounds in one batch
     let worker_cnt = 2; // worker thread count
 
-    let storage = if cfg!(feature = "storage-faulty") {
-        "faulty"
-    } else if cfg!(feature = "storage-file") {
-        "file"
-    } else {
-        panic!("Fuzz test only supports faulty and file storage.");
-    };
-
     for _ in 0..batches {
         let tester = Tester {};
-        let fuzzer = Fuzzer::new(storage).into_ref();
+        let fuzzer = Fuzzer::new().into_ref();
         Fuzzer::run(fuzzer, tester.into_ref(), rounds, worker_cnt);
     }
 }
@@ -466,6 +470,6 @@ fn fuzz_test() {
 #[ignore]
 fn fuzz_test_rerun() {
     let tester = Tester {};
-    // copy batch number from std output and replace it below
-    Fuzzer::rerun("1550214900", Box::new(tester));
+    // copy batch number from output and replace it below
+    Fuzzer::rerun("1551163926", Box::new(tester));
 }

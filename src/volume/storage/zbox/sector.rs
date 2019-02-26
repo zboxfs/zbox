@@ -211,22 +211,20 @@ impl SectorMgr {
             let offset = (sec_span.begin % BLKS_PER_SECTOR) * BLK_SIZE;
             let len = sec_span.bytes_len();
 
-            // if the blocks are still in the sector buffer
+            // if the blocks to be read are still in the staging sector
             if sec_idx == self.sec_idx && offset < self.sec_top {
                 let end = offset + len;
                 assert!(end <= self.sec_top);
                 dst[read..read + len].copy_from_slice(&self.sec[offset..end]);
-                read += len;
-                continue;
+            } else {
+                // otherwise read it from local cache
+                let rel_path = sector_rel_path(sec_idx, &self.hash_key);
+                local_cache.get_to(
+                    &rel_path,
+                    offset,
+                    &mut dst[read..read + len],
+                )?;
             }
-
-            // otherwise get it from local cache
-            let rel_path = sector_rel_path(sec_idx, &self.hash_key);
-            local_cache.get_to(
-                &rel_path,
-                offset,
-                &mut dst[read..read + len],
-            )?;
 
             read += len;
         }
@@ -240,26 +238,36 @@ impl SectorMgr {
             let offset = (sec_span.begin % BLKS_PER_SECTOR) * BLK_SIZE;
             let len = sec_span.bytes_len();
 
-            // If there is a sector buffer gap, fill it by reading data
-            // from local cache. This only happend during first-time call.
-            if offset > self.sec_top {
-                assert_eq!(self.sec_idx, 0);
-                let mut local_cache = self.local_cache.write().unwrap();
-                let rel_path = sector_rel_path(sec_idx, &self.hash_key);
-                local_cache.get_to(
-                    &rel_path,
-                    self.sec_top,
-                    &mut self.sec[self.sec_top..offset],
-                )?;
-                self.sec_top = offset;
+            // if this write is not continuous, we need to 'jump' in the
+            // staging sector accordingly
+            if sec_idx != self.sec_idx || offset != self.sec_top {
+                // if this is very first time write, fill the gap by reading
+                // from local cache
+                if self.sec_idx == 0 && self.sec_top == 0 && offset > 0 {
+                    let mut local_cache = self.local_cache.write().unwrap();
+                    let rel_path = sector_rel_path(sec_idx, &self.hash_key);
+                    match local_cache.get(&rel_path) {
+                        Ok(data) => {
+                            self.sec[..data.len()].copy_from_slice(&data);
+                        }
+                        Err(ref err) if *err == Error::NotFound => {
+                            // if the block watermark jumped too far, we would
+                            // not be able to read the gap because the gap is
+                            // in a hole, so we ignore this NotFound error
+                        }
+                        Err(err) => return Err(err),
+                    }
+                }
+
+                // reset base pointer with new offset
+                self.sec_base = offset;
             }
 
             // copy data to sector buffer
-            self.sec[self.sec_top..self.sec_top + len]
-                .copy_from_slice(&blks[..len]);
-            blks = &blks[len..];
-            self.sec_top += len;
+            self.sec_top = offset + len;
             self.sec_idx = sec_idx;
+            self.sec[offset..self.sec_top].copy_from_slice(&blks[..len]);
+            blks = &blks[len..];
 
             // ensure blocks are not in deleted map
             self.rmap.remove_deleted(sec_idx, sec_span);
@@ -298,6 +306,7 @@ impl SectorMgr {
         )?;
         if self.sec_top >= SECTOR_SIZE {
             self.sec_top = 0;
+            self.sec_idx += 1;
         }
         self.sec_base = self.sec_top;
 

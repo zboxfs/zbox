@@ -472,7 +472,7 @@ impl Fuzzer {
     const RND_DATA_LEN: usize = 2 * 1024 * 1024;
     const DATA_LEN: usize = 2 * Self::RND_DATA_LEN;
 
-    pub fn new(storage_type: &str) -> Self {
+    pub fn new() -> Self {
         init_env();
 
         // create fuzz test dir
@@ -486,12 +486,20 @@ impl Fuzzer {
         );
         let path = base.join(&batch);
         fs::create_dir_all(&path).unwrap();
+        println!("Create fuzz test dir at {:?}.", path);
+
+        // create uri
+        let uri = if cfg!(feature = "storage-faulty") {
+            format!("faulty://{}", path.join(Self::REPO).to_str().unwrap())
+        } else if cfg!(feature = "storage-file") {
+            format!("file://{}", path.join(Self::REPO).to_str().unwrap())
+        } else if cfg!(feature = "storage-zbox-faulty") {
+            String::from("zbox://foo@bar?cache_type=mem&cache_size=1")
+        } else {
+            panic!("Fuzz test only supports faulty and file storage.");
+        };
 
         // open repo
-        println!("Create fuzz test dir at {:?}.", path);
-        let uri = storage_type.to_string()
-            + "://"
-            + path.join(Self::REPO).to_str().unwrap();
         let repo = RepoOpener::new()
             .create(true)
             .open(&uri, Self::PWD)
@@ -631,9 +639,11 @@ impl Fuzzer {
 
         // create and open repo
         let repo_path = base.join(Self::REPO);
-        let uri = storage.clone() + "://" + repo_path.to_str().unwrap();
+        let mut uri = storage.clone() + "://" + repo_path.to_str().unwrap();
         if storage == "file" {
             fs::remove_dir_all(&repo_path).unwrap();
+        } else if storage == "zbox" {
+            uri = String::from("zbox://foo@bar?cache_type=mem&cache_size=1");
         }
         let repo = RepoOpener::new()
             .create(true)
@@ -707,6 +717,13 @@ impl Fuzzer {
                                     worker, round, rounds
                                 );
                             }
+
+                            // verify repo every 100 rounds
+                            if round > 0 && round % 100 == 0 {
+                                fuzzer.ctlr.turn_off();
+                                fuzzer.verify(&ctlgrp);
+                                fuzzer.ctlr.turn_on();
+                            }
                         }
                         println!("[{}]: Finished.", worker);
                     })
@@ -722,6 +739,7 @@ impl Fuzzer {
         {
             let mut fuzzer = fuzzer.write().unwrap();
             let ctlgrp = ctlgrp.read().unwrap();
+            fuzzer.ctlr.turn_off();
             fuzzer.verify(&ctlgrp);
         }
     }
@@ -753,26 +771,31 @@ impl Fuzzer {
         // ------------------
         for round in 0..rounds {
             let step = &steps[round];
-            //if round == 12 { fuzzer.ctlr.turn_off(); }
+            //if round == 18 { fuzzer.ctlr.turn_off(); }
             tester.test_round(&mut fuzzer, &step, &mut ctlgrp);
-            //if round == 12 { break; }
+            //if round == 263 { break; }
             if round % 10 == 0 {
                 println!("[{}]: {}/{}...", worker, round, rounds);
+            }
+
+            // verify repo every 100 rounds
+            if round > 0 && round % 100 == 0 {
+                fuzzer.ctlr.turn_off();
+                fuzzer.verify(&ctlgrp);
+                fuzzer.ctlr.turn_on();
             }
         }
         println!("[{}]: Finished.", worker);
 
         // verify
         // ------------------
+        fuzzer.ctlr.turn_off();
         fuzzer.verify(&ctlgrp);
     }
 
     // verify fuzz test result
     fn verify(&mut self, ctlgrp: &ControlGroup) {
         println!("Start verifying...");
-
-        // turn off random error controller
-        self.ctlr.turn_off();
 
         // sort control group nodes by its path for fast search
         let mut ctlgrp = ctlgrp.clone();
@@ -821,6 +844,6 @@ impl Fuzzer {
             }
         }
 
-        println!("Completed.");
+        println!("Verify completed.");
     }
 }

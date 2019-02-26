@@ -16,7 +16,7 @@ pub use self::armor::{
 pub use self::storage::StorageRef;
 pub use self::volume::{Info, Reader, Volume, VolumeRef, Writer};
 
-#[cfg(feature = "storage-faulty")]
+#[cfg(any(feature = "storage-faulty", feature = "storage-zbox-faulty"))]
 pub use self::storage::FaultyController;
 
 // block and frame size

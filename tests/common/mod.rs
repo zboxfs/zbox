@@ -1,10 +1,18 @@
 #![allow(dead_code)]
 extern crate tempdir;
 
-#[cfg(any(feature = "storage-faulty", feature = "storage-file"))]
+#[cfg(any(
+    feature = "storage-faulty",
+    feature = "storage-file",
+    feature = "storage-zbox-faulty"
+))]
 pub mod controller;
 pub mod crypto;
-#[cfg(any(feature = "storage-faulty", feature = "storage-file"))]
+#[cfg(any(
+    feature = "storage-faulty",
+    feature = "storage-file",
+    feature = "storage-zbox-faulty"
+))]
 pub mod fuzzer;
 
 use self::tempdir::TempDir;
@@ -34,7 +42,7 @@ cfg_if! {
                 TestEnv { repo, tmpdir: Some(tmpdir) }
             }
         }
-    } else if #[cfg(feature = "storage-zbox-native")] {
+    } else if #[cfg(any(feature = "storage-zbox-native", feature = "storage-zbox-faulty"))] {
         impl TestEnv {
             pub fn new() -> Self {
                 init_env();

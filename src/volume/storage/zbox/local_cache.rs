@@ -330,8 +330,8 @@ impl LocalCache {
         // verify local update sequence against remote
         if meta.update_seq != remote_update_seq {
             warn!(
-                "remote repo is changed, local: {}, remote: {}, \
-                 invalidate local cache",
+                "remote repo changed, local: {}, remote: {}, \
+                 clear local cache",
                 meta.update_seq, remote_update_seq
             );
 

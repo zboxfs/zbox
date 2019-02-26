@@ -318,6 +318,7 @@ impl Debug for Storage {
 }
 
 impl Display for Storage {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Storage({:?})", self.depot)
     }

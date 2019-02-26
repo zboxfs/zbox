@@ -12,11 +12,14 @@ mod mem;
 #[cfg(feature = "storage-file")]
 mod file;
 
+#[cfg(any(feature = "storage-faulty", feature = "storage-zbox-faulty"))]
+mod faulty_ctl;
+
 #[cfg(feature = "storage-faulty")]
 mod faulty;
 
-#[cfg(feature = "storage-faulty")]
-pub use self::faulty::Controller as FaultyController;
+#[cfg(any(feature = "storage-faulty", feature = "storage-zbox-faulty"))]
+pub use self::faulty_ctl::Controller as FaultyController;
 
 #[cfg(feature = "storage-sqlite")]
 mod sqlite;

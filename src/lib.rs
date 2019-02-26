@@ -139,7 +139,7 @@ pub mod ffi;
 #[macro_use]
 extern crate lazy_static;
 
-#[cfg(feature = "storage-faulty")]
+#[cfg(any(feature = "storage-faulty", feature = "storage-zbox-faulty"))]
 pub use self::volume::FaultyController;
 
 #[cfg(feature = "storage-sqlite")]
