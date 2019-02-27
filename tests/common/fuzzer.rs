@@ -294,6 +294,21 @@ impl Step {
     // file name to save the steps
     const STEPS_FILE: &'static str = "steps";
 
+    fn new(round: usize, ctlgrp: &ControlGroup) -> Self {
+        let ctlgrp_len = ctlgrp.0.len();
+        Step {
+            round,
+            action: Action::New,
+            node_idx: 0,
+            tgt_idx: ctlgrp_len - 1,
+            ftype: FileType::Dir,
+            name: format!("{}", round),
+            file_pos: 0,
+            data_pos: 0,
+            data_len: 0,
+        }
+    }
+
     fn new_random(round: usize, ctlgrp: &ControlGroup, data: &[u8]) -> Self {
         let ctlgrp_len = ctlgrp.0.len();
         let node_idx = crypto::random_usize(ctlgrp_len);
@@ -451,6 +466,7 @@ pub struct Fuzzer {
     pub repo_handle: RepoHandle,
     pub seed: crypto::RandomSeed,
     pub ctlr: Controller,
+    pub init_rounds: usize,
     pub data: Vec<u8>,
 }
 
@@ -458,8 +474,9 @@ impl Fuzzer {
     // fuzz test base dir path
     const BASE: &'static str = "./fuzz_test/";
 
-    // storage, seed and permutation file name
+    // storage, init rounds, seed and permutation file name
     const STORAGE: &'static str = "storage";
+    const INIT_ROUNDS: &'static str = "init_rounds";
     const SEED: &'static str = "seed";
     const PERMU: &'static str = "permu";
 
@@ -472,7 +489,7 @@ impl Fuzzer {
     const RND_DATA_LEN: usize = 2 * 1024 * 1024;
     const DATA_LEN: usize = 2 * Self::RND_DATA_LEN;
 
-    pub fn new() -> Self {
+    pub fn new(init_rounds: usize) -> Self {
         init_env();
 
         // create fuzz test dir
@@ -505,21 +522,22 @@ impl Fuzzer {
             .open(&uri, Self::PWD)
             .unwrap();
 
-        // create test environment
-        let mut ret = Fuzzer {
+        // create fuzzer
+        let mut fuzzer = Fuzzer {
             batch,
             path,
             uri,
             repo_handle: RepoHandle::new(repo),
             seed: crypto::RandomSeed::new(),
             ctlr: Controller::new(),
+            init_rounds,
             data: vec![0; Self::DATA_LEN],
         };
 
         // initial test
-        ret.init();
+        fuzzer.init();
 
-        ret
+        fuzzer
     }
 
     pub fn into_ref(self) -> Arc<RwLock<Self>> {
@@ -559,6 +577,16 @@ impl Fuzzer {
             .open(&path)
             .unwrap();
         file.write_all(self.storage_type().as_bytes()).unwrap();
+
+        // save init_rounds file
+        let path = self.path.join(Self::INIT_ROUNDS);
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&path)
+            .unwrap();
+        file.write_all(&self.init_rounds.to_le_bytes()).unwrap();
 
         // save seed file
         let path = self.path.join(Self::SEED);
@@ -601,6 +629,15 @@ impl Fuzzer {
         let mut file = fs::File::open(&path).unwrap();
         file.read_to_end(&mut buf).unwrap();
         let storage = String::from_utf8(buf).unwrap();
+
+        // load init rounds file
+        let mut buf = Vec::new();
+        let path = base.join(Self::INIT_ROUNDS);
+        let mut file = fs::File::open(&path).unwrap();
+        file.read_to_end(&mut buf).unwrap();
+        let mut a = [0u8; 8];
+        a.copy_from_slice(&buf[..8]);
+        let init_rounds = usize::from_le_bytes(a);
 
         // load seed file
         let mut buf = Vec::new();
@@ -659,6 +696,7 @@ impl Fuzzer {
             repo_handle: RepoHandle::new(repo),
             seed,
             ctlr: Controller::new(),
+            init_rounds,
             data,
         }
     }
@@ -673,6 +711,23 @@ impl Fuzzer {
         // create control group
         let ctlgrp = Arc::new(RwLock::new(ControlGroup::new()));
 
+        // run init rounds without random error
+        {
+            let mut fuzzer = fuzzer.write().unwrap();
+            if fuzzer.init_rounds > 0 {
+                let tester = tester.read().unwrap();
+                let mut ctlgrp = ctlgrp.write().unwrap();
+
+                println!("Run {} init rounds", fuzzer.init_rounds);
+                for round in 0..fuzzer.init_rounds {
+                    let step = Step::new(round, &ctlgrp);
+                    tester.test_round(&mut fuzzer, &step, &mut ctlgrp);
+                }
+                println!("Init rounds finished");
+            }
+        }
+
+        // reset random error controller and turn it on
         {
             let fuzzer = fuzzer.read().unwrap();
 
@@ -681,7 +736,6 @@ impl Fuzzer {
                 fuzzer.batch, rounds, worker_cnt
             );
 
-            // reset random error controller and turn it on
             fuzzer.ctlr.reset(&fuzzer.seed);
             fuzzer.ctlr.turn_on();
         }
@@ -755,6 +809,16 @@ impl Fuzzer {
 
         // create control group
         let mut ctlgrp = ControlGroup::new();
+
+        // run init rounds without random error
+        if fuzzer.init_rounds > 0 {
+            println!("Run {} init rounds", fuzzer.init_rounds);
+            for round in 0..fuzzer.init_rounds {
+                let step = Step::new(round, &ctlgrp);
+                tester.test_round(&mut fuzzer, &step, &mut ctlgrp);
+            }
+            println!("Init rounds finished");
+        }
 
         let curr = thread::current();
         let worker = curr.name().unwrap();

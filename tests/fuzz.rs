@@ -455,12 +455,13 @@ impl Testable for Tester {
 fn fuzz_test() {
     // increase below numbers to perform intensive fuzz test
     let batches = 1; // number of fuzz test batches
+    let init_rounds = 100; // initial rounds without random errors
     let rounds = 50; // number of rounds in one batch
     let worker_cnt = 2; // worker thread count
 
     for _ in 0..batches {
         let tester = Tester {};
-        let fuzzer = Fuzzer::new().into_ref();
+        let fuzzer = Fuzzer::new(init_rounds).into_ref();
         Fuzzer::run(fuzzer, tester.into_ref(), rounds, worker_cnt);
     }
 }
@@ -471,5 +472,5 @@ fn fuzz_test() {
 fn fuzz_test_rerun() {
     let tester = Tester {};
     // copy batch number from output and replace it below
-    Fuzzer::rerun("1551163926", Box::new(tester));
+    Fuzzer::rerun("1551267522", Box::new(tester));
 }

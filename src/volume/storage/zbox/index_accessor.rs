@@ -50,7 +50,7 @@ where
         let buf = local_cache.get(&rel_path)?;
         let buf = self.crypto.decrypt(&buf, &self.key)?;
         let mut de = Deserializer::new(&buf[..]);
-        let ret: Self::Item = Deserialize::deserialize(&mut de)?;
+        let ret = Deserialize::deserialize(&mut de)?;
         Ok(ret)
     }
 

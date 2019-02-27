@@ -339,7 +339,7 @@ impl Level {
 
 // Log Structured Merge Tree
 //
-// Inspired from LevelDB implementation.
+// Inspired by LevelDB implementation.
 // https://github.com/google/leveldb/blob/master/doc/impl.md
 #[derive(Deserialize, Serialize)]
 pub struct Lsmt {
@@ -783,7 +783,6 @@ impl IndexMgr {
         self.insert(id, &[])
     }
 
-    #[inline]
     pub fn flush(&mut self) -> Result<()> {
         if self.memtab.is_changed {
             self.memtab_armor.save(&mut self.memtab)?;
