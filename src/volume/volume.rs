@@ -476,7 +476,7 @@ mod tests {
         init_env();
         let pwd = "pwd";
         let payload = [1, 2, 3];
-        let uri = "zbox://accessKey456@repo456?cache_type=mem&cache_size=1";
+        let uri = "zbox://accessKey456@repo456?cache_type=mem&cache_size=1mb";
         let mut vol = Volume::new(&uri).unwrap();
         vol.init(&pwd, &Config::default(), &payload).unwrap();
         let vol = vol.into_ref();

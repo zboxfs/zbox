@@ -912,7 +912,7 @@ mod tests {
     fn zbox_depot() {
         init_env();
         let mut storage = Storage::new(
-            "zbox://accessKey456@repo456?cache_type=mem&cache_size=1",
+            "zbox://accessKey456@repo456?cache_type=mem&cache_size=1mb",
         )
         .unwrap();
         storage.connect().unwrap();

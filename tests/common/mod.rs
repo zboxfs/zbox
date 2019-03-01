@@ -46,7 +46,7 @@ cfg_if! {
         impl TestEnv {
             pub fn new() -> Self {
                 init_env();
-                let uri = "zbox://accessKey456@repo456?cache_type=mem&cache_size=1";
+                let uri = "zbox://accessKey456@repo456?cache_type=mem&cache_size=1mb";
                 let repo = RepoOpener::new()
                     .cipher(zbox::Cipher::Xchacha)
                     .create_new(true)

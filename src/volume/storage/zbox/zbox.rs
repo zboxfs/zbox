@@ -13,7 +13,7 @@ use volume::storage::index_mgr::{IndexMgr, Lsmt, MemTab, Tab};
 use volume::storage::Storable;
 
 // parse uri
-// example: access_key@repo_id?cache_type=mem&cache_size=2[&base=path]
+// example: access_key@repo_id?cache_type=mem&cache_size=2mb[&base=path]
 // return: (
 //   access_key: &str,
 //   repo_id: &str,
@@ -47,18 +47,26 @@ fn parse_uri(mut uri: &str) -> Result<(&str, &str, CacheType, usize, PathBuf)> {
         let key = &param[..idx];
         let value = &param[idx + 1..];
 
-        if key == "cache_type" {
-            let ctype = value.parse::<CacheType>()?;
-            cache_type = Some(ctype);
-        } else if key == "cache_size" {
-            let size = value.parse::<usize>().map_err(|_| Error::InvalidUri)?;
-            if size < 1 {
-                // cache size must >= 1MB
-                return Err(Error::InvalidUri);
+        match key {
+            "cache_type" => {
+                let ctype = value.parse::<CacheType>()?;
+                cache_type = Some(ctype);
             }
-            cache_size = Some(size);
-        } else if key == "base" {
-            base = Some(PathBuf::from(value));
+            "cache_size" => {
+                let value = value.to_lowercase();
+                let idx = value.find("mb").ok_or(Error::InvalidUri)?;
+                let value = &value[..idx];
+                let size = value.parse::<usize>().map_err(|_| Error::InvalidUri)?;
+                if size < 1 {
+                    // cache size must >= 1MB
+                    return Err(Error::InvalidUri);
+                }
+                cache_size = Some(size);
+            }
+            "base" => {
+                base = Some(PathBuf::from(value));
+            }
+            _ => return Err(Error::InvalidUri),
         }
     }
 
@@ -342,7 +350,7 @@ mod tests {
 
     #[test]
     fn zbox_storage_mem() {
-        do_test("accessKey456@repo456?cache_type=mem&cache_size=1");
+        do_test("accessKey456@repo456?cache_type=mem&cache_size=1mb");
     }
 
     #[test]
@@ -353,7 +361,7 @@ mod tests {
         /*std::fs::remove_dir_all(&base).unwrap();*/
         /*}*/
         let uri = format!(
-            "accessKey456@repo456?cache_type=file&cache_size=1&base={}",
+            "accessKey456@repo456?cache_type=file&cache_size=1mb&base={}",
             base.display()
         );
         do_test(&uri);

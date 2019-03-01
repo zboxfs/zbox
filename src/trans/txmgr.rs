@@ -274,7 +274,7 @@ mod tests {
     #[cfg(feature = "storage-zbox")]
     fn setup_zbox_vol() -> VolumeRef {
         init_env();
-        let uri = "zbox://accessKey456@repo456?cache_type=mem&cache_size=1"
+        let uri = "zbox://accessKey456@repo456?cache_type=mem&cache_size=1mb"
             .to_string();
         let mut vol = Volume::new(&uri).unwrap();
         vol.init("pwd", &Config::default(), &Vec::new()).unwrap();
