@@ -70,8 +70,17 @@ impl CacheBackend for FileBackend {
 
     #[inline]
     fn clear(&mut self) -> Result<()> {
-        vio::remove_dir_all(&self.base)
-            .and_then(vio::create_dir_all(&self.base))?;
+        if self.base.is_dir() {
+            for entry in vio::read_dir(&self.base)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.is_dir() {
+                    vio::remove_dir_all(path)?;
+                } else {
+                    vio::remove_file(path)?;
+                }
+            }
+        }
         Ok(())
     }
 }
