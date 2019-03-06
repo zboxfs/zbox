@@ -48,7 +48,6 @@ impl CacheBackend for WasmBackend {
         Ok(())
     }
 
-    #[inline]
     fn get(&mut self, rel_path: &Path) -> Result<Vec<u8>> {
         let js_val = get(rel_path.to_str().unwrap());
         if js_val.is_undefined() {

@@ -9,6 +9,7 @@ pub struct MemBackend {
 }
 
 impl MemBackend {
+    #[inline]
     pub fn new() -> Self {
         MemBackend {
             map: HashMap::new(),
