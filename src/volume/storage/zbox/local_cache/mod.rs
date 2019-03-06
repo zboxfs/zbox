@@ -6,7 +6,7 @@ mod local_cache;
 #[cfg(not(feature = "storage-zbox-wasm"))]
 mod mem;
 #[cfg(feature = "storage-zbox-wasm")]
-mod wasm;
+mod browser;
 
 pub use self::local_cache::{LocalCache, LocalCacheRef};
 
@@ -20,7 +20,7 @@ use error::{Error, Result};
 pub enum CacheType {
     Mem,
     File,
-    Wasm,
+    Browser,
 }
 
 impl FromStr for CacheType {
@@ -31,7 +31,7 @@ impl FromStr for CacheType {
         match s {
             "mem" => Ok(CacheType::Mem),
             "file" => Ok(CacheType::File),
-            "wasm" => Ok(CacheType::Wasm),
+            "browser" => Ok(CacheType::Browser),
             _ => Err(Error::InvalidUri),
         }
     }

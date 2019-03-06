@@ -95,11 +95,11 @@ impl LocalCache {
                     Box::new(super::file::FileBackend::new(base))
                 }
             }
-            CacheType::Wasm => {
+            CacheType::Browser => {
                 #[cfg(feature = "storage-zbox-wasm")]
                 {
                     let _ = base;
-                    Box::new(super::wasm::WasmBackend::new())
+                    Box::new(super::browser::WasmBackend::new())
                 }
                 #[cfg(not(feature = "storage-zbox-wasm"))]
                 {
