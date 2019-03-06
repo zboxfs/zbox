@@ -23,16 +23,6 @@ use repo::{
 };
 
 #[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = console)]
-    fn log(a: &str);
-}
-
-macro_rules! console_log {
-    ($($t:tt)*) => (log(&format!($($t)*)))
-}
-
-#[wasm_bindgen]
 pub fn malloc(size: u32) -> u32 {
     let capacity = (8 + size) as usize;
     let mut buf: Vec<u8> = Vec::with_capacity(capacity);
@@ -43,14 +33,12 @@ pub fn malloc(size: u32) -> u32 {
         mem::forget(buf);
         ptr::write(p, len as u32);
         ptr::write(p.add(1), capacity as u32);
-        //console_log!("malloc: size: {:?}, ptr: {:?}", size, ptr);
         ptr.add(8) as u32
     }
 }
 
 #[wasm_bindgen]
 pub fn calloc(nmemb: u32, size: u32) -> u32 {
-    //console_log!("calloc: nmemb: {:?}, size: {:?}", nmemb, size);
     malloc(nmemb * size)
 }
 
@@ -59,7 +47,6 @@ pub fn free(ptr: u32) {
     if ptr == 0 {
         return;
     }
-    //console_log!("free: {:?}", ptr);
     let p = ptr as *mut u8;
     unsafe {
         let base = p.sub(8) as *mut u32;
@@ -77,7 +64,6 @@ pub fn __errno_location() -> i32 {
 
 #[wasm_bindgen]
 pub fn strlen(s: u32) -> u32 {
-    console_log!("[rust] call strlen()");
     let p = s as *const u8;
     let mut i: usize = 0;
     unsafe {
@@ -93,7 +79,6 @@ pub fn strlen(s: u32) -> u32 {
 
 #[wasm_bindgen]
 pub fn strchr(s: u32, c: u32) -> u32 {
-    console_log!("[rust] call strchr()");
     let mut p = s as *const u8;
     let c = c as u8;
     unsafe {
@@ -109,7 +94,6 @@ pub fn strchr(s: u32, c: u32) -> u32 {
 
 #[wasm_bindgen]
 pub fn strncmp(s1: u32, s2: u32, n: u32) -> i32 {
-    console_log!("[rust] call strncmp()");
     let s1 =
         unsafe { core::slice::from_raw_parts(s1 as *const u8, n as usize) };
     let s2 =
@@ -175,8 +159,12 @@ fn time_to_u64(t: SystemTime) -> u64 {
 }
 
 #[wasm_bindgen]
-pub fn init_env() {
-    base::init_env();
+pub fn init_env(enable_logging: bool) {
+    if enable_logging {
+        base::init_env();
+    } else {
+        base::init_env_no_logging();
+    }
 }
 
 #[wasm_bindgen]

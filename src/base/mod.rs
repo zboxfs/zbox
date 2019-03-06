@@ -58,6 +58,11 @@ cfg_if! {
                 crypto::Crypto::init().expect("Initialise crypto failed");
             });
         }
+        pub fn init_env_no_logging() {
+            INIT.call_once(|| {
+                crypto::Crypto::init().expect("Initialise crypto failed");
+            });
+        }
     } else {
         pub fn init_env() {
             INIT.call_once(|| {
