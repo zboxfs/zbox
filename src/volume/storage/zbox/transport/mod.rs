@@ -12,7 +12,7 @@ pub(super) mod wasm;
 
 use std::io::{copy, Read, Write};
 
-use http::{HeaderMap, Response as HttpResponse, Uri};
+use http::{HeaderMap, Response as HttpResponse, StatusCode, Uri};
 use serde::de::DeserializeOwned;
 use serde_json::from_slice;
 
@@ -29,12 +29,18 @@ impl Response {
         Response { inner }
     }
 
-    #[inline]
     pub fn error_for_status(self) -> Result<Self> {
         let status = self.inner.status();
+
+        // 409 conflict error means remote session is already opened
+        if status == StatusCode::CONFLICT {
+            return Err(Error::Opened);
+        }
+
         if !status.is_success() {
             return Err(Error::HttpStatus(status));
         }
+
         Ok(self)
     }
 

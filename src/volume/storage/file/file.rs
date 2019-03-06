@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 
 use super::file_armor::FileArmor;
 use super::sector::SectorMgr;
-use super::vio;
 use base::crypto::{Crypto, Key};
 use base::utils;
+use base::vio;
 use error::{Error, Result};
 use trans::Eid;
 use volume::address::Span;

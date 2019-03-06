@@ -7,10 +7,10 @@ use bytes::BufMut;
 use linked_hash_map::LinkedHashMap;
 
 use super::file_armor::FileArmor;
-use super::vio;
 use base::crypto::{Crypto, HashKey, Key};
 use base::lru::{CountMeter, Lru, PinChecker};
 use base::utils::{ensure_parents_dir, remove_empty_parent_dir};
+use base::vio;
 use error::{Error, Result};
 use trans::{Eid, Id};
 use volume::address::Span;

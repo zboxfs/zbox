@@ -7,6 +7,7 @@ mod refcnt;
 mod time;
 pub mod utils;
 mod version;
+pub(crate) mod vio;
 
 pub use self::refcnt::RefCnt;
 pub use self::time::Time;

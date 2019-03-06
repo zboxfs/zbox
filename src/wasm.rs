@@ -9,7 +9,6 @@ use js_sys;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys;
-//use http::header::{ HeaderMap, HeaderName, HeaderValue };
 
 use base;
 use base::crypto::{Cipher, MemLimit, OpsLimit};
@@ -170,11 +169,6 @@ macro_rules! map_js_err {
     };
 }
 
-/*#[derive(Debug, Serialize, Deserialize)]
-pub struct Resp {
-    pub origin: String,
-}*/
-
 #[inline]
 fn time_to_u64(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()
@@ -325,10 +319,8 @@ impl From<ZboxRepoInfo> for RepoInfo {
 #[allow(non_snake_case)]
 #[derive(Serialize)]
 pub struct Metadata {
-    pub fileType: i32,
-    pub isFile: bool,
-    pub isDir: bool,
-    pub len: usize,
+    pub fileType: String,
+    pub contentLen: usize,
     pub currVersion: usize,
     pub createdAt: u64,
     pub modifiedAt: u64,
@@ -338,9 +330,7 @@ impl From<ZboxMetadata> for Metadata {
     fn from(md: ZboxMetadata) -> Self {
         Metadata {
             fileType: md.file_type().into(),
-            isFile: md.is_file(),
-            isDir: md.is_dir(),
-            len: md.content_len(),
+            contentLen: md.content_len(),
             currVersion: md.curr_version(),
             createdAt: time_to_u64(md.created_at()),
             modifiedAt: time_to_u64(md.modified_at()),
@@ -370,7 +360,7 @@ impl From<&ZboxDirEntry> for DirEntry {
 #[derive(Serialize)]
 pub struct Version {
     pub num: usize,
-    pub len: usize,
+    pub contentLen: usize,
     pub createdAt: u64,
 }
 
@@ -378,7 +368,7 @@ impl From<&ZboxVersion> for Version {
     fn from(ver: &ZboxVersion) -> Self {
         Version {
             num: ver.num(),
-            len: ver.content_len(),
+            contentLen: ver.content_len(),
             createdAt: time_to_u64(ver.created_at()),
         }
     }
@@ -652,7 +642,6 @@ impl Repo {
             Some(ref repo) => repo.read_dir(path),
             None => Err(Error::RepoClosed),
         });
-        trace!("read_dir: {:?}", dirs);
         let dirs = dirs?;
         let ret: Vec<DirEntry> = dirs.iter().map(DirEntry::from).collect();
         Ok(JsValue::from_serde(&ret).unwrap())
@@ -713,96 +702,4 @@ impl Repo {
             None => Err(Error::RepoClosed),
         })
     }
-
-    /*pub fn open(&mut self, uri: &str, pwd: &str) -> Result<()> {
-        if self.repo.is_some() {
-            return map_js_err!(Err(Error::Opened))?;
-        }
-
-        let mut opener = RepoOpener::new();
-        let repo = map_js_err!(opener.create(true).open(&uri, pwd))?;
-        self.repo = Some(repo);
-        Ok(())
-
-        let buf = [1u8, 2u8, 3u8];
-
-        // create and write a file
-        let mut f = OpenOptions::new()
-            .create(true)
-            .open(&mut repo, "/file")
-            .unwrap();
-        f.write_once(&buf[..]).unwrap();
-
-        // read file
-        let mut dst = Vec::new();
-        let ver_num = f.history().unwrap().last().unwrap().num();
-        let mut rdr = f.version_reader(ver_num).unwrap();
-        let result = rdr.read_to_end(&mut dst).unwrap();
-        assert_eq!(result, buf.len());
-        assert_eq!(&dst[..], &buf[..]);
-    }*/
-
-    /*
-    pub fn put() -> JsValue {
-        debug!("call put()");
-        let xhr = web_sys::XmlHttpRequest::new().unwrap();
-        xhr.open_with_async("PUT", "https://httpbin.org/put", false).unwrap();
-        xhr.set_timeout(3000);
-        xhr.set_response_type(web_sys::XmlHttpRequestResponseType::Arraybuffer);
-
-        // put binary body
-        let buf = vec![1, 2, 3];
-        let buf = unsafe { js_sys::Uint8Array::view(&buf)  };
-        xhr.send_with_opt_buffer_source(Some(&buf)).unwrap();
-
-        return JsValue::NULL;
-    }
-
-    pub fn request() -> JsValue {
-        console_log!("[rust] call request3()");
-        let xhr = web_sys::XmlHttpRequest::new().unwrap();
-        xhr.open_with_async("GET", "https://httpbin.org/ip", false).unwrap();
-        //xhr.open_with_async("GET", "http://misbehaving.site/timeout", false).unwrap();
-        //xhr.open_with_async("GET", "http://notexistswebsite.site", false).unwrap();
-        xhr.set_timeout(3000);
-        xhr.set_response_type(web_sys::XmlHttpRequestResponseType::Arraybuffer);
-        xhr.send().unwrap();
-        console_log!("[rust] request sent, ready state: {}, status: {}",
-                     xhr.ready_state(), xhr.status().unwrap());
-
-        // get headers
-        let mut headers = HeaderMap::new();
-        let headers_str = xhr.get_all_response_headers().unwrap();
-        debug!("{}", headers_str);
-        headers_str.trim_end()
-            .split("\r\n")
-            .for_each(|ent| {
-                let ent: Vec<&str> = ent.split(": ").collect();
-                let name = HeaderName::from_lowercase(ent[0].as_bytes()).unwrap();
-                let value = HeaderValue::from_str(ent[1]).unwrap();
-                headers.insert(name, value);
-            });
-        debug!("{:?}", headers);
-
-        // get binary body
-        let resp = xhr.response().unwrap();
-        let bin = js_sys::Uint8Array::new_with_byte_offset(&resp, 0);
-        debug!("bin: {:?}, len: {:?}", bin, bin.byte_length());
-        let mut buf = vec![0u8; bin.byte_length() as usize];
-        bin.copy_to(&mut buf);
-        debug!("body len: {:?}", buf.len());
-
-        return JsValue::NULL;
-
-        /*let body = xhr.response_text().unwrap().unwrap();
-        console_log!("[rust] body: {:?}", body);
-        if body == "" {
-            return JsValue::NULL;
-        }
-        let resp: Resp = serde_json::from_str(&body).unwrap();
-        console_log!("[rust] call request3, {:?}", resp);
-        let ret = JsValue::from_serde(&resp).unwrap();
-
-        ret*/
-    }*/
 }

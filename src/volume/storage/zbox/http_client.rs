@@ -234,7 +234,7 @@ impl HttpClient {
         Ok(result.result)
     }
 
-    // open remote session
+    // open remote session, return remote update sequence
     pub fn open_session(&mut self) -> Result<u64> {
         if self.retry_cnt == 0 {
             debug!("open session 1st time");
@@ -251,15 +251,7 @@ impl HttpClient {
         let mut resp = self
             .transport
             .get(&uri, headers.as_ref())?
-            .error_for_status()
-            .map_err(|err| {
-                // 409 conflict error means remote session is already opened
-                if err == Error::HttpStatus(StatusCode::CONFLICT) {
-                    Error::Opened
-                } else {
-                    err
-                }
-            })?;
+            .error_for_status()?;
         let result: SessionOpenResp = resp.as_json()?;
 
         // if we're re-opening session, but the local update sequence is not

@@ -7,9 +7,9 @@ use std::io::{
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use super::vio;
 use base::crypto::{Crypto, Key};
 use base::utils::{ensure_parents_dir, remove_empty_parent_dir};
+use base::vio;
 use error::{Error, Result};
 use trans::Eid;
 use trans::Finish;

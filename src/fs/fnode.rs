@@ -56,6 +56,15 @@ impl Into<i32> for FileType {
     }
 }
 
+impl Into<String> for FileType {
+    fn into(self) -> String {
+        match self {
+            FileType::File => String::from("File"),
+            FileType::Dir => String::from("Dir"),
+        }
+    }
+}
+
 // fnode child entry
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct ChildEntry {

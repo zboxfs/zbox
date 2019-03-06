@@ -1,48 +1,16 @@
-use std::collections::HashMap;
 use std::fmt::{self, Debug};
-use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
 use linked_hash_map::LinkedHashMap;
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
-use super::http_client::{CacheControl, HttpClient};
-use super::vio;
+use super::super::http_client::{CacheControl, HttpClient};
+use super::{CacheBackend, CacheType, DummyBackend};
 use base::crypto::{Crypto, Key};
-use base::utils;
 use base::IntoRef;
 use error::{Error, Result};
-
-// local cache type
-#[derive(Debug, Copy, Clone, PartialEq, Deserialize, Serialize)]
-pub enum CacheType {
-    Mem,
-    File,
-}
-
-impl FromStr for CacheType {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        if s == "mem" {
-            Ok(CacheType::Mem)
-        } else if s == "file" {
-            Ok(CacheType::File)
-        } else {
-            Err(Error::InvalidUri)
-        }
-    }
-}
-
-impl Default for CacheType {
-    #[inline]
-    fn default() -> Self {
-        CacheType::Mem
-    }
-}
 
 // cached item in local cache
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -66,34 +34,26 @@ struct CacheMeta {
     capacity: usize,
     used: usize,
 
-    // repo update sequence
-    update_seq: u64,
+    // update sequence, used to sync with remote
+    useq: u64,
 
+    // LRU list
     lru: LinkedHashMap<PathBuf, CacheItem>,
 }
 
-#[derive(Default, Deserialize, Serialize)]
 pub struct LocalCache {
     meta: CacheMeta,
 
-    // memory store, for memory-based local cache only
-    mem: HashMap<PathBuf, Vec<u8>>,
-
-    // base dir, for file-based local cache only
-    #[serde(skip_serializing, skip_deserializing, default)]
-    base: PathBuf,
+    // local storage backend
+    backend: Box<CacheBackend>,
 
     // local cache change flag
-    #[serde(skip_serializing, skip_deserializing, default)]
     is_changed: bool,
 
-    #[serde(skip_serializing, skip_deserializing, default)]
+    // http client
     client: HttpClient,
 
-    #[serde(skip_serializing, skip_deserializing, default)]
     crypto: Crypto,
-
-    #[serde(skip_serializing, skip_deserializing, default)]
     key: Key,
 }
 
@@ -114,10 +74,43 @@ impl LocalCache {
         meta.cache_type = cache_type;
         meta.capacity = capacity;
 
+        let backend: Box<CacheBackend> = match cache_type {
+            CacheType::Mem => {
+                #[cfg(feature = "storage-zbox-wasm")]
+                {
+                    return Err(Error::InvalidUri);
+                }
+                #[cfg(not(feature = "storage-zbox-wasm"))]
+                {
+                    Box::new(super::mem::MemBackend::new())
+                }
+            }
+            CacheType::File => {
+                #[cfg(feature = "storage-zbox-wasm")]
+                {
+                    return Err(Error::InvalidUri);
+                }
+                #[cfg(not(feature = "storage-zbox-wasm"))]
+                {
+                    Box::new(super::file::FileBackend::new(base))
+                }
+            }
+            CacheType::Wasm => {
+                #[cfg(feature = "storage-zbox-wasm")]
+                {
+                    let _ = base;
+                    Box::new(super::wasm::WasmBackend::new())
+                }
+                #[cfg(not(feature = "storage-zbox-wasm"))]
+                {
+                    return Err(Error::InvalidUri);
+                }
+            }
+        };
+
         Ok(LocalCache {
             meta,
-            mem: HashMap::new(),
-            base: base.to_path_buf(),
+            backend,
             is_changed: false,
             client,
             crypto: Crypto::default(),
@@ -138,7 +131,7 @@ impl LocalCache {
 
     #[inline]
     pub fn connect(&mut self) -> Result<()> {
-        self.meta.update_seq = self.client.open_session()?;
+        self.client.open_session()?;
         Ok(())
     }
 
@@ -146,20 +139,7 @@ impl LocalCache {
     // to_evict: list of tuple (object key, object length)
     fn evict(&mut self, to_evict: &[(PathBuf, usize)]) -> Result<()> {
         for item in to_evict {
-            match self.meta.cache_type {
-                CacheType::Mem => {
-                    self.mem.remove(&item.0);
-                }
-                CacheType::File => {
-                    let path = self.base.join(&item.0);
-                    if path.exists() {
-                        vio::remove_file(&path)?;
-                        // ignore error when removing empty parent dir
-                        let _ = utils::remove_empty_parent_dir(&path);
-                    }
-                }
-            }
-
+            self.backend.remove(&item.0)?;
             self.meta.lru.remove(&item.0);
             self.meta.used -= item.1;
         }
@@ -174,11 +154,14 @@ impl LocalCache {
             return Ok(());
         }
 
+        // otherwise, we need to evict some objects in local cache to make
+        // enough space
+
         let need_len = self.meta.used + len - self.meta.capacity;
         let mut accum_len = 0;
         let mut to_evict: Vec<(PathBuf, usize)> = Vec::new();
 
-        // try to find enough least used objects in unpinned list first
+        // try to find enough least-used objects in unpinned list first
         for ent in self.meta.lru.entries().filter(|ent| !ent.get().is_pinned) {
             accum_len += ent.get().len;
             to_evict.push((ent.key().clone(), ent.get().len));
@@ -187,8 +170,7 @@ impl LocalCache {
             }
         }
 
-        // if sapce is still not enough, then try to find objects in
-        // pinned list
+        // if sapce is still not enough, try to find objects in pinned list
         if accum_len < need_len {
             for ent in self.meta.lru.entries().filter(|ent| ent.get().is_pinned)
             {
@@ -200,23 +182,10 @@ impl LocalCache {
             }
         }
 
-        if accum_len < need_len {
-            unreachable!("Not enough space in local cache");
-        }
+        assert!(accum_len >= need_len);
 
         // do eviction
         self.evict(&to_evict)
-    }
-
-    // download object from remote and reserve place for it in local cache
-    fn download_remote(
-        &mut self,
-        rel_path: &Path,
-        is_pinned: bool,
-    ) -> Result<Vec<u8>> {
-        let obj = self.client.get(rel_path, CacheControl::from(is_pinned))?;
-        self.reserve_place(obj.len())?;
-        Ok(obj)
     }
 
     // ensure data is downloaded to local cache
@@ -225,63 +194,40 @@ impl LocalCache {
         rel_path: &Path,
         is_pinned: bool,
     ) -> Result<()> {
-        let remote_len;
-
         self.is_changed = true;
 
-        match self.meta.cache_type {
-            CacheType::Mem => {
-                // object is already in cache
-                if self.mem.contains_key(rel_path) {
-                    self.meta.lru.get_refresh(rel_path).unwrap();
-                    return Ok(());
-                }
-
-                // if object is not in cache, get it from remote and then add
-                // to local cache
-                let remote = self.download_remote(rel_path, is_pinned)?;
-                remote_len = remote.len();
-                self.mem.insert(rel_path.to_path_buf(), remote);
-            }
-            CacheType::File => {
-                let path = self.base.join(rel_path);
-
-                // if object is already in local cache
-                if path.exists() {
-                    self.meta.lru.get_refresh(rel_path).unwrap();
-                    return Ok(());
-                }
-
-                // if object is not in cache, get it from remote and then add
-                // to local cache
-                let remote = self.download_remote(rel_path, is_pinned)?;
-                remote_len = remote.len();
-                utils::ensure_parents_dir(&path)?;
-                let mut file = vio::OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(&path)?;
-                file.write_all(&remote)?;
-            }
+        // if object is already in cache
+        if self.backend.contains(rel_path) {
+            let _ = self.meta.lru.get_refresh(rel_path);
+            return Ok(());
         }
+
+        // if object is not in cache, get it from remote and then add
+        // to local cache
+        let remote = {
+            let obj =
+                self.client.get(rel_path, CacheControl::from(is_pinned))?;
+            self.reserve_place(obj.len())?;
+            obj
+        };
+        self.backend.insert(rel_path, &remote)?;
 
         // add to lru and increase used size
         self.meta.lru.insert(
             rel_path.to_path_buf(),
-            CacheItem::new(remote_len, is_pinned),
+            CacheItem::new(remote.len(), is_pinned),
         );
-        self.meta.used += remote_len;
+        self.meta.used += remote.len();
 
         Ok(())
     }
 
     fn load_meta(&mut self) -> Result<CacheMeta> {
-        let path = self.base.join(Self::META_FILE_NAME);
-        let mut buf = Vec::new();
-        let mut file = vio::OpenOptions::new().read(true).open(&path)?;
-        file.read_to_end(&mut buf)?;
-        let buf = self.crypto.decrypt(&buf, &self.key)?;
+        let path = Path::new(Self::META_FILE_NAME);
+        let buf = self
+            .backend
+            .get(&path)
+            .and_then(|buf| self.crypto.decrypt(&buf, &self.key))?;
         let mut de = Deserializer::new(&buf[..]);
         let meta: CacheMeta = Deserialize::deserialize(&mut de)?;
         Ok(meta)
@@ -289,30 +235,20 @@ impl LocalCache {
 
     fn save_meta(&mut self) -> Result<()> {
         // get latest update sequence from http client
-        self.meta.update_seq = self.client.get_update_seq();
+        self.meta.useq = self.client.get_update_seq();
 
-        if self.meta.cache_type == CacheType::Mem {
-            return Ok(());
-        }
-
-        // serialize and write to local
+        // serialize meta and write it to local cache
         let mut buf = Vec::new();
         self.meta.serialize(&mut Serializer::new(&mut buf))?;
-        let buf = self.crypto.encrypt(&buf, &self.key)?;
-        let path = self.base.join(Self::META_FILE_NAME);
-        let mut file = vio::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&path)?;
-        file.write_all(&buf)?;
-
-        Ok(())
+        let path = Path::new(Self::META_FILE_NAME);
+        self.crypto
+            .encrypt(&buf, &self.key)
+            .and_then(|buf| self.backend.insert(&path, &buf))
     }
 
     #[inline]
     pub fn init(&mut self) -> Result<()> {
-        self.save_meta()
+        self.backend.clear().and_then(|_| self.save_meta())
     }
 
     pub fn open(&mut self) -> Result<()> {
@@ -322,36 +258,42 @@ impl LocalCache {
         }
 
         // load cache meta
-        let meta = self.load_meta()?;
-
-        // get remote update sequence
-        let remote_update_seq = self.client.get_update_seq();
-
-        // verify local update sequence against remote
-        if meta.update_seq != remote_update_seq {
-            warn!(
-                "remote repo changed, local: {}, remote: {}, \
-                 clear local cache",
-                meta.update_seq, remote_update_seq
-            );
-
-            // update sequence not match, clear local cache
-            for rel_path in meta.lru.keys() {
-                let path = self.base.join(rel_path);
-                if path.exists() {
-                    vio::remove_file(&path)?;
-                    // ignore error when removing empty parent dir
-                    let _ = utils::remove_empty_parent_dir(&path);
+        match self.load_meta() {
+            Ok(meta) => {
+                // cache type must match
+                if self.meta.cache_type != meta.cache_type {
+                    return Err(Error::InvalidUri);
                 }
+
+                // get remote update sequence
+                let remote_useq = self.client.get_update_seq();
+
+                // only if the update sequences are matched, we can then
+                // use the local cache
+                if meta.useq == remote_useq {
+                    self.meta.useq = remote_useq;
+                    self.meta.used = meta.used;
+                    self.meta.lru = meta.lru;
+                    return Ok(());
+                }
+
+                // otherwise, clear the local cache
+                warn!(
+                    "update seq not match, local: {}, remote: {}, \
+                     clear local cache",
+                    meta.useq, remote_useq,
+                );
+                self.backend.clear()?;
+                self.meta.used = 0;
+                self.meta.lru.clear();
+                self.save_meta()
             }
+            Err(ref err) if *err == Error::NotFound => self.save_meta(),
+            Err(err) => Err(err),
         }
-
-        self.meta.used = meta.used;
-        self.meta.lru = meta.lru;
-
-        Ok(())
     }
 
+    #[inline]
     pub fn get_to(
         &mut self,
         rel_path: &Path,
@@ -359,39 +301,13 @@ impl LocalCache {
         dst: &mut [u8],
     ) -> Result<()> {
         self.ensure_in_local(rel_path, false)?;
-
-        match self.meta.cache_type {
-            CacheType::Mem => {
-                let obj = &self.mem[rel_path];
-                let len = dst.len();
-                dst.copy_from_slice(&obj[offset..offset + len]);
-            }
-            CacheType::File => {
-                let path = self.base.join(rel_path);
-                let mut file =
-                    vio::OpenOptions::new().read(true).open(&path)?;
-                file.seek(SeekFrom::Start(offset as u64))?;
-                file.read_exact(dst)?;
-            }
-        }
-
-        Ok(())
+        self.backend.get_exact(rel_path, offset, dst)
     }
 
+    #[inline]
     pub fn get(&mut self, rel_path: &Path) -> Result<Vec<u8>> {
         self.ensure_in_local(rel_path, true)?;
-
-        match self.meta.cache_type {
-            CacheType::Mem => Ok(self.mem[rel_path].to_owned()),
-            CacheType::File => {
-                let path = self.base.join(rel_path);
-                let mut ret = Vec::new();
-                let mut file =
-                    vio::OpenOptions::new().read(true).open(&path)?;
-                file.read_to_end(&mut ret)?;
-                Ok(ret)
-            }
-        }
+        self.backend.get(rel_path)
     }
 
     fn do_put(
@@ -412,32 +328,16 @@ impl LocalCache {
         // save object to local cache at last and only save when it is
         // a full-put object
         if offset == 0 {
-            let obj_len = obj.len();
+            self.reserve_place(obj.len())?;
 
-            self.reserve_place(obj_len)?;
-
-            match self.meta.cache_type {
-                CacheType::Mem => {
-                    self.mem.insert(rel_path.to_path_buf(), obj.to_owned());
-                }
-                CacheType::File => {
-                    let path = self.base.join(rel_path);
-                    utils::ensure_parents_dir(&path)?;
-                    let mut file = vio::OpenOptions::new()
-                        .write(true)
-                        .create(true)
-                        .truncate(true)
-                        .open(&path)?;
-                    file.write_all(obj)?;
-                }
-            }
+            self.backend.insert(rel_path, obj)?;
 
             // add to lru and increase used size
             self.meta.lru.insert(
                 rel_path.to_path_buf(),
-                CacheItem::new(obj_len, is_pinned),
+                CacheItem::new(obj.len(), is_pinned),
             );
-            self.meta.used += obj_len;
+            self.meta.used += obj.len();
         }
 
         Ok(())
@@ -461,35 +361,19 @@ impl LocalCache {
 
     // delete object from local cache only
     fn del_local(&mut self, rel_path: &Path) -> Result<()> {
+        self.backend.remove(rel_path)?;
         self.is_changed = true;
-
-        match self.meta.cache_type {
-            CacheType::Mem => {
-                self.mem.remove(rel_path);
-            }
-            CacheType::File => {
-                let path = self.base.join(rel_path);
-                if path.exists() {
-                    vio::remove_file(&path)?;
-                    // ignore error when removing empty parent dir
-                    let _ = utils::remove_empty_parent_dir(&path);
-                }
-            }
-        }
-
         if let Some(cache_obj) = self.meta.lru.remove(rel_path) {
             self.meta.used -= cache_obj.len;
         }
-
         Ok(())
     }
 
+    #[inline]
     pub fn del(&mut self, rel_path: &Path) -> Result<()> {
-        // remove from local cache first
-        self.del_local(rel_path)?;
-
-        // then remove from remote
-        self.client.del(rel_path)
+        // remove from local cache first then remove from remote
+        self.del_local(rel_path)
+            .and_then(|_| self.client.del(rel_path))
     }
 
     pub fn flush(&mut self) -> Result<()> {
@@ -499,6 +383,20 @@ impl LocalCache {
             self.is_changed = false;
         }
         Ok(())
+    }
+}
+
+impl Default for LocalCache {
+    #[inline]
+    fn default() -> Self {
+        LocalCache {
+            meta: CacheMeta::default(),
+            backend: Box::new(DummyBackend::default()),
+            is_changed: false,
+            client: HttpClient::default(),
+            crypto: Crypto::default(),
+            key: Key::new_empty(),
+        }
     }
 }
 

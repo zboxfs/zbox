@@ -12,24 +12,30 @@ use error::{Error, Result};
 // XMLHttpRequest ready state: DONE
 const READY_STATE_DONE: u16 = 4;
 
+// map error to request error
+macro_rules! map_req_err {
+    ($x:expr) => {
+        $x.map_err(|_| Error::RequestError);
+    };
+}
+
 // get response from XHR
 fn create_response(xhr: XmlHttpRequest) -> Result<Response> {
     // check response status
     let ready_state = xhr.ready_state();
-    let status = xhr.status().unwrap();
-    if ready_state != READY_STATE_DONE
-        || (status != 200 && status != 204 && status != 404)
-    {
+    let status = map_req_err!(xhr.status())?;
+    if ready_state != READY_STATE_DONE {
         return Err(Error::RequestError);
     }
 
     let mut builder = HttpResponse::builder();
 
     // extract response status
-    builder.status(StatusCode::from_u16(status).unwrap());
+    let status_code = map_req_err!(StatusCode::from_u16(status))?;
+    builder.status(status_code);
 
     // extract response headers
-    let headers_str = xhr.get_all_response_headers().unwrap();
+    let headers_str = map_req_err!(xhr.get_all_response_headers())?;
     if !headers_str.is_empty() {
         headers_str.trim_end().split("\r\n").for_each(|ent| {
             let ent: Vec<&str> = ent.split(": ").collect();
@@ -40,7 +46,7 @@ fn create_response(xhr: XmlHttpRequest) -> Result<Response> {
     }
 
     // extract response body as binary data
-    let resp = xhr.response().unwrap();
+    let resp = map_req_err!(xhr.response())?;
     let bin = Uint8Array::new_with_byte_offset(&resp, 0);
     let mut buf = vec![0u8; bin.byte_length() as usize];
     bin.copy_to(&mut buf);
@@ -84,7 +90,7 @@ impl WasmTransport {
 impl Transport for WasmTransport {
     fn get(&self, uri: &Uri, headers: &HeaderMap) -> Result<Response> {
         let xhr = self.create_xhr("GET", uri, headers);
-        xhr.send().unwrap();
+        map_req_err!(xhr.send())?;
         create_response(xhr)
     }
 
@@ -96,13 +102,13 @@ impl Transport for WasmTransport {
     ) -> Result<Response> {
         let xhr = self.create_xhr("PUT", uri, headers);
         let buf = unsafe { Uint8Array::view(body) };
-        xhr.send_with_opt_buffer_source(Some(&buf)).unwrap();
+        map_req_err!(xhr.send_with_opt_buffer_source(Some(&buf)))?;
         create_response(xhr)
     }
 
     fn delete(&mut self, uri: &Uri, headers: &HeaderMap) -> Result<Response> {
         let xhr = self.create_xhr("DELETE", uri, headers);
-        xhr.send().unwrap();
+        map_req_err!(xhr.send())?;
         create_response(xhr)
     }
 
@@ -114,7 +120,7 @@ impl Transport for WasmTransport {
     ) -> Result<Response> {
         let xhr = self.create_xhr("DELETE", uri, headers);
         let buf = unsafe { Uint8Array::view(body) };
-        xhr.send_with_opt_buffer_source(Some(&buf)).unwrap();
+        map_req_err!(xhr.send_with_opt_buffer_source(Some(&buf)))?;
         create_response(xhr)
     }
 }

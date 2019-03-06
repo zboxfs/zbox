@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-#[cfg(any(feature = "storage-file", feature = "storage-zbox"))]
+#[cfg(any(
+    feature = "storage-file",
+    all(feature = "storage-zbox", not(feature = "storage-zbox-wasm"))
+))]
 use error::{Error, Result};
 
 /// Calculate usize align offset, size must be 2^n integer
@@ -65,7 +68,10 @@ pub fn speed_str(duration: &Duration, data_len: usize) -> String {
 }
 
 /// Ensure all parents dir are created along the path
-#[cfg(any(feature = "storage-file", feature = "storage-zbox"))]
+#[cfg(any(
+    feature = "storage-file",
+    all(feature = "storage-zbox", not(feature = "storage-zbox-wasm"))
+))]
 pub fn ensure_parents_dir(path: &std::path::Path) -> Result<()> {
     let parent = path.parent().unwrap();
     if !parent.exists() {
@@ -75,7 +81,10 @@ pub fn ensure_parents_dir(path: &std::path::Path) -> Result<()> {
 }
 
 /// Remove parent dir if it is empty
-#[cfg(any(feature = "storage-file", feature = "storage-zbox"))]
+#[cfg(any(
+    feature = "storage-file",
+    all(feature = "storage-zbox", not(feature = "storage-zbox-wasm"))
+))]
 pub fn remove_empty_parent_dir(path: &std::path::Path) -> Result<()> {
     for parent in path.ancestors().skip(1) {
         match std::fs::read_dir(parent) {
