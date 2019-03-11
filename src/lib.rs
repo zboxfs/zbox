@@ -115,6 +115,7 @@ macro_rules! map_io_err {
 }
 
 mod base;
+mod binding;
 mod content;
 mod error;
 mod file;
@@ -131,9 +132,6 @@ pub use self::file::{File, VersionReader};
 pub use self::fs::fnode::{DirEntry, FileType, Metadata, Version};
 pub use self::repo::{OpenOptions, Repo, RepoInfo, RepoOpener};
 pub use self::trans::Eid;
-
-#[cfg(feature = "ffi")]
-pub mod ffi;
 
 #[cfg(feature = "storage-faulty")]
 #[macro_use]
@@ -168,9 +166,6 @@ extern crate jni;
 #[macro_use]
 extern crate lazy_static;
 
-#[cfg(feature = "storage-zbox-jni")]
-pub mod jni_lib;
-
 #[cfg(target_os = "android")]
 extern crate android_logger;
 
@@ -186,5 +181,3 @@ extern crate web_sys;
 #[cfg(feature = "storage-zbox-wasm")]
 extern crate wasm_logger;
 
-#[cfg(feature = "storage-zbox-wasm")]
-pub mod wasm;

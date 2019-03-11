@@ -61,7 +61,7 @@ use trans::Eid;
 /// [`new`]: struct.RepoOpener.html#method.new
 /// [`open`]: struct.RepoOpener.html#method.open
 /// [`Result`]: type.Result.html
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct RepoOpener {
     cfg: Config,
     create: bool,

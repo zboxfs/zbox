@@ -33,7 +33,7 @@ impl Default for Options {
 }
 
 // Configuration
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     pub cost: Cost,
     pub cipher: Cipher,
