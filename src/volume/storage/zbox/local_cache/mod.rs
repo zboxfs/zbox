@@ -1,12 +1,12 @@
 #![allow(clippy::module_inception)]
 
+#[cfg(feature = "storage-zbox-wasm")]
+mod browser;
 #[cfg(not(feature = "storage-zbox-wasm"))]
 mod file;
 mod local_cache;
 #[cfg(not(feature = "storage-zbox-wasm"))]
 mod mem;
-#[cfg(feature = "storage-zbox-wasm")]
-mod browser;
 
 pub use self::local_cache::{LocalCache, LocalCacheRef};
 
