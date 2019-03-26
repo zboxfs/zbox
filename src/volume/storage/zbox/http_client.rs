@@ -74,11 +74,20 @@ struct Headers {
 impl Headers {
     fn new() -> Self {
         let mut map = HeaderMap::new();
+        let ver = Version::current_lib_version().to_string();
+
+        // set user agent header
+        map.insert(
+            header::USER_AGENT,
+            HeaderValue::from_str(&format!("zboxfs/{}", ver)).unwrap(),
+        );
+
+        // add zbox version header
         let version_header = HeaderName::from_static("zbox-version");
-        let version_value =
-            HeaderValue::from_str(&Version::current_lib_version().to_string())
-                .unwrap();
+        let version_value = HeaderValue::from_str(&ver).unwrap();
         map.insert(version_header, version_value);
+
+        // for wasm, origin header must be set
         #[cfg(not(feature = "storage-zbox-wasm"))]
         {
             map.insert(
@@ -86,6 +95,7 @@ impl Headers {
                 HeaderValue::from_str("http://localhost").unwrap(),
             );
         }
+
         Headers { map }
     }
 
