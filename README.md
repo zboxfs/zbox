@@ -254,7 +254,6 @@ conduct, and the process for submitting pull requests to us.
 Community
 =========
 
-- [Gitter Chat Room](https://gitter.im/zboxfs/zbox)
 - [Twitter](https://twitter.com/ZboxFS)
 
 License
