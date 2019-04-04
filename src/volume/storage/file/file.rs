@@ -130,7 +130,7 @@ impl Storable for FileStorage {
             .create(true)
             .truncate(true)
             .open(&path)?;
-        file.write_all(super_blk)?;
+        file.write_all(super_blk).and_then(|_| file.flush())?;
         Ok(())
     }
 
