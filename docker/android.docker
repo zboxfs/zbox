@@ -7,10 +7,10 @@ RUN rustup target add aarch64-linux-android x86_64-linux-android
 
 # download Android NDK
 RUN cd /usr/local && \
-    wget -q http://dl.google.com/android/repository/android-ndk-r17c-linux-x86_64.zip && \
-    unzip -q android-ndk-r17c-linux-x86_64.zip && \
-    rm android-ndk-r17c-linux-x86_64.zip
-ENV ANDROID_NDK_HOME /usr/local/android-ndk-r17c
+    wget -q http://dl.google.com/android/repository/android-ndk-r19c-linux-x86_64.zip && \
+    unzip -q android-ndk-r19c-linux-x86_64.zip && \
+    rm android-ndk-r19c-linux-x86_64.zip
+ENV ANDROID_NDK_HOME /usr/local/android-ndk-r19c
 ENV NDK_PLATFORM android-21
 
 # build libsodium for arm64 and x86_64
@@ -34,7 +34,7 @@ COPY Cargo.toml ./
 COPY Cargo.lock ./
 COPY src ./src
 COPY build.rs ./
-RUN RUSTFLAGS=-L/opt/ndk/x86_64/sysroot/usr/lib64 cargo build --target x86_64-linux-android --features storage-zbox-jni && \
+RUN RUSTFLAGS=-L/opt/ndk/x86_64/sysroot/usr/lib cargo build --target x86_64-linux-android --features storage-zbox-jni && \
     cargo clean && \
     rm -rf /tmp/zbox
 
