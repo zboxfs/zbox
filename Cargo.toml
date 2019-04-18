@@ -69,8 +69,6 @@ bytes = "0.4.10"
 cfg-if = "0.1.6"
 env_logger = "0.6.0"
 log = "0.4.6"
-#lz4 = "1.23.1"
-lz4 = { git = "https://github.com/zboxfs/lz4-rs.git"  }
 rmp-serde = "0.13.7"
 serde = "1.0.80"
 serde_derive = "1.0.80"

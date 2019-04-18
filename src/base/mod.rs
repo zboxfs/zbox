@@ -1,12 +1,13 @@
 //! base module document
 //!
 
-pub mod crypto;
-pub mod lru;
+pub(crate) mod crypto;
+pub(crate) mod lru;
+pub(crate) mod lz4;
 mod refcnt;
 mod time;
-pub mod utils;
-mod version;
+pub(crate) mod utils;
+pub(crate) mod version;
 pub(crate) mod vio;
 
 pub use self::refcnt::RefCnt;

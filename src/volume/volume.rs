@@ -2,15 +2,14 @@ use std::fmt::{self, Debug};
 use std::io::{Read, Result as IoResult, Write};
 use std::sync::{Arc, RwLock};
 
-use lz4::{
-    Decoder as Lz4Decoder, Encoder as Lz4Encoder,
-    EncoderBuilder as Lz4EncoderBuilder,
-};
-
 use super::allocator::AllocatorRef;
 use super::storage::{self, Storage, StorageRef};
 use super::super_block::SuperBlk;
 use base::crypto::{Cipher, Cost, Salt};
+use base::lz4::{
+    BlockMode, BlockSize, ContentChecksum, Decoder as Lz4Decoder,
+    Encoder as Lz4Encoder, EncoderBuilder as Lz4EncoderBuilder,
+};
 use base::{IntoRef, Time, Version};
 use error::{Error, Result};
 use fs::Config;
@@ -302,6 +301,9 @@ impl Writer {
         let wtr = storage::Writer::new(id, &vol.storage);
         let inner = if vol.info.compress {
             let comp = Lz4EncoderBuilder::new()
+                .block_size(BlockSize::Default)
+                .block_mode(BlockMode::Linked)
+                .checksum(ContentChecksum::NoChecksum)
                 .level(0)
                 .auto_flush(true)
                 .build(wtr)?;

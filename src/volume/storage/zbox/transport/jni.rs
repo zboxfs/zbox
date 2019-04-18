@@ -7,8 +7,8 @@ use jni::objects::{JObject, JValue};
 use jni::{JNIEnv, JavaVM};
 
 use super::{Response, Transport};
-use error::{Error, Result};
 use binding::jni_lib::JVM;
+use error::{Error, Result};
 
 // create URL parameter for JNI call
 fn create_url_param<'a>(env: &JNIEnv<'a>, uri: &Uri) -> JValue<'a> {

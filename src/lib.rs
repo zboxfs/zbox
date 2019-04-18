@@ -102,7 +102,6 @@ extern crate env_logger;
 extern crate linked_hash_map;
 #[macro_use]
 extern crate log;
-extern crate lz4;
 extern crate rmp_serde;
 extern crate serde;
 #[macro_use]

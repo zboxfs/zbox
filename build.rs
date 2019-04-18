@@ -4,8 +4,16 @@ extern crate reqwest;
 extern crate tar;
 
 use std::env;
+use std::io::{stderr, stdout, Write};
+use std::path::PathBuf;
+use std::process::Command;
+
+use libflate::non_blocking::gzip::Decoder;
+use tar::Archive;
 
 fn main() {
+    download_and_build_lz4();
+
     #[cfg(feature = "libsodium-bundled")]
     download_and_install_libsodium();
 
@@ -39,7 +47,42 @@ fn main() {
     }
 }
 
-// This downloads function and builds the libsodium from source for linux and unix targets.
+// This function download lz4 source files from GitHub and build static library
+// for non-windows target.
+fn download_and_build_lz4() {
+    static LZ4_ZIP: &'static str =
+        "https://github.com/lz4/lz4/archive/v1.9.0.tar.gz";
+    static LZ4_NAME: &'static str = "lz4-1.9.0";
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let lz4_dir = out_dir.join(LZ4_NAME);
+    let lz4_lib_dir = lz4_dir.join("lib");
+    let lz4_lib_file = lz4_lib_dir.join("liblz4.a");
+
+    if !lz4_dir.exists() {
+        let response = reqwest::get(LZ4_ZIP).unwrap();
+        let decoder = Decoder::new(response);
+        let mut ar = Archive::new(decoder);
+        ar.unpack(&out_dir).unwrap();
+    }
+
+    if !lz4_lib_file.exists() {
+        let output = Command::new("make")
+            .current_dir(&lz4_dir)
+            .arg("lib-release")
+            .output()
+            .expect("failed to execute make for lz4 compilation");
+        stdout().write_all(&output.stdout).unwrap();
+        stderr().write_all(&output.stderr).unwrap();
+    }
+
+    assert!(&lz4_lib_file.exists(), "lz4 lib was not created");
+
+    println!("cargo:rustc-link-search=native={}", lz4_lib_dir.display());
+    println!("cargo:rustc-link-lib=static=lz4");
+}
+
+// This downloads function and builds the libsodium from source for linux and
+// unix targets.
 // The steps are taken from the libsodium installation instructions:
 // https://libsodium.gitbook.io/doc/installation
 // effectively:
@@ -48,11 +91,6 @@ fn main() {
 // $ sudo make install
 #[cfg(all(feature = "libsodium-bundled", not(target_os = "windows")))]
 fn download_and_install_libsodium() {
-    use libflate::non_blocking::gzip::Decoder;
-    use std::io::{stderr, stdout, Write};
-    use std::path::{Path, PathBuf};
-    use std::process::Command;
-    use tar::Archive;
     static LIBSODIUM_ZIP: &'static str = "https://download.libsodium.org/libsodium/releases/libsodium-1.0.17.tar.gz";
     static LIBSODIUM_NAME: &'static str = "libsodium-1.0.17";
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -72,7 +110,7 @@ fn download_and_install_libsodium() {
         let configure = source_dir.join("./configure");
         let output = Command::new(&configure)
             .current_dir(&source_dir)
-            .args(&[Path::new("--prefix"), &prefix_dir])
+            .args(&[std::path::Path::new("--prefix"), &prefix_dir])
             .output()
             .expect("failed to execute configure");
         stdout().write_all(&output.stdout).unwrap();
