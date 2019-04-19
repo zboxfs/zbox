@@ -34,7 +34,7 @@ COPY Cargo.toml ./
 COPY Cargo.lock ./
 COPY src ./src
 COPY build.rs ./
-RUN RUSTFLAGS=-L/opt/ndk/x86_64/sysroot/usr/lib cargo build --target x86_64-linux-android --features storage-zbox-jni && \
+RUN RUSTFLAGS=-L/opt/ndk/x86_64/sysroot/usr/lib/x86_64-linux-android/21 cargo build --target x86_64-linux-android --features storage-zbox-jni && \
     cargo clean && \
     rm -rf /tmp/zbox
 
