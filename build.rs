@@ -49,6 +49,7 @@ fn main() {
 
 // This function download lz4 source files from GitHub and build static library
 // for non-windows target.
+#[cfg(not(target_os = "windows"))]
 fn download_and_build_lz4() {
     static LZ4_ZIP: &'static str =
         "https://github.com/lz4/lz4/archive/v1.9.0.tar.gz";
@@ -80,6 +81,46 @@ fn download_and_build_lz4() {
 
     println!("cargo:rustc-link-search=native={}", lz4_lib_dir.display());
     println!("cargo:rustc-link-lib=static=lz4");
+}
+
+// This function download lz4 pre-built static lib file from GitHub for
+// Windows target.
+#[cfg(target_os = "windows")]
+fn download_and_build_lz4() {
+    static LZ4_ZIP: &'static str =
+        "https://github.com/lz4/lz4/releases/download/v1.9.0/lz4_v1_9_0_win64.zip";
+    static LZ4_NAME: &'static str = "lz4-1.9.0";
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let lz4_lib_dir = out_dir.join(LZ4_NAME);
+    let lz4_lib_file = lz4_lib_dir.join("liblz4_static.lib");
+
+    if !lz4_lib_dir.exists() {
+        fs::create_dir(&lz4_lib_dir).unwrap();
+    }
+
+    if !lz4_lib_file.exists() {
+        let mut tmpfile = tempfile::tempfile().unwrap();
+        reqwest::get(LZ4_ZIP)
+            .unwrap()
+            .copy_to(&mut tmpfile)
+            .unwrap();
+        let mut zip = zip::ZipArchive::new(tmpfile).unwrap();
+        let mut lib = zip
+            .by_name("static/liblz4_static.lib")
+            .unwrap();
+        let mut liblz4_file = OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(&lz4_lib_file)
+            .unwrap();
+        io::copy(&mut lib, &mut liblz4_file).unwrap();
+    }
+
+    assert!(&lz4_lib_file.exists(), "lz4 lib was not created");
+
+    println!("cargo:rustc-link-search=native={}", lz4_lib_dir.display());
+    println!("cargo:rustc-link-lib=static=liblz4_static");
 }
 
 // This downloads function and builds the libsodium from source for linux and
