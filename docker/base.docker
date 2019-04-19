@@ -1,7 +1,7 @@
 FROM ubuntu:xenial
 
 RUN apt-get update && \
-    apt-get install -yq sudo curl file wget make pkg-config && \
+    apt-get install -yq sudo curl file wget make pkg-config libssl-dev && \
     apt-get remove -y gcc g++ cpp && \
     apt-get autoremove -y
 

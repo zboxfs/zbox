@@ -7,7 +7,7 @@ cache:
   cargo: true
   directories:
     - $TRAVIS_BUILD_DIR/libsodium
-dist: trusty
+dist: xenial
 sudo: required
 matrix:
   allow_failures:
