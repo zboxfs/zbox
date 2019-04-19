@@ -194,13 +194,16 @@ fn download_and_build_lz4() {
 #[cfg(all(feature = "libsodium-bundled", not(target_os = "windows")))]
 fn download_and_install_libsodium() {
     use libflate::non_blocking::gzip::Decoder;
+    use std::fs::File;
     use std::io::{stderr, stdout, Write};
     use std::path::PathBuf;
     use std::process::Command;
     use tar::Archive;
 
-    static LIBSODIUM_ZIP: &'static str = "https://download.libsodium.org/libsodium/releases/libsodium-1.0.17.tar.gz";
+    static LIBSODIUM_URL: &'static str =
+        "https://download.libsodium.org/libsodium/releases";
     static LIBSODIUM_NAME: &'static str = "libsodium-1.0.17";
+
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let install_dir = out_dir.join("libsodium_install");
     let source_dir = install_dir.join(LIBSODIUM_NAME);
@@ -208,8 +211,43 @@ fn download_and_install_libsodium() {
     let sodium_lib_dir = prefix_dir.join("lib");
 
     if !install_dir.exists() {
-        let response = reqwest::get(LIBSODIUM_ZIP).unwrap();
-        let decoder = Decoder::new(response);
+        let tmpdir = tempfile::tempdir().unwrap();
+
+        // download source code file
+        let src_file_name = format!("{}.tar.gz", LIBSODIUM_NAME);
+        let url = format!("{}/{}", LIBSODIUM_URL, src_file_name);
+        let src_file_path = tmpdir.path().join(&src_file_name);
+        let mut file = File::create(&src_file_path).unwrap();
+        reqwest::get(&url).unwrap().copy_to(&mut file).unwrap();
+
+        // download signature file
+        let sig_file_name = format!("{}.tar.gz.sig", LIBSODIUM_NAME);
+        let url = format!("{}/{}", LIBSODIUM_URL, sig_file_name);
+        let sig_file_path = tmpdir.path().join(&sig_file_name);
+        let mut file = File::create(sig_file_path).unwrap();
+        reqwest::get(&url).unwrap().copy_to(&mut file).unwrap();
+
+        // import libsodium author's public key
+        let output = Command::new("gpg")
+            .arg("--import")
+            .arg("libsodium.gpg.key")
+            .output()
+            .expect("failed to import libsodium author's gpg key");
+        stdout().write_all(&output.stdout).unwrap();
+        stderr().write_all(&output.stderr).unwrap();
+
+        // verify signature
+        let output = Command::new("gpg")
+            .current_dir(tmpdir.path())
+            .arg("--verify")
+            .arg(&sig_file_name)
+            .output()
+            .expect("failed to verify libsodium file");
+        stdout().write_all(&output.stdout).unwrap();
+        stderr().write_all(&output.stderr).unwrap();
+
+        // unpack source code files
+        let decoder = Decoder::new(File::open(&src_file_path).unwrap());
         let mut ar = Archive::new(decoder);
         ar.unpack(&install_dir).unwrap();
     }

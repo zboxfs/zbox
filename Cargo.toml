@@ -62,6 +62,7 @@ storage-zbox-wasm = ["storage-zbox", "wasm-bindgen", "js-sys", "web-sys", "wee_a
 # zbox storage base dependencies
 storage-zbox = ["http", "serde_json"]
 
+# build-in libsodium dependency
 libsodium-bundled = []
 
 [dependencies]
