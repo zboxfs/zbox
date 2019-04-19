@@ -4,12 +4,6 @@ extern crate reqwest;
 extern crate tar;
 
 use std::env;
-use std::io::{stderr, stdout, Write};
-use std::path::PathBuf;
-use std::process::Command;
-
-use libflate::non_blocking::gzip::Decoder;
-use tar::Archive;
 
 fn main() {
     download_and_build_lz4();
@@ -51,6 +45,12 @@ fn main() {
 // for non-windows target.
 #[cfg(not(target_os = "windows"))]
 fn download_and_build_lz4() {
+    use libflate::non_blocking::gzip::Decoder;
+    use std::io::{stderr, stdout, Write};
+    use std::path::PathBuf;
+    use std::process::Command;
+    use tar::Archive;
+
     static LZ4_ZIP: &'static str =
         "https://github.com/lz4/lz4/archive/v1.9.0.tar.gz";
     static LZ4_NAME: &'static str = "lz4-1.9.0";
@@ -83,10 +83,72 @@ fn download_and_build_lz4() {
     println!("cargo:rustc-link-lib=static=lz4");
 }
 
-// This function download lz4 pre-built static lib file from GitHub for
-// Windows target.
-#[cfg(target_os = "windows")]
+// This function download lz4 source files from GitHub and build for
+// Windows and msvc target.
+#[cfg(all(target_os = "windows", target_env = "msvc"))]
 fn download_and_build_lz4() {
+    use libflate::non_blocking::gzip::Decoder;
+    use std::io::{stderr, stdout, Write};
+    use std::path::PathBuf;
+    use std::process::Command;
+    use tar::Archive;
+
+    static LZ4_ZIP: &'static str =
+        "https://github.com/lz4/lz4/archive/v1.9.0.tar.gz";
+    static LZ4_NAME: &'static str = "lz4-1.9.0";
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let lz4_dir = out_dir.join(LZ4_NAME);
+    let lz4_lib_file = lz4_dir.join("liblz4.lib");
+
+    if !lz4_dir.exists() {
+        let response = reqwest::get(LZ4_ZIP).unwrap();
+        let decoder = Decoder::new(response);
+        let mut ar = Archive::new(decoder);
+        ar.unpack(&out_dir).unwrap();
+    }
+
+    if !lz4_lib_file.exists() {
+        let output = Command::new("cl")
+            .current_dir(&lz4_dir)
+            .args(&[
+                "/c",
+                "lib/lz4.c",
+                "lib/lz4hc.c",
+                "lib/lz4frame.c",
+                "lib/xxhash.c",
+            ])
+            .output()
+            .expect("failed to execute cl for lz4 compilation");
+        stdout().write_all(&output.stdout).unwrap();
+        stderr().write_all(&output.stderr).unwrap();
+
+        let output = Command::new("lib")
+            .current_dir(&lz4_dir)
+            .args(&[
+                "lz4.obj",
+                "lz4hc.obj",
+                "lz4frame.obj",
+                "xxhash.obj",
+                "/OUT:liblz4.lib",
+            ])
+            .output()
+            .expect("failed to execute lib for lz4 linking");
+        stdout().write_all(&output.stdout).unwrap();
+        stderr().write_all(&output.stderr).unwrap();
+    }
+
+    assert!(&lz4_lib_file.exists(), "lz4 lib was not created");
+
+    println!("cargo:rustc-link-search=native={}", lz4_dir.display());
+    println!("cargo:rustc-link-lib=static=liblz4");
+}
+
+// This function download lz4 pre-built static lib file from GitHub for
+// Windows and mingw target.
+#[cfg(all(target_os = "windows", target_env = "gnu"))]
+fn download_and_build_lz4() {
+    use std::path::PathBuf;
+
     static LZ4_ZIP: &'static str =
         "https://github.com/lz4/lz4/releases/download/v1.9.0/lz4_v1_9_0_win64.zip";
     static LZ4_NAME: &'static str = "lz4-1.9.0";
@@ -105,9 +167,7 @@ fn download_and_build_lz4() {
             .copy_to(&mut tmpfile)
             .unwrap();
         let mut zip = zip::ZipArchive::new(tmpfile).unwrap();
-        let mut lib = zip
-            .by_name("static/liblz4_static.lib")
-            .unwrap();
+        let mut lib = zip.by_name("static/liblz4_static.lib").unwrap();
         let mut liblz4_file = OpenOptions::new()
             .create(true)
             .truncate(true)
@@ -133,6 +193,12 @@ fn download_and_build_lz4() {
 // $ sudo make install
 #[cfg(all(feature = "libsodium-bundled", not(target_os = "windows")))]
 fn download_and_install_libsodium() {
+    use libflate::non_blocking::gzip::Decoder;
+    use std::io::{stderr, stdout, Write};
+    use std::path::PathBuf;
+    use std::process::Command;
+    use tar::Archive;
+
     static LIBSODIUM_ZIP: &'static str = "https://download.libsodium.org/libsodium/releases/libsodium-1.0.17.tar.gz";
     static LIBSODIUM_NAME: &'static str = "libsodium-1.0.17";
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
