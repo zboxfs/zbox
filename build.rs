@@ -6,8 +6,6 @@ extern crate tar;
 use std::env;
 
 fn main() {
-    download_and_build_lz4();
-
     #[cfg(feature = "libsodium-bundled")]
     download_and_install_libsodium();
 
@@ -34,10 +32,22 @@ fn main() {
         // under '/usr' dir, in that case use the environment variables
         // mentioned above
         pkg_config::Config::new()
-            .atleast_version("1.0.16")
+            .atleast_version("1.0.17")
             .statik(true)
             .probe("libsodium")
             .unwrap();
+    }
+
+    // add liblz4 link options
+    if let Ok(lib_dir) = env::var("LZ4_LIB_DIR") {
+        println!("cargo:rustc-link-search=native={}", lib_dir);
+        if cfg!(target_os = "windows") {
+            println!("cargo:rustc-link-lib=static=liblz4");
+        } else {
+            println!("cargo:rustc-link-lib=static=lz4");
+        }
+    } else {
+        download_and_build_lz4();
     }
 }
 

@@ -382,7 +382,7 @@ impl VersionReader {
     }
 
     #[wasm_bindgen(js_name = readAll)]
-    pub fn read_all(&mut self) -> Result<js_sys::Uint8ClampedArray> {
+    pub fn read_all(&mut self) -> Result<js_sys::Uint8Array> {
         let mut buf = Vec::new();
         map_js_err!(match self.inner {
             Some(ref mut rdr) => rdr.read_to_end(&mut buf).map_err(Error::from),
@@ -429,7 +429,7 @@ impl File {
     }
 
     #[wasm_bindgen(js_name = readAll)]
-    pub fn read_all(&mut self) -> Result<js_sys::Uint8ClampedArray> {
+    pub fn read_all(&mut self) -> Result<js_sys::Uint8Array> {
         let mut buf = Vec::new();
         map_js_err!(match self.inner {
             Some(ref mut file) => {
