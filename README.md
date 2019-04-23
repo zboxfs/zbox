@@ -115,7 +115,7 @@ zbox = "0.7.0"
 ```
 
 If you don't want to install libsodium by yourself, you can specify
-`libsodium-bundled` feature in dependency, which will automatically download
+`libsodium-bundled` feature in dependency, which will automatically download,
 verify and build libsodium.
 
 ```toml
