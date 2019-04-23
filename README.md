@@ -7,7 +7,7 @@
 [![license](https://img.shields.io/github/license/zboxfs/zbox.svg?style=flat-square)](https://github.com/zboxfs/zbox)
 [![GitHub stars](https://img.shields.io/github/stars/zboxfs/zbox.svg?style=social&label=Stars)](https://github.com/zboxfs/zbox)
 
-ZboxFS is a zero-details, privacy-focused embeddable file system. Its goal is
+ZboxFS is a zero-details, privacy-focused in-app file system. Its goal is
 to help application store files securely, privately and reliably. By
 encapsulating files and directories into an encrypted repository, it provides
 a virtual file system and exclusive access to authorised application.
@@ -76,20 +76,16 @@ Below is the feature comparison list.
 
 ## Supported Storage
 
-By now, ZboxFS supports a variety of underlying storage, which are listed below.
-Memory and OS file storage are enabled by default, all the others can be
-enabled individually by specifying its feature when build.
+ZboxFS supports a variety of underlying storages. Memory storage is enabled by
+default. All the other storages can be enabled individually by specifying its
+corresponding Cargo feature when building ZboxFS.
 
-| Storage        | URI identifier  | Feature        |
+| Storage        | URI identifier  | Cargo Feature  |
 | -------------- | --------------- | -------------- |
 | Memory         | "mem://"        | N/A            |
-| OS file system | "file://"       | N/A            |
+| OS file system | "file://"       | storage-file   |
 | SQLite         | "sqlite://"     | storage-sqlite |
 | Redis          | "redis://"      | storage-redis  |
-
-There is another special storage `Faulty` ("faulty://"), which is based on
-memory storage and can simulate random IO error. It is used internally to
-facilitate random IO error test.
 
 How to use
 ==========
@@ -115,7 +111,7 @@ Add the following dependency to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-zbox = "0.6.1"
+zbox = "0.7.0"
 ```
 
 ## Example
@@ -123,7 +119,7 @@ zbox = "0.6.1"
 ```rust
 extern crate zbox;
 
-use std::io::{Read, Write};
+use std::io::{Read, Write, Seek, SeekFrom};
 use zbox::{init_env, RepoOpener, OpenOptions};
 
 fn main() {
@@ -150,6 +146,7 @@ fn main() {
 
     // read file content using std::io::Read trait
     let mut content = String::new();
+    file.seek(SeekFrom::Start(0)).unwrap();
     file.read_to_string(&mut content).unwrap();
     assert_eq!(content, "Hello, world!");
 }

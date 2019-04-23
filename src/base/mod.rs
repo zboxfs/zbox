@@ -33,10 +33,6 @@ use env_logger;
 
 static INIT: Once = ONCE_INIT;
 
-/// Initialise ZboxFS environment.
-///
-/// This function should be called before any other functions provided by ZboxFS.
-/// This function can be called more than one time.
 cfg_if! {
     if #[cfg(target_os = "android")] {
         pub fn init_env() {
@@ -65,6 +61,11 @@ cfg_if! {
             });
         }
     } else {
+        /// Initialise ZboxFS environment.
+        ///
+        /// This function should be called before any other functions provided
+        /// by ZboxFS.
+        /// This function can be called more than one time.
         pub fn init_env() {
             INIT.call_once(|| {
                 env_logger::try_init().ok();

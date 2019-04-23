@@ -1,9 +1,9 @@
-//! ZboxFS is a zero-details, privacy-focused embeddable file system.
+//! ZboxFS is a zero-details, privacy-focused in-app file system.
 //!
-//! It keeps files securely, privately and reliably on underlying storages.
-//! By encapsulating files and directories into an encrypted repository, it
-//! provides a virtual file system and exclusive access to authorised
-//! application.
+//! It keeps your app files securely, privately and reliably on underlying
+//! storages. By encapsulating files and directories into an encrypted
+//! repository, it provides a virtual file system and exclusive access to
+//! the authorised application.
 //!
 //! The most core parts of this module are [`Repo`] and [`File`], which provides
 //! most file system operations and file I/O.
@@ -11,7 +11,7 @@
 //! - [`Repo`] provides similar file system manipulation methods to [`std::fs`]
 //! - [`File`] provides similar file I/O methods to [`std::fs::File`]
 //!
-//! [`init_env`] initialises the environment and should be called before
+//! [`init_env`] initialises the environment and should be called once before
 //! any other methods provied by ZboxFS.
 //!
 //! After repository is opened by [`RepoOpener`], all of the other functions
@@ -19,9 +19,9 @@
 //!
 //! # Examples
 //!
-//! Create and open a [`Repo`] using OS file system as storage.
+//! Create and open a [`Repo`] using memory as underlying storage.
 //!
-//! ```no_run
+//! ```
 //! # #![allow(unused_mut, unused_variables)]
 //! use zbox::{init_env, RepoOpener};
 //!
@@ -31,7 +31,7 @@
 //! // create and open a repository
 //! let mut repo = RepoOpener::new()
 //!     .create(true)
-//!     .open("file://./my_repo", "your password")
+//!     .open("mem://my_repo", "your password")
 //!     .unwrap();
 //! ```
 //!
@@ -68,7 +68,7 @@
 //! ```
 //!
 //! Directory navigation can use [`Path`] and [`PathBuf`]. The path separator
-//! should always be "/".
+//! should always be "/", even on Windows.
 //!
 //! ```
 //! # use zbox::{init_env, RepoOpener};

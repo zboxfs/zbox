@@ -172,38 +172,58 @@ impl RepoOpener {
     /// Opens a repository at URI with the password and options specified by
     /// `self`.
     ///
+    /// In general, the URI is structured as follows:
+    ///
+    /// ```notrust
+    /// storage://username:password@/path/data?key=value&key2=value2
+    /// |------| |-----------------||---------||-------------------|
+    ///     |             |              |                |
+    /// identifier    authority         path          parameters
+    /// ```
+    ///
+    /// Only `identifier` and `path` is required, all the others are optional.
+    ///
     /// Supported storage:
     ///
-    /// - OS file system based storage, location prefix is `file://`
-    ///
-    ///   After the prefix is the path to a directory on OS file system. It can
-    ///   be a relative or absolute path.
-    ///
-    /// - Memory based storage, location prefix is `mem://`
+    /// - Memory storage, URI identifier is `mem://`
     ///
     ///   As memory stoage is volatile, it is always be used with `create`
     ///   option. It doesn't make sense to open an existing memory storage,
-    ///   thus the string after prefix is arbitrary.
+    ///   thus the string after identifier is arbitrary.
     ///
-    /// - SQLite based storage, location prefix is `sqlite://`
+    ///   For example, `mem://foobar`.
     ///
-    ///   After the prefix is the path to a SQLite database file. It can also
+    /// - OS file system storage, URI identifier is `file://`
+    ///
+    ///   After the identifier is the path to a directory on OS file system. It can
+    ///   be a relative or absolute path.
+    ///
+    ///   For example, `file://./foo/bar`.
+    ///
+    ///   This storage must be enabled by Cargo feature `storage-file`.
+    ///
+    /// - SQLite storage, URI identifier is `sqlite://`
+    ///
+    ///   After the identifier is the path to a SQLite database file. It can also
     ///   be a in-memory SQLite database, that is, the path can be ":memory:".
-    ///   This storage can be enabled by feature `storage-sqlite`.
     ///
-    /// - Redis based storage, location prefix is `redis://`
+    ///   For example, `sqlite://./foobar.sqlite`.
     ///
-    ///   After the prefix is the path to a Redis instance. Unix socket is
+    ///   This storage must be enabled by Cargo feature `storage-sqlite`.
+    ///
+    /// - Redis storage, URI identifier is `redis://`
+    ///
+    ///   After the identifier is the path to a Redis instance. Unix socket is
     ///   supported. The URI format is:
     ///
     ///   `redis://[+unix+][:<passwd>@]<hostname>[:port][/<db>]`
     ///
-    ///   This storage can be enabled by feature `storage-redis`.
+    ///   This storage must be enabled by Cargo feature `storage-redis`.
     ///
     /// After a repository is opened, all of the other functions provided by
     /// ZboxFS will be thread-safe.
     ///
-    /// The application should destroy the password as soon as possible after
+    /// Your application should destroy the password as soon as possible after
     /// calling this function.
     ///
     /// # Errors
@@ -414,16 +434,16 @@ pub struct RepoInfo {
 }
 
 impl RepoInfo {
-    /// Returns the unique volume id in this repository.
+    /// Returns the unique volume id of this repository.
     #[inline]
     pub fn volume_id(&self) -> &Eid {
         &self.volume_id
     }
 
-    /// Returns repository version string.
+    /// Returns repository version as string.
     ///
-    /// This is the string representation of this repository, for example,
-    /// `1.0.2`.
+    /// This is the string representation of the repository version, for
+    /// example, `1.0.2`.
     #[inline]
     pub fn version(&self) -> String {
         self.ver.to_string()
@@ -551,23 +571,41 @@ fn open_file_with_options<P: AsRef<Path>>(
 /// directories and their associated data. Similar to [`std::fs`], `Repo`
 /// provides methods to manipulate the enclosed file system.
 ///
+/// # Storages
+///
+/// ZboxFS supports a variety of underlying storages, which are listed below.
+///
+/// | Storage        | URI identifier  | Cargo Feature  |
+/// | -------------- | --------------- | -------------- |
+/// | Memory         | "mem://"        | N/A            |
+/// | OS file system | "file://"       | storage-file   |
+/// | SQLite         | "sqlite://"     | storage-sqlite |
+/// | Redis          | "redis://"      | storage-redis  |
+///
+/// By default, only memory storage is enabled. To use other storages, you need
+/// to specify it as dependency features in your Cargo.toml.
+///
+/// For example, to use OS file as underlying storage, specify its feature in
+/// your project's Cargo.toml file.
+///
+/// ```toml
+/// [dependencies]
+/// zbox = { version = "0.7.0", features = ["storage-file"] }
+/// ```
+///
 /// # Create and open `Repo`
 ///
-/// `Repo` can be created on different storages using [`RepoOpener`]. It uses
-/// an URI-like string to specify its location. Supported storages are listed
-/// below:
-///
-/// * OS file system based storage, location prefix: `file://`
-/// * Memory based storage, location prefix: `mem://`
-/// * SQLite based storage, location prefix: `sqlite://`
-/// * Redis based storage, location prefix: `redis://`
-///
-/// Check details at: [RepoOpener](struct.RepoOpener.html#method.open)
+/// `Repo` can be created on different underlying storages using [`RepoOpener`].
+/// It uses an URI-like string to specify its storage type and location. The
+/// URI string starts with an identifier which specifies the storage type, as
+/// shown in above table. You can check more location URI details at:
+/// [RepoOpener](struct.RepoOpener.html#method.open).
 ///
 /// `Repo` can only be opened once at a time. After opened, it keeps locked
 /// from other open attempts until it goes out scope.
 ///
-/// Optionally, `Repo` can also be opened in [`read-only`] mode.
+/// Optionally, `Repo` can be opened in [`read-only`] mode if you only need
+/// read access.
 ///
 /// # Examples
 ///

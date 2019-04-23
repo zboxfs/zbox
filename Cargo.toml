@@ -1,8 +1,8 @@
 [package]
 name = "zbox"
-version = "0.6.1"
+version = "0.7.0"
 authors = ["Bo Lu"]
-description = "Zbox is a zero-details, privacy-focused embeddable file system."
+description = "Zbox is a zero-details, privacy-focused in-app file system."
 documentation = "https://docs.rs/zbox"
 homepage = "https://github.com/zboxfs/zbox"
 repository = "https://github.com/zboxfs/zbox"
