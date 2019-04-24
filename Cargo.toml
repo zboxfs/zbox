@@ -1,6 +1,6 @@
 [package]
 name = "zbox"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["Bo Lu"]
 description = "Zbox is a zero-details, privacy-focused in-app file system."
 documentation = "https://docs.rs/zbox"
@@ -11,6 +11,9 @@ keywords = ["filesystem", "crypto", "security", "privacy", "storage"]
 categories = ["filesystem", "cryptography"]
 license = "Apache-2.0"
 build = "build.rs"
+
+[package.metadata.docs.rs]
+features = [ "libsodium-bundled" ]
 
 [badges]
 travis-ci = { repository = "zboxfs/zbox" }
