@@ -95,13 +95,7 @@ pub trait Armor<'de> {
         let arm_id = arm.to_eid(id);
         let mut rdr = self.get_item_reader(&arm_id)?;
         let mut buf = Vec::new();
-        rdr.read_to_end(&mut buf).map_err(|err| {
-            if err.kind() == ErrorKind::NotFound {
-                Error::NotFound
-            } else {
-                Error::from(err)
-            }
-        })?;
+        from_io_err!(rdr.read_to_end(&mut buf))?;
         let mut de = Deserializer::new(&buf[..]);
         let item: Self::Item = Deserialize::deserialize(&mut de)?;
         Ok(item)

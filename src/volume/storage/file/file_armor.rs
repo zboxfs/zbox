@@ -193,13 +193,9 @@ impl<'de, T: ArmAccess<'de> + Debug> Armor<'de> for FileArmor<T> {
 
     fn get_item_reader(&self, arm_id: &Eid) -> Result<Self::ItemReader> {
         let path = arm_id.to_path_buf(&self.base);
-        match vio::OpenOptions::new().read(true).open(&path) {
-            Ok(file) => Ok(CryptoReader::new(file, &self.crypto, &self.key)),
-            Err(ref err) if err.kind() == ErrorKind::NotFound => {
-                Err(Error::NotFound)
-            }
-            Err(err) => Err(Error::from(err)),
-        }
+        let file =
+            from_io_err!(vio::OpenOptions::new().read(true).open(&path))?;
+        Ok(CryptoReader::new(file, &self.crypto, &self.key))
     }
 
     fn get_item_writer(&self, arm_id: &Eid) -> Result<Self::ItemWriter> {

@@ -1,10 +1,10 @@
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use super::CacheBackend;
 use base::utils;
 use base::vio;
-use error::Result;
+use error::{Error, Result};
 
 pub struct FileBackend {
     base: PathBuf,
@@ -32,7 +32,8 @@ impl CacheBackend for FileBackend {
         dst: &mut [u8],
     ) -> Result<()> {
         let path = self.base.join(rel_path);
-        let mut file = vio::OpenOptions::new().read(true).open(&path)?;
+        let mut file =
+            from_io_err!(vio::OpenOptions::new().read(true).open(&path))?;
         file.seek(SeekFrom::Start(offset as u64))?;
         file.read_exact(dst)?;
         Ok(())
@@ -41,7 +42,8 @@ impl CacheBackend for FileBackend {
     fn get(&mut self, rel_path: &Path) -> Result<Vec<u8>> {
         let path = self.base.join(rel_path);
         let mut ret = Vec::new();
-        let mut file = vio::OpenOptions::new().read(true).open(&path)?;
+        let mut file =
+            from_io_err!(vio::OpenOptions::new().read(true).open(&path))?;
         file.read_to_end(&mut ret)?;
         Ok(ret)
     }

@@ -107,9 +107,23 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
+// convert zbox error to IO error
 macro_rules! map_io_err {
     ($x:expr) => {
         $x.map_err(|e| IoError::new(ErrorKind::Other, e.description()));
+    };
+}
+
+// convert from IO error to zbox error, take care of NotFound error
+macro_rules! from_io_err {
+    ($x:expr) => {
+        $x.map_err(|err| {
+            if err.kind() == ErrorKind::NotFound {
+                Error::NotFound
+            } else {
+                Error::from(err)
+            }
+        });
     };
 }
 
