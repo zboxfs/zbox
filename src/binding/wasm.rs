@@ -149,7 +149,11 @@ type Result<T> = result::Result<T, JsValue>;
 
 macro_rules! map_js_err {
     ($x:expr) => {
-        $x.map_err(|e| JsValue::from(e.description()));
+        $x.map_err(|err| {
+            let desc = err.description().to_owned();
+            let code: i32 = err.into();
+            JsValue::from(format!("ZboxFS({}): {}", code, desc))
+        });
     };
 }
 
@@ -159,8 +163,8 @@ fn time_to_u64(t: SystemTime) -> u64 {
 }
 
 #[wasm_bindgen]
-pub fn init_env(enable_logging: bool) {
-    if enable_logging {
+pub fn init_env(is_debug: bool) {
+    if is_debug {
         base::init_env();
     } else {
         base::init_env_no_logging();

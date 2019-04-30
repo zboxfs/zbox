@@ -167,7 +167,7 @@ impl SuperBlk {
                     if *err == Error::Decrypt
                         || *err == Error::InvalidSuperBlk =>
                 {
-                    warn!("super block right arm is corrupted");
+                    warn!("decrypt super block right arm failed");
                     Ok(left)
                 }
                 Err(err) => Err(err),
@@ -176,7 +176,7 @@ impl SuperBlk {
             Err(ref err)
                 if *err == Error::Decrypt || *err == Error::InvalidSuperBlk =>
             {
-                warn!("super block left arm is corrupted");
+                warn!("decrypt super block left arm failed");
                 right_arm
             }
             Err(err) => Err(err),
