@@ -701,6 +701,11 @@ impl Repo {
     }
 
     /// Reset password for the respository.
+    ///
+    /// Note: if this method failed due to IO error, super block might be
+    /// damaged. If so, use
+    /// [repair_super_block](struct.Repo.html#method.repair_super_block)
+    /// to restore super block before re-open the repo.
     pub fn reset_password(
         &mut self,
         old_pwd: &str,
@@ -710,6 +715,19 @@ impl Repo {
     ) -> Result<()> {
         let cost = Cost::new(ops_limit, mem_limit);
         self.fs.reset_password(old_pwd, new_pwd, cost)
+    }
+
+    /// Repair possibly damaged super block.
+    ///
+    /// This method will try to repair super block using backup. One scenario
+    /// is when [reset_password](struct.Repo.html#method.reset_password) failed
+    /// due to IO error, super block might be damaged. Using this method can
+    /// restore the damaged super block from backup.
+    ///
+    /// If super block is all good, this method is no-op.
+    #[inline]
+    pub fn repair_super_block(uri: &str, pwd: &str) -> Result<()> {
+        Fs::repair_super_block(uri, pwd)
     }
 
     /// Returns whether the path points at an existing entity in repository.

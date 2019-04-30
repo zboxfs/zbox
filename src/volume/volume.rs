@@ -121,6 +121,13 @@ impl Volume {
         Ok(super_blk.body.payload.clone())
     }
 
+    /// Try to repair super block
+    pub fn repair_super_block(&mut self, pwd: &str) -> Result<()> {
+        let mut storage = self.storage.write().unwrap();
+        storage.connect()?;
+        SuperBlk::repair(pwd, &mut storage)
+    }
+
     /// Check specified volume if it exists
     pub fn exists(&self) -> Result<bool> {
         let storage = self.storage.read().unwrap();

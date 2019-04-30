@@ -85,7 +85,7 @@ impl SuperBlk {
     // magic numbers for body AEAD encryption
     const MAGIC: [u8; 4] = [233, 239, 241, 251];
 
-    // save super block
+    // save super blocks
     pub fn save(&mut self, pwd: &str, storage: &mut Storage) -> Result<()> {
         let crypto = Crypto::new(self.head.cost, self.head.cipher)?;
 
@@ -112,13 +112,13 @@ impl SuperBlk {
         // encrypt compose buffer using volume key which is the user password hash
         let enc_buf = crypto.encrypt_with_ad(&comp_buf, vkey, &Self::MAGIC)?;
 
-        // combine head and compose buffer and save it to storage
+        // combine head and compose buffer and save 2 copies to storage
         let mut buf = Vec::new();
         buf.put(&head_buf);
         buf.put(&enc_buf);
-        storage.put_super_block(&buf, self.body.seq % 2)?;
-
-        Ok(())
+        storage
+            .put_super_block(&buf, 0)
+            .and(storage.put_super_block(&buf, 1))
     }
 
     // load a specific super block arm
@@ -146,40 +146,53 @@ impl SuperBlk {
         Ok(SuperBlk { head, body })
     }
 
-    // load super block
+    // load super block from both left and right arm
     pub fn load(pwd: &str, storage: &mut Storage) -> Result<Self> {
+        let left = Self::load_arm(0, pwd, storage)?;
+        let right = Self::load_arm(1, pwd, storage)?;
+
+        if left.body.seq == right.body.seq {
+            Ok(left)
+        } else {
+            Err(Error::InvalidSuperBlk)
+        }
+    }
+
+    // try to repair super block using at least one valid
+    pub fn repair(pwd: &str, storage: &mut Storage) -> Result<()> {
         let left_arm = Self::load_arm(0, pwd, storage);
         let right_arm = Self::load_arm(1, pwd, storage);
 
         match left_arm {
-            Ok(left) => match right_arm {
-                Ok(right) => {
+            Ok(mut left) => match right_arm {
+                Ok(mut right) => {
+                    if left.body.volume_id != right.body.volume_id
+                        || left.body.key != right.body.key
+                    {
+                        return Err(Error::InvalidSuperBlk);
+                    }
                     if left.body.seq > right.body.seq {
-                        Ok(left)
+                        left.save(pwd, storage)?;
                     } else if left.body.seq < right.body.seq {
-                        Ok(right)
+                        right.save(pwd, storage)?;
                     } else {
-                        Err(Error::InvalidSuperBlk)
+                        debug!("super block all good, no need repair");
+                        return Ok(());
                     }
                 }
-                Err(ref err) if *err == Error::NotFound => Ok(left),
-                Err(ref err)
-                    if *err == Error::Decrypt
-                        || *err == Error::InvalidSuperBlk =>
-                {
-                    warn!("decrypt super block right arm failed");
-                    Ok(left)
-                }
-                Err(err) => Err(err),
+                Err(_) => left.save(pwd, storage)?,
             },
-            Err(ref err) if *err == Error::NotFound => right_arm,
-            Err(ref err)
-                if *err == Error::Decrypt || *err == Error::InvalidSuperBlk =>
-            {
-                warn!("decrypt super block left arm failed");
-                right_arm
+            Err(err) => {
+                if let Ok(mut right) = right_arm {
+                    right.save(pwd, storage)?;
+                } else {
+                    return Err(err);
+                }
             }
-            Err(err) => Err(err),
         }
+
+        debug!("super block repaired");
+
+        Ok(())
     }
 }

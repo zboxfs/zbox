@@ -227,6 +227,13 @@ impl Fs {
         vol.reset_password(old_pwd, new_pwd, cost)
     }
 
+    /// Repair possibly damaged super block
+    #[inline]
+    pub fn repair_super_block(uri: &str, pwd: &str) -> Result<()> {
+        let mut vol = Volume::new(uri)?;
+        vol.repair_super_block(pwd)
+    }
+
     /// Resolve path
     pub fn resolve(&self, path: &Path) -> Result<FnodeRef> {
         // only resolve absolute path
