@@ -195,7 +195,8 @@ impl Storable for ZboxStorage {
         let rel_path =
             Path::new(Self::SUPER_BLK_STEM).with_extension(&suffix.to_string());
         let mut local_cache = self.local_cache.write().unwrap();
-        local_cache.put_pinned(&rel_path, super_blk)
+        local_cache.put_pinned(&rel_path, super_blk)?;
+        local_cache.flush()
     }
 
     #[inline]
