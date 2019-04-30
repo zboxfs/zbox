@@ -200,8 +200,13 @@ pub struct CRepoInfo {
 }
 
 #[no_mangle]
-pub extern "C" fn zbox_get_repo_info(info: *mut CRepoInfo, repo: *const Repo) {
-    let repo_info = unsafe { (*repo).info() };
+pub extern "C" fn zbox_get_repo_info(info: *mut CRepoInfo, repo: *const Repo) -> c_int {
+    let repo_info = unsafe {
+        match (*repo).info() {
+            Ok(info) => info,
+            Err(err) => return err.into(),
+        }
+    };
     let version = CString::new(repo_info.version()).unwrap();
     let uri = CString::new(repo_info.uri()).unwrap();
     let ctime = repo_info.created_at();
@@ -218,6 +223,8 @@ pub extern "C" fn zbox_get_repo_info(info: *mut CRepoInfo, repo: *const Repo) {
     info.dedup_chunk = repo_info.dedup_chunk() as boolean_t;
     info.is_read_only = repo_info.is_read_only() as boolean_t;
     info.created_at = to_time_t(ctime);
+
+    0
 }
 
 #[no_mangle]
@@ -251,13 +258,31 @@ pub extern "C" fn zbox_repo_reset_password(
 }
 
 #[no_mangle]
+pub extern "C" fn zbox_repo_repair_super_block(
+    uri: *const c_char,
+    pwd: *const c_char
+) -> c_int {
+    unsafe {
+        let uri = CStr::from_ptr(uri).to_str().unwrap();
+        let pwd = CStr::from_ptr(pwd).to_str().unwrap();
+        match Repo::repair_super_block(uri, pwd) {
+            Ok(_) => 0,
+            Err(err) => err.into(),
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn zbox_repo_path_exists(
     repo: *mut Repo,
     path: *const c_char,
-) -> boolean_t {
+) -> c_int {
     unsafe {
         let path = CStr::from_ptr(path).to_str().unwrap();
-        (*repo).path_exists(path) as u8
+        match (*repo).path_exists(path) {
+            Ok(result) => result as c_int,
+            Err(err) => err.into(),
+        }
     }
 }
 
@@ -265,10 +290,13 @@ pub extern "C" fn zbox_repo_path_exists(
 pub extern "C" fn zbox_repo_is_file(
     repo: *mut Repo,
     path: *const c_char,
-) -> boolean_t {
+) -> c_int {
     unsafe {
         let path = CStr::from_ptr(path).to_str().unwrap();
-        (*repo).is_file(path) as u8
+        match (*repo).is_file(path) {
+            Ok(result) => result as c_int,
+            Err(err) => err.into(),
+        }
     }
 }
 
@@ -276,10 +304,13 @@ pub extern "C" fn zbox_repo_is_file(
 pub extern "C" fn zbox_repo_is_dir(
     repo: *mut Repo,
     path: *const c_char,
-) -> boolean_t {
+) -> c_int {
     unsafe {
         let path = CStr::from_ptr(path).to_str().unwrap();
-        (*repo).is_dir(path) as u8
+        match (*repo).is_dir(path) {
+            Ok(result) => result as c_int,
+            Err(err) => err.into(),
+        }
     }
 }
 
@@ -366,7 +397,7 @@ impl From<Metadata> for CMetadata {
     fn from(n: Metadata) -> Self {
         CMetadata {
             ftype: n.file_type().into(),
-            len: n.len(),
+            len: n.content_len(),
             curr_version: n.curr_version(),
             ctime: to_time_t(n.created_at()),
             mtime: to_time_t(n.modified_at()),
@@ -481,7 +512,7 @@ impl From<Vec<Version>> for VersionList {
             .map(|ver| -> CVersion {
                 CVersion {
                     num: ver.num(),
-                    len: ver.len(),
+                    len: ver.content_len(),
                     created_at: to_time_t(ver.created_at()),
                 }
             })

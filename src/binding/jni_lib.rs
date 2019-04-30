@@ -452,6 +452,20 @@ pub extern "system" fn Java_io_zbox_fs_Repo_jniResetPassword(
 }
 
 #[no_mangle]
+pub extern "system" fn Java_io_zbox_fs_Repo_jniRepairSuperBlock(
+    env: JNIEnv,
+    _obj: JObject,
+    uri: JString,
+    pwd: JString,
+) {
+    let uri: String = env.get_string(uri).unwrap().into();
+    let pwd: String = env.get_string(pwd).unwrap().into();
+    if let Err(ref err) = Repo::repair_super_block(&uri, &pwd) {
+        throw(&env, err);
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_io_zbox_fs_Repo_jniPathExists(
     env: JNIEnv,
     obj: JObject,

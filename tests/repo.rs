@@ -7,7 +7,7 @@ use tempdir::TempDir;
 
 #[cfg(feature = "storage-file")]
 use zbox::{
-    init_env, Cipher, Error, MemLimit, OpenOptions, OpsLimit, RepoOpener,
+    init_env, Cipher, Error, MemLimit, OpenOptions, OpsLimit, Repo, RepoOpener,
 };
 
 #[cfg(feature = "storage-file")]
@@ -195,5 +195,18 @@ fn repo_oper() {
         assert_eq!(f.metadata().unwrap_err(), Error::RepoClosed);
         assert_eq!(f.history().unwrap_err(), Error::RepoClosed);
         assert_eq!(f.curr_version().unwrap_err(), Error::RepoClosed);
+    }
+
+    // case #10: test repair_super_block()
+    {
+        let path = base.clone() + "/repo10";
+        let repo = RepoOpener::new()
+            .create_new(true)
+            .open(&path, &pwd)
+            .unwrap();
+
+        drop(repo);
+
+        Repo::repair_super_block(&path, &pwd).unwrap();
     }
 }

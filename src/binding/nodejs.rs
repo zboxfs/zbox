@@ -241,6 +241,24 @@ repo_async_task!{
 }
 
 repo_async_task!{
+    struct RepoRepairSuperBlkTask {
+        uri: String,
+        pwd: String,
+    }
+
+    output = (),
+    js_event = JsUndefined,
+
+    perform(self) {
+        Repo::repair_super_block(&self.uri, &self.pwd)
+    }
+
+    complete(cx, _ret) {
+        Ok(cx.undefined())
+    }
+}
+
+repo_async_task!{
     struct RepoPathExistsTask {
         path: String,
     }
@@ -715,6 +733,20 @@ declare_types! {
                 let guard = cx.lock();
                 let inner = this.borrow(&guard);
                 let task = RepoResetPwdTask { repo: inner.clone(), old_pwd, new_pwd, ops_limit, mem_limit };
+                task.schedule(callback);
+            }
+            Ok(cx.undefined().upcast())
+        }
+
+        method repairSuperBlock(mut cx) {
+            let uri = cx.argument::<JsString>(0)?.value();
+            let pwd = cx.argument::<JsString>(1)?.value();
+            let callback = cx.argument::<JsFunction>(2)?;
+            let this = cx.this();
+            {
+                let guard = cx.lock();
+                let inner = this.borrow(&guard);
+                let task = RepoRepairSuperBlkTask { uri, pwd };
                 task.schedule(callback);
             }
             Ok(cx.undefined().upcast())

@@ -570,6 +570,11 @@ impl Repo {
         })
     }
 
+    #[wasm_bindgen(js_name = repairSuperBlock)]
+    pub fn repair_super_block(uri: &str, pwd: &str) -> Result<()> {
+        map_js_err!(ZboxRepo::repair_super_block(uri, pwd))
+    }
+
     #[wasm_bindgen(js_name = pathExists)]
     pub fn path_exists(&self, path: &str) -> Result<bool> {
         map_js_err!(match self.inner {
