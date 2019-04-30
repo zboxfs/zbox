@@ -289,8 +289,8 @@ pub struct RepoInfo {
     pub compress: bool,
     pub versionLimit: u8,
     pub dedupChunk: bool,
-    pub readOnly: bool,
-    pub ctime: u64,
+    pub isReadOnly: bool,
+    pub createdAt: u64,
 }
 
 impl From<ZboxRepoInfo> for RepoInfo {
@@ -302,8 +302,8 @@ impl From<ZboxRepoInfo> for RepoInfo {
             compress: info.compress(),
             versionLimit: info.version_limit(),
             dedupChunk: info.dedup_chunk(),
-            readOnly: info.is_read_only(),
-            ctime: time_to_u64(info.created_at()),
+            isReadOnly: info.is_read_only(),
+            createdAt: time_to_u64(info.created_at()),
         }
     }
 }
