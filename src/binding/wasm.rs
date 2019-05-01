@@ -193,26 +193,26 @@ impl RepoOpener {
     }
 
     #[wasm_bindgen(js_name = createNew)]
-    pub fn create_new(mut self, create_new: bool) {
+    pub fn create_new(&mut self, create_new: bool) {
         self.inner.create_new(create_new);
     }
 
-    pub fn compress(mut self, compress: bool) {
+    pub fn compress(&mut self, compress: bool) {
         self.inner.compress(compress);
     }
 
     #[wasm_bindgen(js_name = versionLimit)]
-    pub fn version_limit(mut self, version_limit: u8) {
+    pub fn version_limit(&mut self, version_limit: u8) {
         self.inner.version_limit(version_limit);
     }
 
     #[wasm_bindgen(js_name = dedupChunk)]
-    pub fn dedup_chunk(mut self, dedup_chunk: bool) {
+    pub fn dedup_chunk(&mut self, dedup_chunk: bool) {
         self.inner.dedup_chunk(dedup_chunk);
     }
 
     #[wasm_bindgen(js_name = readOnly)]
-    pub fn read_only(mut self, read_only: bool) {
+    pub fn read_only(&mut self, read_only: bool) {
         self.inner.read_only(read_only);
     }
 
@@ -257,17 +257,17 @@ impl OpenOptions {
     }
 
     #[wasm_bindgen(js_name = createNew)]
-    pub fn create_new(mut self, create_new: bool) {
+    pub fn create_new(&mut self, create_new: bool) {
         self.inner.create_new(create_new);
     }
 
     #[wasm_bindgen(js_name = versionLimit)]
-    pub fn version_limit(mut self, version_limit: u8) {
+    pub fn version_limit(&mut self, version_limit: u8) {
         self.inner.version_limit(version_limit);
     }
 
     #[wasm_bindgen(js_name = dedupChunk)]
-    pub fn dedup_chunk(mut self, dedup_chunk: bool) {
+    pub fn dedup_chunk(&mut self, dedup_chunk: bool) {
         self.inner.dedup_chunk(dedup_chunk);
     }
 
