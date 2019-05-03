@@ -11,8 +11,8 @@ use trans::{TxHandle, TxMgr};
 
 /// A reader for a specific vesion of file content.
 ///
-/// This reader is returned by the [`version_reader`] function, and implements
-/// [`Read`] trait.
+/// This reader can be obtained by [`version_reader`] function, and it
+/// implements [`Read`] trait.
 ///
 /// [`version_reader`]: struct.File.html#method.version_reader
 /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
@@ -46,7 +46,7 @@ impl Seek for VersionReader {
     }
 }
 
-/// A reference to an open file in the repository.
+/// A reference to an opened file in the repository.
 ///
 /// An instance of a `File` can be read and/or written depending on what options
 /// it was opened with. Files also implement [`Seek`] to alter the logical
@@ -108,8 +108,11 @@ impl Seek for VersionReader {
 /// immutable once it is created.
 ///
 /// By default, the maximum number of versions of a `File` is `10`, which is
-/// configurable by [`version_limit`]. After reaching this limit, the oldest
-/// [`Version`] will be automatically deleted after adding a new one.
+/// configurable by [`version_limit`] on both `Repo` and `File` level. File
+/// level option takes precedence.
+///
+/// After reaching this limit, the oldest [`Version`] will be automatically
+/// deleted after adding a new one.
 ///
 /// Version number starts from `1` and continuously increases by 1.
 ///
@@ -118,13 +121,14 @@ impl Seek for VersionReader {
 /// The file content is cached internally for deduplication and will be handled
 /// automatically, thus calling [`flush`] is **not** recommendated.
 ///
-/// `File` is multi-versioned, each time updating the content will create a new
+/// `File` is multi-versioned, each time updating its content will create a new
 /// permanent [`Version`]. There are two ways of writing data to a file:
 ///
 /// - **Multi-part Write**
 ///
-///   This is done by updating `File` using [`Write`] trait. After all writing
-///   operations, [`finish`] must be called to create a new version.
+///   This is done by updating `File` using [`Write`] trait multiple times.
+///   After all writing operations, [`finish`] must be called to create a new
+///   version.
 ///
 ///   ## Examples
 ///
@@ -206,6 +210,7 @@ impl Seek for VersionReader {
 /// # fn foo() -> Result<()> {
 /// # init_env();
 /// # let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
+/// // create a file and write data to it
 /// let mut file = OpenOptions::new().create(true).open(&mut repo, "/foo.txt")?;
 /// file.write_once(&[1, 2, 3, 4, 5, 6])?;
 ///
@@ -238,6 +243,7 @@ impl Seek for VersionReader {
 /// # fn foo() -> Result<()> {
 /// # init_env();
 /// # let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
+/// // create a file and write 2 versions
 /// let mut file = OpenOptions::new().create(true).open(&mut repo, "/foo.txt")?;
 /// file.write_once(b"foo")?;
 /// file.write_once(b"bar")?;
@@ -245,13 +251,13 @@ impl Seek for VersionReader {
 /// // get latest version number
 /// let curr_ver = file.curr_version()?;
 ///
-/// // create a version reader and read its content
+/// // create a version reader and read latest version of content
 /// let mut rdr = file.version_reader(curr_ver)?;
 /// let mut content = String::new();
 /// rdr.read_to_string(&mut content)?;
 /// assert_eq!(content, "foobar");
 ///
-/// // create another version reader and read its content
+/// // create another version reader and read previous version of content
 /// let mut rdr = file.version_reader(curr_ver - 1)?;
 /// let mut content = String::new();
 /// rdr.read_to_string(&mut content)?;
@@ -310,7 +316,7 @@ impl File {
         Ok(())
     }
 
-    /// Queries metadata about the underlying file.
+    /// Queries metadata about the file.
     pub fn metadata(&self) -> Result<Metadata> {
         self.check_closed()?;
         let fnode = self.handle.fnode.read().unwrap();
@@ -337,10 +343,10 @@ impl File {
         fnode.curr_len()
     }
 
-    /// Return reader of specified version.
+    /// Get a reader of the specified version.
     ///
     /// The returned reader implements [`Read`] trait. To get the version
-    /// number, firstly call [`history`] to get the list of all versions and
+    /// number, first call [`history`] to get the list of all versions and
     /// then choose the version number from it.
     ///
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
@@ -416,7 +422,7 @@ impl File {
         Ok(())
     }
 
-    /// Complete multi-part write to create a new version.
+    /// Complete multi-part write to file and create a new version.
     ///
     /// # Errors
     ///
@@ -452,7 +458,7 @@ impl File {
         Ok(())
     }
 
-    /// Single-part write to create a new version.
+    /// Single-part write to file and create a new version.
     ///
     /// This function provides a convenient way of combining [`Write`] and
     /// [`finish`].

@@ -116,7 +116,7 @@ impl RepoOpener {
     /// Sets the option to always create a new repository.
     ///
     /// This option indicates whether a new repository will be created. No
-    /// repository is allowed to exist at the target location.
+    /// repository is allowed to exist at the target path.
     pub fn create_new(&mut self, create_new: bool) -> &mut Self {
         self.create_new = create_new;
         if create_new {
@@ -136,7 +136,7 @@ impl RepoOpener {
 
     /// Sets the default maximum number of file version.
     ///
-    /// The `version_limit` must be within [1, 255], 10 is the default. This
+    /// The `version_limit` must be within [1, 255], default is 10. This
     /// setting is a repository-wise setting, indivisual file can overwrite it
     /// by setting [`version_limit`] in [`OpenOptions`].
     ///
@@ -220,11 +220,11 @@ impl RepoOpener {
     ///
     ///   This storage must be enabled by Cargo feature `storage-redis`.
     ///
-    /// After a repository is opened, all of the other functions provided by
+    /// After a repository is opened, all of the other methods provided by
     /// ZboxFS will be thread-safe.
     ///
     /// Your application should destroy the password as soon as possible after
-    /// calling this function.
+    /// calling this method.
     ///
     /// # Errors
     ///
@@ -443,7 +443,7 @@ impl RepoInfo {
     /// Returns repository version as string.
     ///
     /// This is the string representation of the repository version, for
-    /// example, `1.0.2`.
+    /// example, `0.6.0`.
     #[inline]
     pub fn version(&self) -> String {
         self.ver.to_string()
@@ -722,9 +722,10 @@ impl Repo {
     /// This method will try to repair super block using backup. One scenario
     /// is when [reset_password](struct.Repo.html#method.reset_password) failed
     /// due to IO error, super block might be damaged. Using this method can
-    /// restore the damaged super block from backup.
+    /// restore the damaged super block from backup. If super block is all
+    /// good, this method is no-op.
     ///
-    /// If super block is all good, this method is no-op.
+    /// This method must be called when repo is closed.
     #[inline]
     pub fn repair_super_block(uri: &str, pwd: &str) -> Result<()> {
         Fs::repair_super_block(uri, pwd)
@@ -771,11 +772,13 @@ impl Repo {
 
     /// Create a file in read-write mode.
     ///
-    /// This function will create a file if it does not exist, and will
+    /// This method will create a file if it does not exist, and will
     /// truncate it if it does.
     ///
     /// See the [`OpenOptions::open`](struct.OpenOptions.html#method.open)
-    /// function for more details.
+    /// method for more details.
+    ///
+    /// `path` must be an absolute path.
     #[inline]
     pub fn create_file<P: AsRef<Path>>(&mut self, path: P) -> Result<File> {
         OpenOptions::new()
@@ -788,10 +791,10 @@ impl Repo {
     ///
     /// `path` must be an absolute path.
     ///
-    /// See the [`OpenOptions::open`] function for more details.
+    /// See the [`OpenOptions::open`] method for more details.
     ///
     /// # Errors
-    /// This function will return an error if path does not already exist.
+    /// This method will return an error if path does not already exist.
     /// Other errors may also be returned according to [`OpenOptions::open`].
     ///
     /// # Examples
@@ -842,8 +845,7 @@ impl Repo {
         self.fs.read_dir(path.as_ref())
     }
 
-    /// Given a path, query the repository to get information about a file,
-    /// directory, etc.
+    /// Get the metadata about a file or directory at specified path.
     ///
     /// `path` must be an absolute path.
     #[inline]
@@ -851,7 +853,7 @@ impl Repo {
         self.fs.metadata(path.as_ref())
     }
 
-    /// Return a vector of history versions of a regular file.
+    /// Return a vector of history versions of a regular file at specified path.
     ///
     /// `path` must be an absolute path to a regular file.
     #[inline]
@@ -861,10 +863,9 @@ impl Repo {
 
     /// Copies the content of one file to another.
     ///
-    /// This function will overwrite the content of `to`.
+    /// This mthod will overwrite the content of `to`.
     ///
-    /// If `from` and `to` both point to the same file, then this function will
-    /// do nothing.
+    /// If `from` and `to` both point to the same file, this method is no-op.
     ///
     /// `from` and `to` must be absolute paths to regular files.
     #[inline]
