@@ -76,14 +76,7 @@ impl LocalCache {
 
         let backend: Box<CacheBackend> = match cache_type {
             CacheType::Mem => {
-                #[cfg(feature = "storage-zbox-wasm")]
-                {
-                    return Err(Error::InvalidUri);
-                }
-                #[cfg(not(feature = "storage-zbox-wasm"))]
-                {
-                    Box::new(super::mem::MemBackend::new())
-                }
+                Box::new(super::mem::MemBackend::new())
             }
             CacheType::File => {
                 #[cfg(feature = "storage-zbox-wasm")]

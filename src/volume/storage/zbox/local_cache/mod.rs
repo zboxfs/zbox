@@ -5,7 +5,6 @@ mod browser;
 #[cfg(not(feature = "storage-zbox-wasm"))]
 mod file;
 mod local_cache;
-#[cfg(not(feature = "storage-zbox-wasm"))]
 mod mem;
 
 pub use self::local_cache::{LocalCache, LocalCacheRef};
