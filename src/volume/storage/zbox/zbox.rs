@@ -30,11 +30,19 @@ fn parse_uri(mut uri: &str) -> Result<(&str, &str, CacheType, usize, PathBuf)> {
     let mut idx = uri.find('@').ok_or(Error::InvalidUri)?;
     let access_key = &uri[..idx];
     uri = &uri[idx + 1..];
+    if uri.is_empty() {
+        return Err(Error::InvalidUri);
+    }
 
     // parse repo id, required
-    idx = uri.find('?').ok_or(Error::InvalidUri)?;
-    let repo_id = &uri[..idx];
-    uri = &uri[idx + 1..];
+    let repo_id;
+    if let Some(idx) = uri.find('?') {
+        repo_id = &uri[..idx];
+        uri = &uri[idx + 1..];
+    } else {
+        repo_id = &uri[..uri.len()];
+        uri = &uri[repo_id.len()..];
+    };
 
     // set default value for parameters
     let mut cache_type: Option<CacheType> = Some(CacheType::Mem);
@@ -42,32 +50,34 @@ fn parse_uri(mut uri: &str) -> Result<(&str, &str, CacheType, usize, PathBuf)> {
     let mut base: Option<PathBuf> = None;
 
     // parse parameters
-    for param in uri.split('&') {
-        idx = param.find('=').ok_or(Error::InvalidUri)?;
-        let key = &param[..idx];
-        let value = &param[idx + 1..];
+    if !uri.is_empty() {
+        for param in uri.split('&') {
+            idx = param.find('=').ok_or(Error::InvalidUri)?;
+            let key = &param[..idx];
+            let value = &param[idx + 1..];
 
-        match key {
-            "cache_type" => {
-                let ctype = value.parse::<CacheType>()?;
-                cache_type = Some(ctype);
-            }
-            "cache_size" => {
-                let value = value.to_lowercase();
-                let idx = value.find("mb").ok_or(Error::InvalidUri)?;
-                let value = &value[..idx];
-                let size =
-                    value.parse::<usize>().map_err(|_| Error::InvalidUri)?;
-                if size < 1 {
-                    // cache size must >= 1MB
-                    return Err(Error::InvalidUri);
+            match key {
+                "cache_type" => {
+                    let ctype = value.parse::<CacheType>()?;
+                    cache_type = Some(ctype);
                 }
-                cache_size = Some(size);
+                "cache_size" => {
+                    let value = value.to_lowercase();
+                    let idx = value.find("mb").ok_or(Error::InvalidUri)?;
+                    let value = &value[..idx];
+                    let size =
+                        value.parse::<usize>().map_err(|_| Error::InvalidUri)?;
+                    if size < 1 {
+                        // cache size must >= 1MB
+                        return Err(Error::InvalidUri);
+                    }
+                    cache_size = Some(size);
+                }
+                "base" => {
+                    base = Some(PathBuf::from(value));
+                }
+                _ => return Err(Error::InvalidUri),
             }
-            "base" => {
-                base = Some(PathBuf::from(value));
-            }
-            _ => return Err(Error::InvalidUri),
         }
     }
 
@@ -279,6 +289,19 @@ mod tests {
     use super::*;
     use base::init_env;
     use volume::BLK_SIZE;
+
+    #[test]
+    fn zbox_parse_uri() {
+        assert_eq!(parse_uri("").unwrap_err(), Error::InvalidUri);
+        assert_eq!(parse_uri("abcd").unwrap_err(), Error::InvalidUri);
+        assert_eq!(parse_uri("中文").unwrap_err(), Error::InvalidUri);
+        assert_eq!(parse_uri("//").unwrap_err(), Error::InvalidUri);
+        assert_eq!(parse_uri("zbox://").unwrap_err(), Error::InvalidUri);
+        assert_eq!(parse_uri("zbox://foo").unwrap_err(), Error::InvalidUri);
+        assert_eq!(parse_uri("zbox://foo@").unwrap_err(), Error::InvalidUri);
+        assert!(parse_uri("zbox://foo@bar").is_ok());
+        assert!(parse_uri("zbox://foo@bar?").is_ok());
+    }
 
     fn do_test(uri: &str) {
         init_env();

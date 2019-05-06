@@ -2,7 +2,7 @@
 name = "zbox"
 version = "0.7.1"
 authors = ["Bo Lu"]
-description = "Zbox is a zero-details, privacy-focused in-app file system."
+description = "ZboxFS is a zero-details, privacy-focused in-app file system."
 documentation = "https://docs.rs/zbox"
 homepage = "https://github.com/zboxfs/zbox"
 repository = "https://github.com/zboxfs/zbox"
