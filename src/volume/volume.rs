@@ -78,10 +78,8 @@ impl Volume {
         super_blk.body.ctime = self.info.ctime;
         super_blk.body.payload = payload.to_vec();
 
-        // save super block twice to save its both arms
-        super_blk
-            .save(pwd, &mut storage)
-            .and(super_blk.save(pwd, &mut storage))?;
+        // save super block
+        super_blk.save(pwd, &mut storage)?;
 
         debug!("volume initialised");
 
