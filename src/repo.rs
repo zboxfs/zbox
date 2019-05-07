@@ -97,8 +97,8 @@ impl RepoOpener {
     /// Sets the crypto cipher encrypts the repository.
     ///
     /// This option is only used for creating a repository. `Cipher::Aes` is
-    /// the default if hardware supports AES-NI instructions, otherwise it will
-    /// fall back to `Cipher::Xchacha`.
+    /// the default if CPU supports AES-NI instructions, otherwise it will fall
+    /// back to `Cipher::Xchacha`.
     pub fn cipher(&mut self, cipher: Cipher) -> &mut Self {
         self.cfg.cipher = cipher;
         self

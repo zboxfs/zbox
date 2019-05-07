@@ -451,7 +451,23 @@ impl HashState {
 /// It represents a maximum amount of computations to perform. Higher level
 /// will require more CPU cycles to compute.
 ///
-/// See <https://download.libsodium.org/doc/password_hashing/> for more details.
+/// It is used with [MemLimit](enum.MemLimit.html).
+///
+/// For interactive, online operations, `OpsLimit::Interactive` and
+/// `MemLimit::Interactive` provide base line for these two parameters. This
+/// requires 64 MB of dedicated RAM. Higher values may improve security.
+///
+/// Alternatively, `OpsLimit::Moderate` and `MemLimit::Moderate` can be used.
+/// This requires 256 MB of dedicated RAM, and takes about 0.7 seconds on a
+/// 2.8 Ghz Core i7 CPU.
+///
+/// For highly sensitive data and non-interactive operations,
+/// `OpsLimit::Sensitive` and `MemLimit::Sensitive` can be used. With these
+/// parameters, deriving a key takes about 3.5 seconds on a 2.8 Ghz Core i7 CPU
+/// and requires 1024 MB of dedicated RAM.
+///
+/// See <https://download.libsodium.org/doc/password_hashing/the_argon2i_function>
+/// for more details.
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize, Serialize)]
 pub enum OpsLimit {
     Interactive = 2,
@@ -492,7 +508,23 @@ impl From<i32> for OpsLimit {
 /// It represents a maximum amount of memory required to perform password
 /// hashing.
 ///
-/// See <https://download.libsodium.org/doc/password_hashing/> for more details.
+/// It is used with [OpsLimit](enum.OpsLimit.html).
+///
+/// For interactive, online operations, `OpsLimit::Interactive` and
+/// `MemLimit::Interactive` provide base line for these two parameters. This
+/// requires 64 MB of dedicated RAM. Higher values may improve security.
+///
+/// Alternatively, `OpsLimit::Moderate` and `MemLimit::Moderate` can be used.
+/// This requires 256 MB of dedicated RAM, and takes about 0.7 seconds on a
+/// 2.8 Ghz Core i7 CPU.
+///
+/// For highly sensitive data and non-interactive operations,
+/// `OpsLimit::Sensitive` and `MemLimit::Sensitive` can be used. With these
+/// parameters, deriving a key takes about 3.5 seconds on a 2.8 Ghz Core i7 CPU
+/// and requires 1024 MB of dedicated RAM.
+///
+/// See <https://download.libsodium.org/doc/password_hashing/the_argon2i_function>
+/// for more details.
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize, Serialize)]
 pub enum MemLimit {
     /// 64 MB
@@ -614,6 +646,9 @@ impl Default for Key {
 }
 
 /// Crypto cipher primitivies.
+///
+/// See <https://download.libsodium.org/doc/secret-key_cryptography/aead> for
+/// more details.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 pub enum Cipher {
     /// XChaCha20-Poly1305
