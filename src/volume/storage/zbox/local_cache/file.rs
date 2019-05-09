@@ -70,7 +70,6 @@ impl CacheBackend for FileBackend {
         Ok(())
     }
 
-    #[inline]
     fn clear(&mut self) -> Result<()> {
         if self.base.is_dir() {
             for entry in vio::read_dir(&self.base)? {

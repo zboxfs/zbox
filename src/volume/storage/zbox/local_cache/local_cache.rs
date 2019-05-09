@@ -85,7 +85,8 @@ impl LocalCache {
                 }
                 #[cfg(not(feature = "storage-zbox-wasm"))]
                 {
-                    Box::new(super::file::FileBackend::new(base))
+                    let base = base.join(repo_id);
+                    Box::new(super::file::FileBackend::new(&base))
                 }
             }
             CacheType::Browser => {
