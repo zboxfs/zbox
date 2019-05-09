@@ -6,7 +6,7 @@
 //! the authorised application.
 //!
 //! The most core parts of this module are [`Repo`] and [`File`], which provides
-//! most file system operations and file I/O.
+//! most API for file system operations and file data I/O.
 //!
 //! - [`Repo`] provides similar file system manipulation methods to [`std::fs`]
 //! - [`File`] provides similar file I/O methods to [`std::fs::File`]
