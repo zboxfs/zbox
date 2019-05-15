@@ -41,11 +41,16 @@ cfg_if! {
                 android_logger::init_once(
                     Filter::default()
                         .with_min_level(Level::Trace)
+                        .with_allowed_module_path("zbox::base")
                         .with_allowed_module_path("zbox::fs::fs")
                         .with_allowed_module_path("zbox::trans::txmgr"),
                     Some("zboxfs"),
                 );
                 crypto::Crypto::init().expect("Initialise crypto failed");
+                debug!(
+                    "ZboxFS v{} - privacy-focused in-app file system",
+                    Version::current_lib_version()
+                );
             });
         }
     } else if #[cfg(target_arch = "wasm32")] {
@@ -53,6 +58,10 @@ cfg_if! {
             INIT.call_once(|| {
                 wasm_logger::init(wasm_logger::Config::new(Level::Trace));
                 crypto::Crypto::init().expect("Initialise crypto failed");
+                debug!(
+                    "ZboxFS v{} - privacy-focused in-app file system",
+                    Version::current_lib_version()
+                );
             });
         }
         pub fn init_env_no_logging() {
@@ -70,6 +79,10 @@ cfg_if! {
             INIT.call_once(|| {
                 env_logger::try_init().ok();
                 crypto::Crypto::init().expect("Initialise crypto failed");
+                debug!(
+                    "ZboxFS v{} - privacy-focused in-app file system",
+                    Version::current_lib_version()
+                );
             });
         }
     }
