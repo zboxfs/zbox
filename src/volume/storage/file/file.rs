@@ -1,6 +1,6 @@
+use std::fmt::{self, Debug};
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
-use std::fmt::{self, Debug};
 
 use super::file_armor::FileArmor;
 use super::sector::SectorMgr;

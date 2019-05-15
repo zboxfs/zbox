@@ -65,8 +65,9 @@ fn parse_uri(mut uri: &str) -> Result<(&str, &str, CacheType, usize, PathBuf)> {
                     let value = value.to_lowercase();
                     let idx = value.find("mb").ok_or(Error::InvalidUri)?;
                     let value = &value[..idx];
-                    let size =
-                        value.parse::<usize>().map_err(|_| Error::InvalidUri)?;
+                    let size = value
+                        .parse::<usize>()
+                        .map_err(|_| Error::InvalidUri)?;
                     if size < 1 {
                         // cache size must >= 1MB
                         return Err(Error::InvalidUri);

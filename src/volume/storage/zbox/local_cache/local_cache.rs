@@ -75,9 +75,7 @@ impl LocalCache {
         meta.capacity = capacity;
 
         let backend: Box<CacheBackend> = match cache_type {
-            CacheType::Mem => {
-                Box::new(super::mem::MemBackend::new())
-            }
+            CacheType::Mem => Box::new(super::mem::MemBackend::new()),
             CacheType::File => {
                 #[cfg(feature = "storage-zbox-wasm")]
                 {

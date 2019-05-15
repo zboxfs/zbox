@@ -200,7 +200,10 @@ pub struct CRepoInfo {
 }
 
 #[no_mangle]
-pub extern "C" fn zbox_get_repo_info(info: *mut CRepoInfo, repo: *const Repo) -> c_int {
+pub extern "C" fn zbox_get_repo_info(
+    info: *mut CRepoInfo,
+    repo: *const Repo,
+) -> c_int {
     let repo_info = unsafe {
         match (*repo).info() {
             Ok(info) => info,
@@ -260,7 +263,7 @@ pub extern "C" fn zbox_repo_reset_password(
 #[no_mangle]
 pub extern "C" fn zbox_repo_repair_super_block(
     uri: *const c_char,
-    pwd: *const c_char
+    pwd: *const c_char,
 ) -> c_int {
     unsafe {
         let uri = CStr::from_ptr(uri).to_str().unwrap();
