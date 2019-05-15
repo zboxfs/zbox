@@ -725,7 +725,8 @@ impl Repo {
     /// restore the damaged super block from backup. If super block is all
     /// good, this method is no-op.
     ///
-    /// This method must be called when repo is closed.
+    /// This method is not useful for memory-based storage and must be called
+    /// when repo is closed.
     #[inline]
     pub fn repair_super_block(uri: &str, pwd: &str) -> Result<()> {
         Fs::repair_super_block(uri, pwd)

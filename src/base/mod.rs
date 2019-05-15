@@ -48,7 +48,7 @@ cfg_if! {
                 );
                 crypto::Crypto::init().expect("Initialise crypto failed");
                 debug!(
-                    "ZboxFS v{} - privacy-focused in-app file system",
+                    "ZboxFS v{} - Zero-details, privacy-focused in-app file system",
                     Version::current_lib_version()
                 );
             });
@@ -59,7 +59,7 @@ cfg_if! {
                 wasm_logger::init(wasm_logger::Config::new(Level::Trace));
                 crypto::Crypto::init().expect("Initialise crypto failed");
                 debug!(
-                    "ZboxFS v{} - privacy-focused in-app file system",
+                    "ZboxFS v{} - Zero-details, privacy-focused in-app file system",
                     Version::current_lib_version()
                 );
             });
@@ -80,7 +80,7 @@ cfg_if! {
                 env_logger::try_init().ok();
                 crypto::Crypto::init().expect("Initialise crypto failed");
                 debug!(
-                    "ZboxFS v{} - privacy-focused in-app file system",
+                    "ZboxFS v{} - Zero-details, privacy-focused in-app file system",
                     Version::current_lib_version()
                 );
             });
