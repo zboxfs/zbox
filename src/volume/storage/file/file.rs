@@ -1,5 +1,6 @@
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
+use std::fmt::{self, Debug};
 
 use super::file_armor::FileArmor;
 use super::sector::SectorMgr;
@@ -13,7 +14,6 @@ use volume::storage::index_mgr::{IndexMgr, Lsmt, MemTab, Tab};
 use volume::storage::Storable;
 
 /// File Storage
-#[derive(Debug)]
 pub struct FileStorage {
     base: PathBuf,
     wal_base: PathBuf,
@@ -202,6 +202,14 @@ impl Storable for FileStorage {
     #[inline]
     fn flush(&mut self) -> Result<()> {
         self.idx_mgr.flush()
+    }
+}
+
+impl Debug for FileStorage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("FileStorage")
+            .field("base", &self.base)
+            .finish()
     }
 }
 
