@@ -386,21 +386,21 @@ pub extern "C" fn zbox_repo_create_dir_all(
 
 #[repr(C)]
 pub struct CMetadata {
-    ftype: i32,
-    len: size_t,
+    file_type: i32,
+    content_len: size_t,
     curr_version: size_t,
-    ctime: time_t,
-    mtime: time_t,
+    created_at: time_t,
+    modified_at: time_t,
 }
 
 impl From<Metadata> for CMetadata {
     fn from(n: Metadata) -> Self {
         CMetadata {
-            ftype: n.file_type().into(),
-            len: n.content_len(),
+            file_type: n.file_type().into(),
+            content_len: n.content_len(),
             curr_version: n.curr_version(),
-            ctime: to_time_t(n.created_at()),
-            mtime: to_time_t(n.modified_at()),
+            created_at: to_time_t(n.created_at()),
+            modified_at: to_time_t(n.modified_at()),
         }
     }
 }
@@ -494,7 +494,7 @@ pub extern "C" fn zbox_repo_metadata(
 #[repr(C)]
 pub struct CVersion {
     num: size_t,
-    len: size_t,
+    content_len: size_t,
     created_at: time_t,
 }
 
@@ -512,7 +512,7 @@ impl From<Vec<Version>> for VersionList {
             .map(|ver| -> CVersion {
                 CVersion {
                     num: ver.num(),
-                    len: ver.content_len(),
+                    content_len: ver.content_len(),
                     created_at: to_time_t(ver.created_at()),
                 }
             })
