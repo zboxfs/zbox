@@ -62,8 +62,8 @@ fn download_and_build_lz4() {
     use tar::Archive;
 
     static LZ4_ZIP: &'static str =
-        "https://github.com/lz4/lz4/archive/v1.9.0.tar.gz";
-    static LZ4_NAME: &'static str = "lz4-1.9.0";
+        "https://github.com/lz4/lz4/archive/v1.9.1.tar.gz";
+    static LZ4_NAME: &'static str = "lz4-1.9.1";
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let lz4_dir = out_dir.join(LZ4_NAME);
     let lz4_lib_dir = lz4_dir.join("lib");
@@ -104,8 +104,8 @@ fn download_and_build_lz4() {
     use tar::Archive;
 
     static LZ4_ZIP: &'static str =
-        "https://github.com/lz4/lz4/archive/v1.9.0.tar.gz";
-    static LZ4_NAME: &'static str = "lz4-1.9.0";
+        "https://github.com/lz4/lz4/archive/v1.9.1.tar.gz";
+    static LZ4_NAME: &'static str = "lz4-1.9.1";
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let lz4_dir = out_dir.join(LZ4_NAME);
     let lz4_lib_file = lz4_dir.join("liblz4.lib");
@@ -160,8 +160,8 @@ fn download_and_build_lz4() {
     use std::path::PathBuf;
 
     static LZ4_ZIP: &'static str =
-        "https://github.com/lz4/lz4/releases/download/v1.9.0/lz4_v1_9_0_win64.zip";
-    static LZ4_NAME: &'static str = "lz4-1.9.0";
+        "https://github.com/lz4/lz4/releases/download/v1.9.1/lz4_v1_9_1_win64.zip";
+    static LZ4_NAME: &'static str = "lz4-1.9.1";
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let lz4_lib_dir = out_dir.join(LZ4_NAME);
     let lz4_lib_file = lz4_lib_dir.join("liblz4_static.lib");
