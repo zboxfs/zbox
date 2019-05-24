@@ -105,7 +105,10 @@ tempdir = "0.3.7"
 rand = "0.6.5"
 rand_xorshift = "0.1.1"
 
-[build-dependencies]
+[target.'cfg(not(target_os = "windows"))'.build-dependencies]
+pkg-config = "0.3.14"
+
+[target.'cfg(target_os = "windows")'.build-dependencies]
 libflate = "0.1"
 pkg-config = "0.3.14"
 reqwest = "0.9"

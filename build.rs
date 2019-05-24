@@ -1,9 +1,25 @@
-extern crate libflate;
 extern crate pkg_config;
+
+#[cfg(target_os = "windows")]
+extern crate libflate;
+#[cfg(target_os = "windows")]
 extern crate reqwest;
+#[cfg(target_os = "windows")]
 extern crate tar;
 
 use std::env;
+use std::path::PathBuf;
+use std::process::Command;
+
+const LZ4_NAME: &'static str = "lz4-1.9.1";
+const LZ4_URL: &'static str =
+    "https://github.com/lz4/lz4/archive/v1.9.1.tar.gz";
+
+#[cfg(feature = "libsodium-bundled")]
+const LIBSODIUM_NAME: &'static str = "libsodium-1.0.17";
+#[cfg(feature = "libsodium-bundled")]
+const LIBSODIUM_URL: &'static str =
+    "https://download.libsodium.org/libsodium/releases/libsodium-1.0.17.tar.gz";
 
 fn main() {
     #[cfg(feature = "libsodium-bundled")]
@@ -55,36 +71,37 @@ fn main() {
 // for non-windows target.
 #[cfg(not(target_os = "windows"))]
 fn download_and_build_lz4() {
-    use libflate::non_blocking::gzip::Decoder;
-    use std::io::{stderr, stdout, Write};
-    use std::path::PathBuf;
-    use std::process::Command;
-    use tar::Archive;
-
-    static LZ4_ZIP: &'static str =
-        "https://github.com/lz4/lz4/archive/v1.9.1.tar.gz";
-    static LZ4_NAME: &'static str = "lz4-1.9.1";
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let lz4_file = format!("{}.tar.gz", LZ4_NAME);
     let lz4_dir = out_dir.join(LZ4_NAME);
     let lz4_lib_dir = lz4_dir.join("lib");
     let lz4_lib_file = lz4_lib_dir.join("liblz4.a");
 
     if !lz4_dir.exists() {
-        let response = reqwest::get(LZ4_ZIP).unwrap();
-        let decoder = Decoder::new(response);
-        let mut ar = Archive::new(decoder);
-        ar.unpack(&out_dir).unwrap();
+        let output = Command::new("curl")
+            .current_dir(&out_dir)
+            .args(&[LZ4_URL, "-sSfL", "-o", &lz4_file])
+            .output()
+            .expect("failed to download lz4");
+        assert!(output.status.success());
+
+        let output = Command::new("tar")
+            .current_dir(&out_dir)
+            .args(&["zxf", &lz4_file])
+            .output()
+            .expect("failed to unpack lz4");
+        assert!(output.status.success());
     }
 
     if !lz4_lib_file.exists() {
         let output = Command::new("make")
             .current_dir(&lz4_dir)
             .env("CFLAGS", "-fPIC -O3")
+            .arg("BUILD_SHARED=no")
             .arg("lib-release")
             .output()
             .expect("failed to execute make for lz4 compilation");
-        stdout().write_all(&output.stdout).unwrap();
-        stderr().write_all(&output.stderr).unwrap();
+        assert!(output.status.success());
     }
 
     assert!(&lz4_lib_file.exists(), "lz4 lib was not created");
@@ -99,19 +116,14 @@ fn download_and_build_lz4() {
 fn download_and_build_lz4() {
     use libflate::non_blocking::gzip::Decoder;
     use std::io::{stderr, stdout, Write};
-    use std::path::PathBuf;
-    use std::process::Command;
     use tar::Archive;
 
-    static LZ4_ZIP: &'static str =
-        "https://github.com/lz4/lz4/archive/v1.9.1.tar.gz";
-    static LZ4_NAME: &'static str = "lz4-1.9.1";
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let lz4_dir = out_dir.join(LZ4_NAME);
     let lz4_lib_file = lz4_dir.join("liblz4.lib");
 
     if !lz4_dir.exists() {
-        let response = reqwest::get(LZ4_ZIP).unwrap();
+        let response = reqwest::get(LZ4_URL).unwrap();
         let decoder = Decoder::new(response);
         let mut ar = Archive::new(decoder);
         ar.unpack(&out_dir).unwrap();
@@ -159,9 +171,6 @@ fn download_and_build_lz4() {
 fn download_and_build_lz4() {
     use std::path::PathBuf;
 
-    static LZ4_ZIP: &'static str =
-        "https://github.com/lz4/lz4/releases/download/v1.9.1/lz4_v1_9_1_win64.zip";
-    static LZ4_NAME: &'static str = "lz4-1.9.1";
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let lz4_lib_dir = out_dir.join(LZ4_NAME);
     let lz4_lib_file = lz4_lib_dir.join("liblz4_static.lib");
@@ -172,7 +181,7 @@ fn download_and_build_lz4() {
 
     if !lz4_lib_file.exists() {
         let mut tmpfile = tempfile::tempfile().unwrap();
-        reqwest::get(LZ4_ZIP)
+        reqwest::get(LZ4_URL)
             .unwrap()
             .copy_to(&mut tmpfile)
             .unwrap();
@@ -203,39 +212,30 @@ fn download_and_build_lz4() {
 // $ sudo make install
 #[cfg(all(feature = "libsodium-bundled", not(target_os = "windows")))]
 fn download_and_install_libsodium() {
-    use libflate::non_blocking::gzip::Decoder;
-    use std::fs::File;
-    use std::io::{stderr, stdout, Write};
-    use std::path::PathBuf;
-    use std::process::Command;
-    use tar::Archive;
-
-    static LIBSODIUM_URL: &'static str =
-        "https://download.libsodium.org/libsodium/releases";
-    static LIBSODIUM_NAME: &'static str = "libsodium-1.0.17";
-
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let install_dir = out_dir.join("libsodium_install");
-    let source_dir = install_dir.join(LIBSODIUM_NAME);
+    let source_dir = out_dir.join(LIBSODIUM_NAME);
     let prefix_dir = out_dir.join("libsodium");
     let sodium_lib_dir = prefix_dir.join("lib");
+    let src_file_name = format!("{}.tar.gz", LIBSODIUM_NAME);
 
-    if !install_dir.exists() {
-        let tmpdir = tempfile::tempdir().unwrap();
-
+    if !source_dir.exists() {
         // download source code file
-        let src_file_name = format!("{}.tar.gz", LIBSODIUM_NAME);
-        let url = format!("{}/{}", LIBSODIUM_URL, src_file_name);
-        let src_file_path = tmpdir.path().join(&src_file_name);
-        let mut file = File::create(&src_file_path).unwrap();
-        reqwest::get(&url).unwrap().copy_to(&mut file).unwrap();
+        let output = Command::new("curl")
+            .current_dir(&out_dir)
+            .args(&[LIBSODIUM_URL, "-sSfL", "-o", &src_file_name])
+            .output()
+            .expect("failed to download libsodium");
+        assert!(output.status.success());
 
         // download signature file
-        let sig_file_name = format!("{}.tar.gz.sig", LIBSODIUM_NAME);
-        let url = format!("{}/{}", LIBSODIUM_URL, sig_file_name);
-        let sig_file_path = tmpdir.path().join(&sig_file_name);
-        let mut file = File::create(sig_file_path).unwrap();
-        reqwest::get(&url).unwrap().copy_to(&mut file).unwrap();
+        let sig_file_name = format!("{}.sig", src_file_name);
+        let sig_url = format!("{}.sig", LIBSODIUM_URL);
+        let output = Command::new("curl")
+            .current_dir(&out_dir)
+            .args(&[&sig_url, "-sSfL", "-o", &sig_file_name])
+            .output()
+            .expect("failed to download libsodium signature file");
+        assert!(output.status.success());
 
         // import libsodium author's public key
         let output = Command::new("gpg")
@@ -243,23 +243,24 @@ fn download_and_install_libsodium() {
             .arg("libsodium.gpg.key")
             .output()
             .expect("failed to import libsodium author's gpg key");
-        stdout().write_all(&output.stdout).unwrap();
-        stderr().write_all(&output.stderr).unwrap();
+        assert!(output.status.success());
 
         // verify signature
         let output = Command::new("gpg")
-            .current_dir(tmpdir.path())
+            .current_dir(&out_dir)
             .arg("--verify")
             .arg(&sig_file_name)
             .output()
             .expect("failed to verify libsodium file");
-        stdout().write_all(&output.stdout).unwrap();
-        stderr().write_all(&output.stderr).unwrap();
+        assert!(output.status.success());
 
         // unpack source code files
-        let decoder = Decoder::new(File::open(&src_file_path).unwrap());
-        let mut ar = Archive::new(decoder);
-        ar.unpack(&install_dir).unwrap();
+        let output = Command::new("tar")
+            .current_dir(&out_dir)
+            .args(&["zxf", &src_file_name])
+            .output()
+            .expect("failed to unpack libsodium");
+        assert!(output.status.success());
     }
 
     if !sodium_lib_dir.exists() {
@@ -269,31 +270,20 @@ fn download_and_install_libsodium() {
             .args(&[std::path::Path::new("--prefix"), &prefix_dir])
             .output()
             .expect("failed to execute configure");
-        stdout().write_all(&output.stdout).unwrap();
-        stderr().write_all(&output.stderr).unwrap();
+        assert!(output.status.success());
 
         let output = Command::new("make")
             .current_dir(&source_dir)
             .output()
             .expect("failed to execute make");
-        stdout().write_all(&output.stdout).unwrap();
-        stderr().write_all(&output.stderr).unwrap();
+        assert!(output.status.success());
 
         let output = Command::new("make")
             .current_dir(&source_dir)
-            .arg("check")
-            .output()
-            .expect("failed to execute make check");
-        stdout().write_all(&output.stdout).unwrap();
-        stderr().write_all(&output.stderr).unwrap();
-
-        let output = std::process::Command::new("make")
-            .current_dir(&source_dir)
             .arg("install")
             .output()
-            .expect("failed to execute sudo make install");
-        stdout().write_all(&output.stdout).unwrap();
-        stderr().write_all(&output.stderr).unwrap();
+            .expect("failed to execute make install");
+        assert!(output.status.success());
     }
 
     assert!(
