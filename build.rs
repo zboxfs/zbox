@@ -77,6 +77,20 @@ fn download_and_build_lz4() {
     let lz4_lib_dir = lz4_dir.join("lib");
     let lz4_lib_file = lz4_lib_dir.join("liblz4.a");
 
+    // check if command tools exist
+    Command::new("curl")
+        .arg("--version")
+        .output()
+        .expect("curl not found");
+    Command::new("tar")
+        .arg("--version")
+        .output()
+        .expect("tar not found");
+    Command::new("make")
+        .arg("--version")
+        .output()
+        .expect("make not found");
+
     if !lz4_dir.exists() {
         let output = Command::new("curl")
             .current_dir(&out_dir)
@@ -217,6 +231,24 @@ fn download_and_install_libsodium() {
     let prefix_dir = out_dir.join("libsodium");
     let sodium_lib_dir = prefix_dir.join("lib");
     let src_file_name = format!("{}.tar.gz", LIBSODIUM_NAME);
+
+    // check if command tools exist
+    Command::new("curl")
+        .arg("--version")
+        .output()
+        .expect("curl not found");
+    Command::new("tar")
+        .arg("--version")
+        .output()
+        .expect("tar not found");
+    Command::new("gpg")
+        .arg("--version")
+        .output()
+        .expect("gpg not found");
+    Command::new("make")
+        .arg("--version")
+        .output()
+        .expect("make not found");
 
     if !source_dir.exists() {
         // download source code file
