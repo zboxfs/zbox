@@ -134,7 +134,7 @@ fn download_and_build_lz4() {
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let lz4_dir = out_dir.join(LZ4_NAME);
-    let lz4_lib_file = lz4_dir.join("liblz4.lib");
+    let lz4_lib_file = out_dir.join("liblz4.lib");
 
     if !lz4_dir.exists() {
         let response = reqwest::get(LZ4_URL).unwrap();
@@ -144,33 +144,12 @@ fn download_and_build_lz4() {
     }
 
     if !lz4_lib_file.exists() {
-        let output = Command::new("cl")
-            .current_dir(&lz4_dir)
-            .args(&[
-                "/c",
-                "lib/lz4.c",
-                "lib/lz4hc.c",
-                "lib/lz4frame.c",
-                "lib/xxhash.c",
-            ])
-            .output()
-            .expect("failed to execute cl for lz4 compilation");
-        stdout().write_all(&output.stdout).unwrap();
-        stderr().write_all(&output.stderr).unwrap();
+        let files =
+            ["lib/lz4.c", "lib/lz4hc.c", "lib/lz4frame.c", "lib/xxhash.c"]
+                .into_iter()
+                .map(|f| lz4_dir.join(f));
 
-        let output = Command::new("lib")
-            .current_dir(&lz4_dir)
-            .args(&[
-                "lz4.obj",
-                "lz4hc.obj",
-                "lz4frame.obj",
-                "xxhash.obj",
-                "/OUT:liblz4.lib",
-            ])
-            .output()
-            .expect("failed to execute lib for lz4 linking");
-        stdout().write_all(&output.stdout).unwrap();
-        stderr().write_all(&output.stderr).unwrap();
+        cc::Build::new().files(files).compile("liblz4");
     }
 
     assert!(&lz4_lib_file.exists(), "lz4 lib was not created");
@@ -359,11 +338,11 @@ fn download_and_install_libsodium() {
         let mut zip = zip::ZipArchive::new(tmpfile).unwrap();
         #[cfg(target_arch = "x86_64")]
         let mut lib = zip
-            .by_name("x64/Release/v142/static/libsodium.lib")
+            .by_name("x64/Release/v141/static/libsodium.lib")
             .unwrap();
         #[cfg(target_arch = "x86")]
         let mut lib = zip
-            .by_name("Win32/Release/v142/static/libsodium.lib")
+            .by_name("Win32/Release/v141/static/libsodium.lib")
             .unwrap();
         #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
         compile_error!("Bundled libsodium is only supported on x86 or x86_64 target architecture.");
