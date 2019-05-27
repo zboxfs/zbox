@@ -144,12 +144,10 @@ fn download_and_build_lz4() {
     }
 
     if !lz4_lib_file.exists() {
-        let files = [
-            "lib/lz4.c",
-            "lib/lz4hc.c",
-            "lib/lz4frame.c",
-            "lib/xxhash.c",
-        ].into_iter().map(|f| lz4_dir.join(f));
+        let files =
+            ["lib/lz4.c", "lib/lz4hc.c", "lib/lz4frame.c", "lib/xxhash.c"]
+                .into_iter()
+                .map(|f| lz4_dir.join(f));
 
         cc::Build::new().files(files).compile("liblz4");
     }
