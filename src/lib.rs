@@ -95,7 +95,6 @@
 //! [`File`]: struct.File.html
 //! [`RepoOpener`]: struct.RepoOpener.html
 
-extern crate bytes;
 #[macro_use]
 extern crate cfg_if;
 extern crate env_logger;

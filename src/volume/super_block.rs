@@ -1,4 +1,3 @@
-use bytes::{Buf, BufMut, IntoBuf};
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
@@ -21,10 +20,13 @@ impl Head {
     const BYTES_LEN: usize = SALT_SIZE + Cost::BYTES_LEN + Cipher::BYTES_LEN;
 
     fn seri(&self) -> Vec<u8> {
-        let mut buf = Vec::new();
-        buf.put(self.salt.as_ref());
-        buf.put_u8(self.cost.to_u8());
-        buf.put_u8(self.cipher.into());
+        let mut pos = 0;
+        let mut buf = vec![0u8; Self::BYTES_LEN];
+        buf[..SALT_SIZE].copy_from_slice(self.salt.as_ref());
+        pos += SALT_SIZE;
+        buf[pos] = self.cost.to_u8();
+        pos += Cost::BYTES_LEN;
+        buf[pos] = self.cipher.into();
         buf
     }
 
@@ -98,9 +100,9 @@ impl SuperBlk {
         let body_buf = self.body.seri()?;
 
         // compose buffer: body buffer length + body buffer + padding
-        let mut comp_buf = Vec::new();
-        comp_buf.put_u64_le(body_buf.len() as u64);
-        comp_buf.put(&body_buf);
+        let mut comp_buf = vec![0u8; 8 + body_buf.len()];
+        comp_buf[..8].copy_from_slice(&((body_buf.len() as u64).to_le_bytes()));
+        comp_buf[8..8 + body_buf.len()].copy_from_slice(&body_buf);
 
         // resize the compose buffer to make it can exactly fit in a block
         let new_len = crypto.decrypted_len(BLK_SIZE - head_buf.len());
@@ -113,9 +115,11 @@ impl SuperBlk {
         let enc_buf = crypto.encrypt_with_ad(&comp_buf, vkey, &Self::MAGIC)?;
 
         // combine head and compose buffer and save 2 copies to storage
-        let mut buf = Vec::new();
-        buf.put(&head_buf);
-        buf.put(&enc_buf);
+        let mut pos = 0;
+        let mut buf = vec![0u8; head_buf.len() + enc_buf.len()];
+        buf[..head_buf.len()].copy_from_slice(&head_buf);
+        pos += head_buf.len();
+        buf[pos..pos + enc_buf.len()].copy_from_slice(&enc_buf);
         storage
             .put_super_block(&buf, 0)
             .and(storage.put_super_block(&buf, 1))
@@ -137,11 +141,15 @@ impl SuperBlk {
         let vkey = &pwd_hash.value;
 
         // read encryped body
-        let mut comp_buf = crypto
-            .decrypt_with_ad(&buf[Head::BYTES_LEN..], vkey, &Self::MAGIC)?
-            .into_buf();
-        let body_buf_len = comp_buf.get_u64_le() as usize;
-        let body = Body::deseri(&comp_buf.bytes()[..body_buf_len])?;
+        let comp_buf = crypto.decrypt_with_ad(
+            &buf[Head::BYTES_LEN..],
+            vkey,
+            &Self::MAGIC,
+        )?;
+        let mut buf: [u8; 8] = Default::default();
+        buf.copy_from_slice(&comp_buf[..8]);
+        let body_buf_len = u64::from_le_bytes(buf) as usize;
+        let body = Body::deseri(&comp_buf[8..8 + body_buf_len])?;
 
         Ok(SuperBlk { head, body })
     }

@@ -3,7 +3,6 @@ use std::fmt::{self, Debug, Display, Formatter};
 use std::result::Result as StdResult;
 use std::u64;
 
-use bytes::BufMut;
 use serde::de::{self, Deserializer};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
@@ -67,8 +66,7 @@ impl Txid {
 
     /// Derive an eid from txid
     pub fn derive_id(self, hash_key: &HashKey) -> Eid {
-        let mut buf = Vec::new();
-        buf.put_u64_le(self.0);
+        let buf = self.0.to_le_bytes();
         let hash = Crypto::hash_with_key(&buf, hash_key);
         Eid::from_slice(&hash)
     }

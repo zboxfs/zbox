@@ -2,7 +2,6 @@ use std::fmt::Debug;
 use std::io::{ErrorKind, Read, Write};
 use std::marker::PhantomData;
 
-use bytes::BufMut;
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
@@ -24,9 +23,9 @@ impl Arm {
         self.serialize(&mut Serializer::new(&mut arm_buf)).unwrap();
 
         // hash eid and arm to make an eid
-        let mut buf = Vec::new();
-        buf.put(id.as_ref());
-        buf.put(&arm_buf);
+        let mut buf = vec![0u8; Eid::EID_SIZE + arm_buf.len()];
+        buf[..Eid::EID_SIZE].copy_from_slice(id.as_ref());
+        buf[Eid::EID_SIZE..].copy_from_slice(&arm_buf);
         let hash = Crypto::hash(&buf);
         Eid::from_slice(&hash)
     }

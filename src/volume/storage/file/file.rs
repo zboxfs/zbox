@@ -217,7 +217,6 @@ impl Debug for FileStorage {
 mod tests {
     extern crate tempdir;
 
-    use bytes::{ByteOrder, LittleEndian};
     use std::fs;
     use std::time::Instant;
 
@@ -429,17 +428,16 @@ mod tests {
 
         let mut ids = Vec::new();
         let mut addrs = Vec::new();
-        let mut buf = vec![0u8; 4];
         let buf2 = vec![42, 42, 42, 42];
         let buf3 = vec![43, 43, 43, 43];
         let cnt = 49152;
 
         for i in 0..cnt {
             let id = Eid::new();
-            LittleEndian::write_u32(&mut buf, i as u32);
-            idx_mgr.insert(&id, &buf).unwrap();
+            let id_buf = (i as u32).to_le_bytes();
+            idx_mgr.insert(&id, &id_buf).unwrap();
             ids.push(id);
-            addrs.push(buf.clone());
+            addrs.push(id_buf.clone());
 
             // update an existing addr
             if i == 8192 {

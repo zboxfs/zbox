@@ -3,7 +3,6 @@ use std::fmt::{self, Debug};
 use std::path::{Path, PathBuf};
 use std::u16;
 
-use bytes::BufMut;
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
@@ -24,8 +23,7 @@ const RECYCLE_FILE: &str = "recycle";
 
 // make sector relative path from its index
 fn sector_rel_path(sec_idx: usize, hash_key: &HashKey) -> PathBuf {
-    let mut buf = Vec::with_capacity(8);
-    buf.put_u64_le(sec_idx as u64);
+    let buf = (sec_idx as u64).to_le_bytes();
     Path::new(BASE_DIR)
         .join(Crypto::hash_with_key(&buf, hash_key).to_rel_path())
 }

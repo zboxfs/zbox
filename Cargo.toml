@@ -69,7 +69,6 @@ storage-zbox = ["http", "serde_json"]
 libsodium-bundled = []
 
 [dependencies]
-bytes = "0.4.10"
 cfg-if = "0.1.6"
 env_logger = "0.6.0"
 log = "0.4.6"
@@ -101,6 +100,7 @@ optional = true
 features = [ "Crypto", "WorkerGlobalScope", "XmlHttpRequest", "XmlHttpRequestResponseType", "Blob"]
 
 [dev-dependencies]
+bytes = "0.4.12"
 tempdir = "0.3.7"
 rand = "0.6.5"
 rand_xorshift = "0.1.1"

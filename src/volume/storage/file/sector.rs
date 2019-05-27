@@ -3,7 +3,6 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::u16;
 
-use bytes::BufMut;
 use linked_hash_map::LinkedHashMap;
 
 use super::file_armor::FileArmor;
@@ -188,8 +187,7 @@ impl SectorMgr {
 
     // convert sector index to Eid
     fn sector_idx_to_id(&self, sec_idx: usize) -> Eid {
-        let mut buf = Vec::with_capacity(8);
-        buf.put_u64_le(sec_idx as u64);
+        let buf = (sec_idx as u64).to_le_bytes();
         let hash = Crypto::hash_with_key(&buf, &self.hash_key);
         Eid::from_slice(&hash)
     }
