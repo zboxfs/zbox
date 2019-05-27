@@ -9,15 +9,16 @@ extern crate tar;
 
 use std::env;
 use std::path::PathBuf;
+#[cfg(not(target_os = "windows"))]
 use std::process::Command;
 
 const LZ4_NAME: &'static str = "lz4-1.9.1";
 const LZ4_URL: &'static str =
     "https://github.com/lz4/lz4/archive/v1.9.1.tar.gz";
 
-#[cfg(feature = "libsodium-bundled")]
+#[cfg(all(feature = "libsodium-bundled", not(target_os = "windows")))]
 const LIBSODIUM_NAME: &'static str = "libsodium-1.0.17";
-#[cfg(feature = "libsodium-bundled")]
+#[cfg(all(feature = "libsodium-bundled", not(target_os = "windows")))]
 const LIBSODIUM_URL: &'static str =
     "https://download.libsodium.org/libsodium/releases/libsodium-1.0.17.tar.gz";
 
@@ -129,7 +130,6 @@ fn download_and_build_lz4() {
 #[cfg(all(target_os = "windows", target_env = "msvc"))]
 fn download_and_build_lz4() {
     use libflate::non_blocking::gzip::Decoder;
-    use std::io::{stderr, stdout, Write};
     use tar::Archive;
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
