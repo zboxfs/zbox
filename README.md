@@ -114,7 +114,7 @@ Add the following dependency to your `Cargo.toml`:
 zbox = "0.7.1"
 ```
 
-If you don't want to install libsodium by yourself, you can specify
+If you don't want to install libsodium by yourself, simply specify
 `libsodium-bundled` feature in dependency, which will automatically download,
 verify and build libsodium.
 
