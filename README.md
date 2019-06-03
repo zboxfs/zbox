@@ -163,33 +163,19 @@ fn main() {
 
 ## Build with Docker
 
-ZboxFS comes with [Docker] support, it is easier to build ZboxFS with [zboxfs/base]
-image. This image is based on Ubuntu 16.04 and has Rust stable and libsodium
-included. Check more details in the [Dockerfile](docker/base.docker).
+ZboxFS comes with [Docker] support, which made building ZboxFS easier.
 
-You can also use image [zboxfs/android] to build ZboxFS for Android. It is based
-on [zboxfs/base] image and has Android NDK included. Check more details in the
-[Dockerfile](docker/android.docker).
+- [zboxfs/base]
+  Base image for building ZboxFS on Linux
 
-To build for Linux x86_64:
-```bash
-docker run --rm -v $PWD:/root/zbox zboxfs/base cargo build
-```
+- [zboxfs/-wasm]
+  Docker image for building WebAssembly binding
 
-To build for Android x86_64:
-```bash
-docker run --rm -v $PWD:/root/zbox zboxfs/android cargo build --target x86_64-linux-android
-```
+- [zboxfs/nodejs]
+  Docker image for building Node.js binding
 
-To build for Android arm64:
-```bash
-docker run --rm -v $PWD:/root/zbox zboxfs/android cargo build --target aarch64-linux-android
-```
-
-Or run the test suite.
-```bash
-docker run --rm -v $PWD:/root/zbox zboxfs/base cargo test
-```
+- [zboxfs/android]
+  Docker image for building Android Java binding
 
 ## Static linking with libsodium
 
@@ -279,7 +265,8 @@ file for details.
 [TrueCrypt]: http://truecrypt.sourceforge.net
 [LUKS]: https://gitlab.com/cryptsetup/cryptsetup/
 [VeraCrypt]: https://veracrypt.codeplex.com
-[rust:latest]: https://hub.docker.com/_/rust/
 [Docker]: https://www.docker.com
-[zboxfs/base]: https://hub.docker.com/r/zboxfs/base/
-[zboxfs/android]: https://hub.docker.com/r/zboxfs/android/
+[zboxfs/base]: https://github.com/zboxfs/zbox-docker-base
+[zboxfs/wasm]: https://github.com/zboxfs/zbox-docker-wasm
+[zboxfs/nodejs]: https://github.com/zboxfs/zbox-docker-nodejs
+[zboxfs/android]: https://github.com/zboxfs/zbox-docker-android
