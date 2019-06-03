@@ -163,12 +163,13 @@ fn main() {
 
 ## Build with Docker
 
-ZboxFS comes with [Docker] support, which made building ZboxFS easier.
+ZboxFS comes with [Docker] support, which made building ZboxFS easier. Check
+each repo for more details.
 
 - [zboxfs/base]
   Base image for building ZboxFS on Linux
 
-- [zboxfs/-wasm]
+- [zboxfs/wasm]
   Docker image for building WebAssembly binding
 
 - [zboxfs/nodejs]
