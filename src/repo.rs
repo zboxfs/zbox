@@ -590,7 +590,7 @@ fn open_file_with_options<P: AsRef<Path>>(
 ///
 /// ```toml
 /// [dependencies]
-/// zbox = { version = "0.7.1", features = ["storage-file"] }
+/// zbox = { version = "0.8.0", features = ["storage-file"] }
 /// ```
 ///
 /// # Create and open `Repo`

@@ -33,6 +33,8 @@ Features
   Argon2 password hashing and etc., empowered by [libsodium]
 - Support multiple storages, including memory, OS file system, RDBMS, Key-value
   object store and more
+- Files and directories are chunked into same-sized blocks to eliminate metadata
+  leakage
 - Content-based data chunk deduplication and file-based deduplication
 - Data compression using [LZ4] in fast mode, optional
 - Data integrity is guaranteed by authenticated encryption primitives (AEAD
@@ -111,7 +113,7 @@ Add the following dependency to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-zbox = "0.7.1"
+zbox = "0.8.0"
 ```
 
 If you don't want to install libsodium by yourself, simply specify
@@ -120,7 +122,7 @@ verify and build libsodium.
 
 ```toml
 [dependencies]
-zbox = { version = "0.7.1", features = ["libsodium-bundled"] }
+zbox = { version = "0.8.0", features = ["libsodium-bundled"] }
 ```
 
 ## Example
