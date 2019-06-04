@@ -76,20 +76,20 @@ impl Headers {
         let mut map = HeaderMap::new();
         let ver = Version::current_lib_version().to_string();
 
-        // set user agent header
-        map.insert(
-            header::USER_AGENT,
-            HeaderValue::from_str(&format!("zboxfs/{}", ver)).unwrap(),
-        );
-
         // add zbox version header
         let version_header = HeaderName::from_static("zbox-version");
         let version_value = HeaderValue::from_str(&ver).unwrap();
         map.insert(version_header, version_value);
 
-        // for wasm, origin header must be set
+        // set headers for non-browser request only, because some browsers will
+        // not allow us to do that
         #[cfg(not(feature = "storage-zbox-wasm"))]
         {
+            map.insert(
+                header::USER_AGENT,
+                HeaderValue::from_str(&format!("zboxfs/{}", ver)).unwrap(),
+            );
+
             map.insert(
                 header::ORIGIN,
                 HeaderValue::from_str("http://localhost").unwrap(),
