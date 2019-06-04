@@ -74,7 +74,7 @@ struct Headers {
 impl Headers {
     fn new() -> Self {
         let mut map = HeaderMap::new();
-        let ver = Version::current_lib_version().to_string();
+        let ver = Version::lib_version().to_string();
 
         // add zbox version header
         let version_header = HeaderName::from_static("zbox-version");

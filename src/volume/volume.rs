@@ -59,7 +59,7 @@ impl Volume {
 
         // initialise info
         self.info.id = Eid::new();
-        self.info.ver = Version::current_repo_version();
+        self.info.ver = Version::repo_version();
         self.info.compress = cfg.compress;
         self.info.cost = cfg.cost;
         self.info.cipher = cfg.cipher;

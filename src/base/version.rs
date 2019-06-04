@@ -12,7 +12,7 @@ pub struct Version {
 
 impl Version {
     #[inline]
-    pub fn current_repo_version() -> Self {
+    pub fn repo_version() -> Self {
         Version {
             major: version::REPO_MAJOR_VERSION,
             minor: version::REPO_MINOR_VERSION,
@@ -20,9 +20,8 @@ impl Version {
         }
     }
 
-    #[allow(dead_code)]
     #[inline]
-    pub fn current_lib_version() -> Self {
+    pub fn lib_version() -> Self {
         Version {
             major: version::LIB_MAJOR_VERSION,
             minor: version::LIB_MINOR_VERSION,
@@ -31,7 +30,7 @@ impl Version {
     }
 
     pub fn match_repo_version(&self) -> bool {
-        let curr = Version::current_repo_version();
+        let curr = Version::repo_version();
         self.major == curr.major && self.minor == curr.minor
     }
 }

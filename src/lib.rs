@@ -138,7 +138,7 @@ mod version;
 mod volume;
 
 pub use self::base::crypto::{Cipher, MemLimit, OpsLimit};
-pub use self::base::init_env;
+pub use self::base::{init_env, zbox_version};
 pub use self::error::{Error, Result};
 pub use self::file::{File, VersionReader};
 pub use self::fs::fnode::{DirEntry, FileType, Metadata, Version};

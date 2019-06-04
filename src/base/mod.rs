@@ -31,6 +31,14 @@ use wasm_logger;
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 use env_logger;
 
+/// Get ZboxFS version string.
+///
+/// This method return ZboxFS version as a string, e.g. "ZboxFS 0.8.0".
+#[inline]
+pub fn zbox_version() -> String {
+    format!("ZboxFS {}", Version::lib_version())
+}
+
 static INIT: Once = ONCE_INIT;
 
 cfg_if! {
@@ -48,8 +56,8 @@ cfg_if! {
                 );
                 crypto::Crypto::init().expect("Initialise crypto failed");
                 debug!(
-                    "ZboxFS v{} - Zero-details, privacy-focused in-app file system",
-                    Version::current_lib_version()
+                    "{} - Zero-details, privacy-focused in-app file system",
+                    zbox_version()
                 );
             });
         }
@@ -59,8 +67,8 @@ cfg_if! {
                 wasm_logger::init(wasm_logger::Config::new(Level::Trace));
                 crypto::Crypto::init().expect("Initialise crypto failed");
                 debug!(
-                    "ZboxFS v{} - Zero-details, privacy-focused in-app file system",
-                    Version::current_lib_version()
+                    "{} - Zero-details, privacy-focused in-app file system",
+                    zbox_version()
                 );
             });
         }
@@ -80,8 +88,8 @@ cfg_if! {
                 env_logger::try_init().ok();
                 crypto::Crypto::init().expect("Initialise crypto failed");
                 debug!(
-                    "ZboxFS v{} - Zero-details, privacy-focused in-app file system",
-                    Version::current_lib_version()
+                    "{} - Zero-details, privacy-focused in-app file system",
+                    zbox_version()
                 );
             });
         }
