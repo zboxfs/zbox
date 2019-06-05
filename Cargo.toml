@@ -29,9 +29,6 @@ opt-level = 's'
 [features]
 default = ["storage-mem"]
 
-# ffi compilation flag
-ffi = []
-
 # performance test compilation flag
 test-perf = ["storage-file"]
 
