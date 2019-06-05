@@ -13,10 +13,10 @@ use std::str;
 type c_void = std::ffi::c_void;
 
 #[allow(non_camel_case_types)]
-type c_char = i8;
+type c_char = std::os::raw::c_char;
 
 #[allow(non_camel_case_types)]
-type c_uint = u32;
+type c_uint = std::os::raw::c_uint;
 
 #[allow(non_camel_case_types)]
 type size_t = usize;
