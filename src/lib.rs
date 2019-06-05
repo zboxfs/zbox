@@ -171,13 +171,6 @@ extern crate lazy_static;
 #[cfg(feature = "storage-zbox-native")]
 extern crate reqwest;
 
-#[cfg(feature = "storage-zbox-jni")]
-extern crate jni;
-
-#[cfg(feature = "storage-zbox-jni")]
-#[macro_use]
-extern crate lazy_static;
-
 #[cfg(target_os = "android")]
 extern crate android_logger;
 

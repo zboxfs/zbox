@@ -56,9 +56,6 @@ storage-zbox-faulty = ["storage-zbox", "lazy_static"]
 # zbox storage with native transport
 storage-zbox-native = ["storage-zbox", "reqwest"]
 
-# zbox storage with jni transport
-storage-zbox-jni = ["storage-zbox", "jni", "lazy_static"]
-
 # zbox storage with wasm transport
 storage-zbox-wasm = ["storage-zbox", "wasm-bindgen", "js-sys", "web-sys", "wee_alloc", "wasm-logger"]
 
@@ -81,7 +78,6 @@ redis = { version = "0.9.1", optional = true }
 http  = { version = "0.1.17", optional = true }
 serde_json = { version = "1.0.39", optional = true }
 reqwest  = { version = "0.9.5", optional = true }
-jni = { version = "0.10.2", optional = true }
 wasm-bindgen = { version = "0.2.45", features = ["serde-serialize"], optional = true }
 js-sys = { version = "0.3.22", optional = true }
 wee_alloc = { version = "0.4.4", optional = true }
