@@ -172,6 +172,11 @@ pub fn init_env(is_debug: bool) {
 }
 
 #[wasm_bindgen]
+pub fn zbox_version() -> String {
+    base::zbox_version()
+}
+
+#[wasm_bindgen]
 pub struct RepoOpener {
     inner: ZboxRepoOpener,
 }
