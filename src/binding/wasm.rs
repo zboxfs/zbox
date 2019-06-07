@@ -3,9 +3,11 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::mem;
 use std::ptr;
 use std::result;
+use std::str::FromStr;
 use std::time::SystemTime;
 
 use js_sys;
+use log::Level;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys;
@@ -163,12 +165,13 @@ fn time_to_u64(t: SystemTime) -> u64 {
 }
 
 #[wasm_bindgen]
-pub fn init_env(is_debug: bool) {
-    if is_debug {
-        base::init_env();
+pub fn init_env(level: &str) {
+    let lvl = if level == "off" {
+        None
     } else {
-        base::init_env_no_logging();
-    }
+        Some(Level::from_str(level).unwrap_or(Level::Warn))
+    };
+    base::init_env(lvl);
 }
 
 #[wasm_bindgen]

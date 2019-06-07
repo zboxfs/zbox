@@ -55,26 +55,23 @@ cfg_if! {
                     Some("zboxfs"),
                 );
                 crypto::Crypto::init().expect("Initialise crypto failed");
-                debug!(
+                info!(
                     "{} - Zero-details, privacy-focused in-app file system",
                     zbox_version()
                 );
             });
         }
     } else if #[cfg(target_arch = "wasm32")] {
-        pub fn init_env() {
+        pub fn init_env(level: Option<Level>) {
             INIT.call_once(|| {
-                wasm_logger::init(wasm_logger::Config::new(Level::Trace));
+                if let Some(lvl) = level {
+                    wasm_logger::init(wasm_logger::Config::new(lvl));
+                }
                 crypto::Crypto::init().expect("Initialise crypto failed");
-                debug!(
+                info!(
                     "{} - Zero-details, privacy-focused in-app file system",
                     zbox_version()
                 );
-            });
-        }
-        pub fn init_env_no_logging() {
-            INIT.call_once(|| {
-                crypto::Crypto::init().expect("Initialise crypto failed");
             });
         }
     } else {
@@ -87,7 +84,7 @@ cfg_if! {
             INIT.call_once(|| {
                 env_logger::try_init().ok();
                 crypto::Crypto::init().expect("Initialise crypto failed");
-                debug!(
+                info!(
                     "{} - Zero-details, privacy-focused in-app file system",
                     zbox_version()
                 );

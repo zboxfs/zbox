@@ -78,7 +78,7 @@ reqwest  = { version = "0.9.5", optional = true }
 wasm-bindgen = { version = "0.2.45", features = ["serde-serialize"], optional = true }
 js-sys = { version = "0.3.22", optional = true }
 wee_alloc = { version = "0.4.4", optional = true }
-wasm-logger = { version = "0.1.1", optional = true }
+wasm-logger = { version = "0.1.3", optional = true }
 
 [dependencies.linked-hash-map]
 version = "0.5.1"

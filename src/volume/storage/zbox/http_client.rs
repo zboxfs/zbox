@@ -313,7 +313,7 @@ impl HttpClient {
         rel_path: &Path,
         cache_ctl: CacheControl,
     ) -> Result<Response> {
-        debug!("get {:?}", rel_path);
+        trace!("get {:?}", rel_path);
 
         let uri = self.make_uri(rel_path)?;
 
@@ -377,7 +377,7 @@ impl HttpClient {
         cache_ctl: CacheControl,
         body: &[u8],
     ) -> Result<()> {
-        debug!("put {:?}, offset {}, len {}", rel_path, offset, body.len());
+        trace!("put {:?}, offset {}, len {}", rel_path, offset, body.len());
 
         // if the object is already in deletion bulk, we need to remove it
         if let Some(idx) = self.del_bulk.iter().position(|p| p == rel_path) {
@@ -415,7 +415,7 @@ impl HttpClient {
             return Ok(());
         }
 
-        debug!("bulk del {:?} objects", bulk.len());
+        trace!("bulk del {:?} objects", bulk.len());
 
         // make bulk deletion uri
         let uri = self.make_uri(Self::BULK_URI)?;
