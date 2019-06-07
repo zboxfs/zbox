@@ -904,7 +904,7 @@ impl Repo {
     }
 
     /// Rename a file or directory to a new name, replacing the original file
-    /// if to already exists.
+    /// if `to` already exists.
     ///
     /// `from` and `to` must be absolute paths.
     #[inline]
