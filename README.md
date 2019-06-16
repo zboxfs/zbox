@@ -29,7 +29,7 @@ Features
 ========
 - Everything is encrypted :lock:, including metadata and directory structure,
   no knowledge can be leaked to underlying storage
-- State-of-the-art cryptography: AES256-GCM (hardware), XChaCha20-Poly1305,
+- State-of-the-art cryptography: AES-256-GCM (hardware), XChaCha20-Poly1305,
   Argon2 password hashing and etc., empowered by [libsodium]
 - Support multiple storages, including memory, OS file system, RDBMS, Key-value
   object store and more
