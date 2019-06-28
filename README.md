@@ -1,4 +1,4 @@
-<img src="https://www.zbox.io/svg/logo.svg" alt="ZboxFS Logo" height="96" /> ZboxFS
+<img src="https://zboxfs.github.io/zbox/images/logo.svg" alt="ZboxFS Logo" height="96" /> ZboxFS
 ======
 [![Travis](https://img.shields.io/travis/zboxfs/zbox.svg?style=flat-square)](https://travis-ci.org/zboxfs/zbox)
 [![Crates.io](https://img.shields.io/crates/d/zbox.svg?style=flat-square)](https://crates.io/crates/zbox)
@@ -52,7 +52,7 @@ Many OS-level file systems support encryption, such as [EncFS], [APFS] and
 
 This diagram shows the difference between ZboxFS and them.
 
-![Comparison](https://www.zbox.io/svg/zbox-compare.svg)
+![Comparison](https://zboxfs.github.io/zbox/images/zbox-compare.svg)
 
 Below is the feature comparison list.
 
