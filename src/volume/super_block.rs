@@ -111,7 +111,8 @@ impl SuperBlk {
         }
         comp_buf.resize(new_len, 0);
 
-        // encrypt compose buffer using volume key which is the user password hash
+        // encrypt composed buffer using the volume key, which is the user
+        // password hash
         let enc_buf = crypto.encrypt_with_ad(&comp_buf, vkey, &Self::MAGIC)?;
 
         // combine head and compose buffer and save 2 copies to storage

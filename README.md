@@ -1,4 +1,4 @@
-<img src="https://www.zbox.io/svg/logo.svg" alt="Zbox Logo" height="96" /> ZboxFS
+<img src="https://www.zbox.io/svg/logo.svg" alt="ZboxFS Logo" height="96" /> ZboxFS
 ======
 [![Travis](https://img.shields.io/travis/zboxfs/zbox.svg?style=flat-square)](https://travis-ci.org/zboxfs/zbox)
 [![Crates.io](https://img.shields.io/crates/d/zbox.svg?style=flat-square)](https://crates.io/crates/zbox)
@@ -30,10 +30,10 @@ Features
 - Everything is encrypted :lock:, including metadata and directory structure,
   no knowledge can be leaked to underlying storage
 - State-of-the-art cryptography: AES-256-GCM (hardware), XChaCha20-Poly1305,
-  Argon2 password hashing and etc., empowered by [libsodium]
+  Argon2 password hashing and etc., powered by [libsodium]
 - Support multiple storages, including memory, OS file system, RDBMS, Key-value
   object store and more
-- Files and directories are chunked into same-sized blocks to eliminate metadata
+- Files and directories are packed into same-sized blocks to eliminate metadata
   leakage
 - Content-based data chunk deduplication and file-based deduplication
 - Data compression using [LZ4] in fast mode, optional
@@ -65,10 +65,10 @@ Below is the feature comparison list.
 | Shared access for processes | :heavy_multiplication_x: | :heavy_check_mark:       | :heavy_check_mark:       |
 | Deduplication               | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
 | Compression                 | :heavy_check_mark:       | partial                  | :heavy_multiplication_x: |
-| Versioning                  | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
+| Content versioning          | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
 | COW semantics               | :heavy_check_mark:       | partial                  | :heavy_multiplication_x: |
 | ACID Transaction            | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
-| Multiple storage layers     | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
+| Multiple storages           | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
 | API access                  | :heavy_check_mark:       | through VFS              | through VFS              |
 | Symbolic links              | :heavy_multiplication_x: | :heavy_check_mark:       | depends on inner FS      |
 | Users and permissions       | :heavy_multiplication_x: | :heavy_check_mark:       | :heavy_check_mark:       |
@@ -150,7 +150,7 @@ fn main() {
         .unwrap();
 
     // use std::io::Write trait to write data into it
-    file.write_all(b"Hello, world!").unwrap();
+    file.write_all(b"Hello, World!").unwrap();
 
     // finish writing to make a permanent content version
     file.finish().unwrap();
@@ -159,7 +159,7 @@ fn main() {
     let mut content = String::new();
     file.seek(SeekFrom::Start(0)).unwrap();
     file.read_to_string(&mut content).unwrap();
-    assert_eq!(content, "Hello, world!");
+    assert_eq!(content, "Hello, World!");
 }
 ```
 
