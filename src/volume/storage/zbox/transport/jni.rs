@@ -105,7 +105,7 @@ fn create_response(status: i32, body: Vec<u8>) -> Result<Response> {
     let mut builder = HttpResponse::builder();
     builder.status(status as u16);
     let rdr = Cursor::new(body);
-    let ret = Response::new(builder.body(Box::new(rdr) as Box<Read>)?);
+    let ret = Response::new(builder.body(Box::new(rdr) as Box<dyn Read>)?);
     Ok(ret)
 }
 

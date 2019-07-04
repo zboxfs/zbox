@@ -45,7 +45,7 @@ pub struct LocalCache {
     meta: CacheMeta,
 
     // local storage backend
-    backend: Box<CacheBackend>,
+    backend: Box<dyn CacheBackend>,
 
     // local cache change flag
     is_changed: bool,
@@ -74,7 +74,7 @@ impl LocalCache {
         meta.cache_type = cache_type;
         meta.capacity = capacity;
 
-        let backend: Box<CacheBackend> = match cache_type {
+        let backend: Box<dyn CacheBackend> = match cache_type {
             CacheType::Mem => Box::new(super::mem::MemBackend::new()),
             CacheType::File => {
                 #[cfg(feature = "storage-zbox-wasm")]

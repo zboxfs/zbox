@@ -222,7 +222,7 @@ impl Read for WalReader {
 
 /// Volume Reader
 pub struct Reader {
-    inner: Box<Read>,
+    inner: Box<dyn Read>,
 }
 
 impl Reader {

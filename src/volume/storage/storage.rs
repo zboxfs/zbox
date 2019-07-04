@@ -18,7 +18,7 @@ use volume::address::Addr;
 use volume::{Allocator, AllocatorRef, BLKS_PER_FRAME, BLK_SIZE, FRAME_SIZE};
 
 // parse storage part in uri
-fn parse_uri(uri: &str) -> Result<Box<Storable>> {
+fn parse_uri(uri: &str) -> Result<Box<dyn Storable>> {
     if !uri.is_ascii() {
         return Err(Error::InvalidUri);
     }
@@ -112,7 +112,7 @@ impl Meter<Vec<u8>> for FrameCacheMeter {
 /// Storage
 pub struct Storage {
     // underlying storage layer
-    depot: Box<Storable>,
+    depot: Box<dyn Storable>,
 
     // block allocator
     allocator: AllocatorRef,
@@ -141,7 +141,7 @@ impl Storage {
     const ADDRESS_CACHE_SIZE: usize = 64;
 
     pub fn new(uri: &str) -> Result<Self> {
-        let depot: Box<Storable> = parse_uri(uri)?;
+        let depot = parse_uri(uri)?;
         let frame_cache = Lru::new(Self::FRAME_CACHE_SIZE);
 
         Ok(Storage {

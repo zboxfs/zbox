@@ -20,12 +20,12 @@ use error::{Error, Result};
 
 /// Http response wrapper
 pub struct Response {
-    pub inner: HttpResponse<Box<Read>>,
+    pub inner: HttpResponse<Box<dyn Read>>,
 }
 
 impl Response {
     #[inline]
-    pub fn new(inner: HttpResponse<Box<Read>>) -> Self {
+    pub fn new(inner: HttpResponse<Box<dyn Read>>) -> Self {
         Response { inner }
     }
 

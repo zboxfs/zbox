@@ -25,7 +25,7 @@ pub trait Transable: Debug + Id + Send + Sync {
     fn abort(&mut self);
 }
 
-pub type TransableRef = Arc<RwLock<Transable>>;
+pub type TransableRef = Arc<RwLock<dyn Transable>>;
 
 /// Transaction
 pub struct Trans {

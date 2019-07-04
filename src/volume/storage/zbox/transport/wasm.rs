@@ -50,7 +50,7 @@ fn create_response(xhr: XmlHttpRequest) -> Result<Response> {
     let bin = Uint8Array::new_with_byte_offset(&resp, 0);
     let mut buf = vec![0u8; bin.byte_length() as usize];
     bin.copy_to(&mut buf);
-    let body = Box::new(Cursor::new(buf)) as Box<Read>;
+    let body = Box::new(Cursor::new(buf)) as Box<dyn Read>;
     let ret = Response::new(builder.body(body)?);
     Ok(ret)
 }

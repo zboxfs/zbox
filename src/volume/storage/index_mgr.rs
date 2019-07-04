@@ -20,9 +20,9 @@ pub trait Accessor: Send + Sync {
     fn remove(&self, id: &Eid) -> Result<()>;
 }
 
-type LsmtArmor = Box<Accessor<Item = Lsmt>>;
-type MemTabArmor = Box<Accessor<Item = MemTab>>;
-type TabArmor = Box<Accessor<Item = Tab>>;
+type LsmtArmor = Box<dyn Accessor<Item = Lsmt>>;
+type MemTabArmor = Box<dyn Accessor<Item = MemTab>>;
+type TabArmor = Box<dyn Accessor<Item = Tab>>;
 
 #[derive(Clone, Default, Eq, Deserialize, Serialize)]
 pub struct TabItem((Eid, Vec<u8>));

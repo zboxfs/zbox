@@ -1,8 +1,7 @@
 use std::fmt::{self, Debug};
-use std::io::{Error as IoError, ErrorKind, Result as IoResult};
 use std::sync::{Arc, RwLock};
 
-use base::crypto::{Crypto, Key, RandomSeed};
+use base::crypto::{Crypto, Key};
 use base::lru::{CountMeter, Lru, PinChecker};
 use base::IntoRef;
 use error::Result;

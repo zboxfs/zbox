@@ -22,7 +22,7 @@ fn create_response(status: StatusCode, body: Vec<u8>) -> Result<Response> {
     let mut builder = HttpResponse::builder();
     builder.status(status);
     let body = Cursor::new(body);
-    let ret = Response::new(builder.body(Box::new(body) as Box<Read>)?);
+    let ret = Response::new(builder.body(Box::new(body) as Box<dyn Read>)?);
     Ok(ret)
 }
 

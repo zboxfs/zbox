@@ -14,7 +14,7 @@ fn create_response(resp: NativeResponse) -> Result<Response> {
     for (name, value) in resp.headers() {
         builder.header(name, value);
     }
-    let ret = Response::new(builder.body(Box::new(resp) as Box<Read>)?);
+    let ret = Response::new(builder.body(Box::new(resp) as Box<dyn Read>)?);
     Ok(ret)
 }
 

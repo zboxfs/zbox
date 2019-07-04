@@ -148,7 +148,7 @@ pub struct HttpClient {
     ttl: u64,
     retry_cnt: u64,
     headers: Headers,
-    transport: Box<Transport>,
+    transport: Box<dyn Transport>,
     del_bulk: Vec<PathBuf>,
 }
 
@@ -164,7 +164,7 @@ impl HttpClient {
 
     pub fn new(repo_id: &str, access_key: &str) -> Result<Self> {
         // create transport
-        let transport: Box<Transport> = {
+        let transport: Box<dyn Transport> = {
             #[cfg(feature = "storage-zbox-faulty")]
             {
                 Box::new(super::transport::faulty::FaultyTransport::new(
