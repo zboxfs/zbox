@@ -127,7 +127,6 @@ macro_rules! from_io_err {
 }
 
 mod base;
-mod binding;
 mod content;
 mod error;
 mod file;
@@ -174,14 +173,11 @@ extern crate reqwest;
 #[cfg(target_os = "android")]
 extern crate android_logger;
 
-#[cfg(feature = "storage-zbox-wasm")]
+#[cfg(target_arch = "wasm32")]
 extern crate wasm_bindgen;
 
-#[cfg(feature = "storage-zbox-wasm")]
+#[cfg(target_arch = "wasm32")]
 extern crate js_sys;
 
-#[cfg(feature = "storage-zbox-wasm")]
+#[cfg(target_arch = "wasm32")]
 extern crate web_sys;
-
-#[cfg(feature = "storage-zbox-wasm")]
-extern crate wasm_logger;

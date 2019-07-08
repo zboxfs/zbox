@@ -102,7 +102,7 @@ pub enum Error {
     #[cfg(feature = "storage-zbox-jni")]
     Jni(JniError),
 
-    #[cfg(feature = "storage-zbox-wasm")]
+    #[cfg(target_arch = "wasm32")]
     RequestError,
 }
 
@@ -182,7 +182,7 @@ impl Display for Error {
             #[cfg(feature = "storage-zbox-jni")]
             Error::Jni(ref err) => err.fmt(f),
 
-            #[cfg(feature = "storage-zbox-wasm")]
+            #[cfg(target_arch = "wasm32")]
             Error::RequestError => write!(f, "Http request failed"),
         }
     }
@@ -262,7 +262,7 @@ impl StdError for Error {
             #[cfg(feature = "storage-zbox-jni")]
             Error::Jni(ref err) => err.description(),
 
-            #[cfg(feature = "storage-zbox-wasm")]
+            #[cfg(target_arch = "wasm32")]
             Error::RequestError => "Http request error",
         }
     }
@@ -436,7 +436,7 @@ impl Into<i32> for Error {
             #[cfg(feature = "storage-zbox-jni")]
             Error::Jni(_) => -2064,
 
-            #[cfg(feature = "storage-zbox-wasm")]
+            #[cfg(target_arch = "wasm32")]
             Error::RequestError => -2065,
         }
     }
@@ -518,7 +518,7 @@ impl PartialEq for Error {
                 a.kind().description() == b.kind().description()
             }
 
-            #[cfg(feature = "storage-zbox-wasm")]
+            #[cfg(target_arch = "wasm32")]
             (&Error::RequestError, &Error::RequestError) => true,
 
             (_, _) => false,

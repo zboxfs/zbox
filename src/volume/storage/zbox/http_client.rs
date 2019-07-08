@@ -83,7 +83,7 @@ impl Headers {
 
         // set headers for non-browser request only, because some browsers will
         // not allow us to do that
-        #[cfg(not(feature = "storage-zbox-wasm"))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             map.insert(
                 header::USER_AGENT,
@@ -186,7 +186,7 @@ impl HttpClient {
                 )?)
             }
 
-            #[cfg(feature = "storage-zbox-wasm")]
+            #[cfg(target_arch = "wasm32")]
             {
                 Box::new(super::transport::wasm::WasmTransport::new(
                     Self::DEFAULT_TIMEOUT,

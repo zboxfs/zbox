@@ -7,7 +7,7 @@ pub(super) mod native;
 #[cfg(feature = "storage-zbox-jni")]
 pub(super) mod jni;
 
-#[cfg(feature = "storage-zbox-wasm")]
+#[cfg(target_arch = "wasm32")]
 pub(super) mod wasm;
 
 use std::io::{copy, Read, Write};

@@ -25,9 +25,6 @@ use android_logger::{self, Filter};
 #[cfg(target_arch = "wasm32")]
 use log::Level;
 
-#[cfg(target_arch = "wasm32")]
-use wasm_logger;
-
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 use env_logger;
 
@@ -64,9 +61,9 @@ cfg_if! {
     } else if #[cfg(target_arch = "wasm32")] {
         pub fn init_env(level: Option<Level>) {
             INIT.call_once(|| {
-                if let Some(lvl) = level {
+                /*if let Some(lvl) = level {
                     wasm_logger::init(wasm_logger::Config::new(lvl));
-                }
+                }*/
                 crypto::Crypto::init().expect("Initialise crypto failed");
                 info!(
                     "{} - Zero-details, privacy-focused in-app file system",

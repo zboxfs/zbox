@@ -53,9 +53,6 @@ storage-zbox-faulty = ["storage-zbox", "lazy_static"]
 # zbox storage with native transport
 storage-zbox-native = ["storage-zbox", "reqwest"]
 
-# zbox storage with wasm transport
-storage-zbox-wasm = ["storage-zbox", "wasm-bindgen", "js-sys", "web-sys", "wee_alloc", "wasm-logger"]
-
 # zbox storage base dependencies
 storage-zbox = ["http", "serde_json"]
 
@@ -75,10 +72,6 @@ redis = { version = "0.9.1", optional = true }
 http  = { version = "0.1.17", optional = true }
 serde_json = { version = "1.0.39", optional = true }
 reqwest  = { version = "0.9.5", optional = true }
-wasm-bindgen = { version = "0.2.45", features = ["serde-serialize"], optional = true }
-js-sys = { version = "0.3.22", optional = true }
-wee_alloc = { version = "0.4.4", optional = true }
-wasm-logger = { version = "0.1.4", optional = true }
 
 [dependencies.linked-hash-map]
 version = "0.5.1"
@@ -87,10 +80,10 @@ features = ["serde_impl"]
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.7.0"
 
-[dependencies.web-sys]
-version = "0.3.22"
-optional = true
-features = [ "Crypto", "WorkerGlobalScope", "XmlHttpRequest", "XmlHttpRequestResponseType", "Blob"]
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { version = "0.2.47", features = ["serde-serialize"] }
+js-sys = { version = "0.3.24" }
+web-sys = { version = "0.3.24", features = [ "Crypto", "WorkerGlobalScope", "XmlHttpRequest", "XmlHttpRequestResponseType", "Blob"] }
 
 [dev-dependencies]
 bytes = "0.4.12"

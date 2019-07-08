@@ -1,8 +1,8 @@
 #![allow(clippy::module_inception)]
 
-#[cfg(feature = "storage-zbox-wasm")]
+#[cfg(target_arch = "wasm32")]
 mod browser;
-#[cfg(not(feature = "storage-zbox-wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 mod file;
 mod local_cache;
 mod mem;

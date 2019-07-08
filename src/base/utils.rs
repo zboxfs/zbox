@@ -2,7 +2,7 @@ use std::time::Duration;
 
 #[cfg(any(
     feature = "storage-file",
-    all(feature = "storage-zbox", not(feature = "storage-zbox-wasm"))
+    all(feature = "storage-zbox", not(target_arch = "wasm32"))
 ))]
 use error::{Error, Result};
 
@@ -70,7 +70,7 @@ pub fn speed_str(duration: &Duration, data_len: usize) -> String {
 /// Ensure all parents dir are created along the path
 #[cfg(any(
     feature = "storage-file",
-    all(feature = "storage-zbox", not(feature = "storage-zbox-wasm"))
+    all(feature = "storage-zbox", not(target_arch = "wasm32"))
 ))]
 pub fn ensure_parents_dir(path: &std::path::Path) -> Result<()> {
     let parent = path.parent().unwrap();
@@ -83,7 +83,7 @@ pub fn ensure_parents_dir(path: &std::path::Path) -> Result<()> {
 /// Remove parent dir if it is empty
 #[cfg(any(
     feature = "storage-file",
-    all(feature = "storage-zbox", not(feature = "storage-zbox-wasm"))
+    all(feature = "storage-zbox", not(target_arch = "wasm32"))
 ))]
 pub fn remove_empty_parent_dir(path: &std::path::Path) -> Result<()> {
     for parent in path.ancestors().skip(1) {

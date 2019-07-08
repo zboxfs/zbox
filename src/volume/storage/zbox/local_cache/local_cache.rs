@@ -77,23 +77,23 @@ impl LocalCache {
         let backend: Box<dyn CacheBackend> = match cache_type {
             CacheType::Mem => Box::new(super::mem::MemBackend::new()),
             CacheType::File => {
-                #[cfg(feature = "storage-zbox-wasm")]
+                #[cfg(target_arch = "wasm32")]
                 {
                     return Err(Error::InvalidUri);
                 }
-                #[cfg(not(feature = "storage-zbox-wasm"))]
+                #[cfg(not(target_arch = "wasm32"))]
                 {
                     let base = base.join(repo_id);
                     Box::new(super::file::FileBackend::new(&base))
                 }
             }
             CacheType::Browser => {
-                #[cfg(feature = "storage-zbox-wasm")]
+                #[cfg(target_arch = "wasm32")]
                 {
                     let _ = base;
                     Box::new(super::browser::WasmBackend::new())
                 }
-                #[cfg(not(feature = "storage-zbox-wasm"))]
+                #[cfg(not(target_arch = "wasm32"))]
                 {
                     return Err(Error::InvalidUri);
                 }
