@@ -405,7 +405,7 @@ mod tests {
         // delete all blocks in unfiished sector #2 should not remove the sector
         fs.del_blocks(Span::new(4096, 4)).unwrap();
 
-        // continu write until the end of sector #2,
+        // continue write until the end of sector #2,
         // this should shrink sector #2
         let idx = 4100;
         for i in 0..4092 / 4 {
