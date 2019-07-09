@@ -1,11 +1,16 @@
+#![cfg(any(
+    feature = "storage-file",
+    feature = "storage-sqlite",
+    feature = "storage-redis"
+))]
+
 extern crate tempdir;
 
 extern crate zbox;
 
-#[cfg(feature = "storage-file")]
+use std::io::{Read, Seek, SeekFrom};
 use tempdir::TempDir;
-
-#[cfg(feature = "storage-file")]
+#[allow(unused_imports)]
 use zbox::{
     init_env, Cipher, Error, MemLimit, OpenOptions, OpsLimit, Repo, RepoOpener,
 };
@@ -209,4 +214,73 @@ fn repo_oper() {
 
         Repo::repair_super_block(&path, &pwd).unwrap();
     }
+}
+
+fn smoke_test(uri: String) {
+    init_env();
+
+    // initialise repo and write file
+    {
+        let mut repo =
+            RepoOpener::new().create(true).open(&uri, "pwd").unwrap();
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .open(&mut repo, "/my_file.txt")
+            .unwrap();
+
+        file.write_once(b"Hello, World!").unwrap();
+
+        // read file content using std::io::Read trait
+        let mut content = String::new();
+        file.seek(SeekFrom::Start(0)).unwrap();
+        file.read_to_string(&mut content).unwrap();
+        assert_eq!(content, "Hello, World!");
+    }
+
+    // open repo again and read file
+    {
+        let mut repo =
+            RepoOpener::new().create(false).open(&uri, "pwd").unwrap();
+
+        let mut file = OpenOptions::new()
+            .create(false)
+            .open(&mut repo, "/my_file.txt")
+            .unwrap();
+
+        // read file content using std::io::Read trait
+        let mut content = String::new();
+        file.read_to_string(&mut content).unwrap();
+        assert_eq!(content, "Hello, World!");
+
+        // list dir
+        let dirs = repo.read_dir("/").unwrap();
+        assert_eq!(dirs.len(), 1);
+    }
+}
+
+#[test]
+fn repo_smoke_test() {
+    let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
+    let uri;
+
+    #[cfg(feature = "storage-file")]
+    {
+        let base = "file://".to_string() + tmpdir.path().to_str().unwrap();
+        uri = base + "/repo";
+    }
+
+    #[cfg(feature = "storage-sqlite")]
+    {
+        let file = tmpdir.path().join("zbox.db");
+        uri = "sqlite://".to_string() + file.to_str().unwrap();
+    }
+
+    #[cfg(feature = "storage-redis")]
+    {
+        let _ = tmpdir;
+        uri = "redis://localhost:6379".to_string();
+    }
+
+    smoke_test(uri);
 }

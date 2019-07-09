@@ -55,6 +55,38 @@ cfg_if! {
                 TestEnv { repo, tmpdir: None }
             }
         }
+    } else if #[cfg(feature = "storage-sqlite")] {
+        impl TestEnv {
+            pub fn new() -> Self {
+                init_env();
+                let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
+                let file = tmpdir.path().join("zbox.db");
+                let uri = "sqlite://".to_string() + file.to_str().unwrap();
+                dbg!(&uri);
+                let repo = RepoOpener::new()
+                    .create_new(true)
+                    .open(&uri, "pwd")
+                    .unwrap();
+                TestEnv { repo, tmpdir: Some(tmpdir) }
+            }
+        }
+    } else if #[cfg(feature = "storage-redis")] {
+        // to test redis storage, start a local redis server first:
+        // docker run --rm -p 6379:6379 redis:latest
+        //
+        // Note: test cases should run one by one and clear redis db before
+        // start the next test case
+        impl TestEnv {
+            pub fn new() -> Self {
+                init_env();
+                let uri = "redis://localhost:6379".to_string();
+                let repo = RepoOpener::new()
+                    .create_new(true)
+                    .open(&uri, "pwd")
+                    .unwrap();
+                TestEnv { repo, tmpdir: None }
+            }
+        }
     } else {
         impl TestEnv {
             pub fn new() -> Self {

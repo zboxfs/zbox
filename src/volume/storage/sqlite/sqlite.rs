@@ -1,4 +1,5 @@
 use std::ffi::CString;
+use std::fmt::{self, Debug};
 use std::os::raw::{c_int, c_void};
 use std::ptr;
 use std::thread::panicking;
@@ -116,7 +117,6 @@ fn run_select_blob(stmt: *mut ffi::sqlite3_stmt) -> Result<Vec<u8>> {
 }
 
 /// Sqlite Storage
-#[derive(Debug)]
 pub struct SqliteStorage {
     filename: CString,
     db: *mut ffi::sqlite3,
@@ -158,6 +158,13 @@ impl SqliteStorage {
 
     // prepare and cache all sql statements
     fn prepare_stmts(&mut self) -> Result<()> {
+        // check if all statements are prepared
+        if self.stmts.len() == 11 {
+            return Ok(());
+        }
+
+        self.stmts.clear();
+
         // super block sql
         self.prepare_sql(format!(
             "
@@ -322,10 +329,14 @@ impl Storable for SqliteStorage {
 
     #[inline]
     fn open(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
+        // prepare statements
         self.prepare_stmts()
     }
 
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
+        // prepare statements
+        self.prepare_stmts()?;
+
         let stmt = self.stmts[0];
         reset_stmt(stmt)?;
 
@@ -473,6 +484,14 @@ impl Drop for SqliteStorage {
                 panic!("Error while closing SQLite connection: {}", result);
             }
         }
+    }
+}
+
+impl Debug for SqliteStorage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("SqliteStorage")
+            .field("filename", &self.filename)
+            .finish()
     }
 }
 

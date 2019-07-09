@@ -95,10 +95,10 @@ impl RedisStorage {
 
 impl Storable for RedisStorage {
     fn exists(&self) -> Result<bool> {
-        self.client
-            .get_connection()
-            .map(|_| true)
-            .map_err(Error::from)
+        // check super block existence to determine if repo exists
+        let conn = self.client.get_connection()?;
+        let key = super_blk_key(0);
+        conn.exists::<&str, bool>(&key).map_err(Error::from)
     }
 
     fn connect(&mut self) -> Result<()> {
