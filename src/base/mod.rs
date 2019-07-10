@@ -9,6 +9,8 @@ mod time;
 pub(crate) mod utils;
 pub(crate) mod version;
 pub(crate) mod vio;
+#[cfg(target_arch = "wasm32")]
+mod wasm_logger;
 
 pub use self::refcnt::RefCnt;
 pub use self::time::Time;
@@ -16,14 +18,11 @@ pub use self::version::Version;
 
 use std::sync::{Arc, Once, RwLock, ONCE_INIT};
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
 use log::Level;
 
 #[cfg(target_os = "android")]
 use android_logger::{self, Filter};
-
-#[cfg(target_arch = "wasm32")]
-use log::Level;
 
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 use env_logger;
@@ -61,9 +60,10 @@ cfg_if! {
     } else if #[cfg(target_arch = "wasm32")] {
         pub fn init_env(level: Option<Level>) {
             INIT.call_once(|| {
-                /*if let Some(lvl) = level {
-                    wasm_logger::init(wasm_logger::Config::new(lvl));
-                }*/
+                if let Some(lvl) = level {
+                    wasm_logger::init(lvl)
+                        .expect("Initialise wasm logger failed");
+                }
                 crypto::Crypto::init().expect("Initialise crypto failed");
                 info!(
                     "{} - Zero-details, privacy-focused in-app file system",
