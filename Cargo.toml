@@ -1,6 +1,6 @@
 [package]
 name = "zbox"
-version = "0.8.2"
+version = "0.8.3"
 authors = ["Bo Lu"]
 description = "ZboxFS is a zero-details, privacy-focused in-app file system."
 documentation = "https://docs.rs/zbox"
