@@ -22,11 +22,15 @@ impl Log for WasmLogger {
         }
 
         let lvl = format!("{}", record.level());
-        let file = format!("{}", record.file().unwrap_or_else(|| record.target()));
-        let line = format!("{}", record.line().map_or_else(
+        let file =
+            format!("{}", record.file().unwrap_or_else(|| record.target()));
+        let line = format!(
+            "{}",
+            record.line().map_or_else(
                 || "[unknown]".to_string(),
                 |line| line.to_string()
-            ));
+            )
+        );
         let msg = format!("{}", record.args());
 
         log(&lvl, &file, &line, &msg);
