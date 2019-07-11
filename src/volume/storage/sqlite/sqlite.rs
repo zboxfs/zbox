@@ -1,4 +1,4 @@
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::fmt::{self, Debug};
 use std::os::raw::{c_int, c_void};
 use std::ptr;
@@ -45,9 +45,8 @@ fn bind_int(
 fn bind_id(
     stmt: *mut ffi::sqlite3_stmt,
     col_idx: c_int,
-    id: &Eid,
+    id_str: &CStr,
 ) -> Result<()> {
-    let id_str = CString::new(id.to_string()).unwrap();
     let result = unsafe {
         ffi::sqlite3_bind_text(
             stmt,
@@ -360,7 +359,8 @@ impl Storable for SqliteStorage {
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
-        bind_id(stmt, 1, id)?;
+        let id_str = CString::new(id.to_string()).unwrap();
+        bind_id(stmt, 1, &id_str)?;
         run_select_blob(stmt)
     }
 
@@ -369,7 +369,8 @@ impl Storable for SqliteStorage {
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
-        bind_id(stmt, 1, id)?;
+        let id_str = CString::new(id.to_string()).unwrap();
+        bind_id(stmt, 1, &id_str)?;
         bind_blob(stmt, 2, wal)?;
         run_dml(stmt)
     }
@@ -379,7 +380,8 @@ impl Storable for SqliteStorage {
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
-        bind_id(stmt, 1, id)?;
+        let id_str = CString::new(id.to_string()).unwrap();
+        bind_id(stmt, 1, &id_str)?;
         run_dml(stmt)
     }
 
@@ -388,7 +390,8 @@ impl Storable for SqliteStorage {
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
-        bind_id(stmt, 1, id)?;
+        let id_str = CString::new(id.to_string()).unwrap();
+        bind_id(stmt, 1, &id_str)?;
         run_select_blob(stmt)
     }
 
@@ -397,7 +400,8 @@ impl Storable for SqliteStorage {
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
-        bind_id(stmt, 1, id)?;
+        let id_str = CString::new(id.to_string()).unwrap();
+        bind_id(stmt, 1, &id_str)?;
         bind_blob(stmt, 2, addr)?;
         run_dml(stmt)
     }
@@ -407,7 +411,8 @@ impl Storable for SqliteStorage {
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
-        bind_id(stmt, 1, id)?;
+        let id_str = CString::new(id.to_string()).unwrap();
+        bind_id(stmt, 1, &id_str)?;
         run_dml(stmt)
     }
 
