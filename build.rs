@@ -98,14 +98,18 @@ fn download_and_build_lz4() {
             .args(&[LZ4_URL, "-sSfL", "-o", &lz4_file])
             .output()
             .expect("failed to download lz4");
-        assert!(output.status.success());
+        if !output.status.success() {
+            panic!("failed to download lz4");
+        }
 
         let output = Command::new("tar")
             .current_dir(&out_dir)
             .args(&["zxf", &lz4_file])
             .output()
             .expect("failed to unpack lz4");
-        assert!(output.status.success());
+        if !output.status.success() {
+            panic!("failed to unpack lz4");
+        }
     }
 
     if !lz4_lib_file.exists() {
@@ -115,8 +119,10 @@ fn download_and_build_lz4() {
             .arg("BUILD_SHARED=no")
             .arg("lib-release")
             .output()
-            .expect("failed to execute make for lz4 compilation");
-        assert!(output.status.success());
+            .expect("failed to compile lz4");
+        if !output.status.success() {
+            panic!("failed to compile lz4");
+        }
     }
 
     assert!(&lz4_lib_file.exists(), "lz4 lib was not created");
