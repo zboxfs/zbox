@@ -27,7 +27,7 @@ impl Default for Options {
     fn default() -> Self {
         Options {
             version_limit: DEFAULT_VERSION_LIMIT,
-            dedup_chunk: true,
+            dedup_chunk: false,
         }
     }
 }

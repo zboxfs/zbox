@@ -83,13 +83,18 @@ pub struct ChunkMap {
 }
 
 impl ChunkMap {
-    // max number of index in the map
+    // max number of index in the map, this is a trade-off to save memory as
+    // large file will have too many chunks
     const INDEX_MAP_CAPACITY: usize = 256;
 
     pub fn new(is_enabled: bool) -> Self {
         ChunkMap {
             seg_ids: Vec::new(),
-            map: LinkedHashMap::with_capacity(Self::INDEX_MAP_CAPACITY),
+            map: LinkedHashMap::with_capacity(if is_enabled {
+                Self::INDEX_MAP_CAPACITY
+            } else {
+                0
+            }),
             is_enabled,
         }
     }
