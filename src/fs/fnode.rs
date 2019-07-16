@@ -564,7 +564,7 @@ impl Fnode {
 
     // add a new version
     // return content if it is not duplicated, none if it is duplicated
-    fn add_version(&mut self, content: Content) -> Result<Option<Content>> {
+    pub fn add_version(&mut self, content: Content) -> Result<Option<Content>> {
         assert!(self.is_file());
 
         // dedup content and add the new version
@@ -580,7 +580,7 @@ impl Fnode {
         self.mtime = ver.ctime;
         self.vers.push_back(ver);
 
-        // remove the oldest version, note that version limit is zero based
+        // remove the oldest version
         if self.vers.len() > self.opts.version_limit as usize {
             let retire = self.vers.front().unwrap().num;
             self.remove_ver(retire)?;
@@ -607,8 +607,8 @@ impl Fnode {
         Ok(ContentReader::new(content, &self.store))
     }
 
-    // clone a new current content
-    fn clone_current_content(&self) -> Result<Content> {
+    /// Clone a new current content
+    pub fn clone_current_content(&self) -> Result<Content> {
         let store = self.store.read().unwrap();
         let curr_ctn = store.get_content(&self.curr_ver().content_id)?;
         let content = curr_ctn.read().unwrap();

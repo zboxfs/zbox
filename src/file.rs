@@ -244,7 +244,10 @@ impl Seek for VersionReader {
 /// # init_env();
 /// # let mut repo = RepoOpener::new().create(true).open("mem://foo", "pwd")?;
 /// // create a file and write 2 versions
-/// let mut file = OpenOptions::new().create(true).open(&mut repo, "/foo.txt")?;
+/// let mut file = OpenOptions::new()
+///     .version_limit(4)
+///     .create(true)
+///     .open(&mut repo, "/foo.txt")?;
 /// file.write_once(b"foo")?;
 /// file.write_once(b"bar")?;
 ///

@@ -14,7 +14,7 @@ use trans::TxMgrRef;
 use volume::VolumeRef;
 
 // Default file versoin limit
-const DEFAULT_VERSION_LIMIT: u8 = 10;
+const DEFAULT_VERSION_LIMIT: u8 = 1;
 
 // Options
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]

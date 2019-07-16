@@ -79,7 +79,7 @@ fn file_read_write_st() {
         let hist = f.history().unwrap();
         assert_eq!(meta.content_len(), buf2.len());
         assert_eq!(meta.curr_version(), 3);
-        assert_eq!(hist.len(), 3);
+        assert_eq!(hist.len(), 1);
     }
 
     // #3, append to file
@@ -99,7 +99,7 @@ fn file_read_write_st() {
         let hist = f.history().unwrap();
         assert_eq!(meta.content_len(), buf.len() + buf2.len());
         assert_eq!(meta.curr_version(), 4);
-        assert_eq!(hist.len(), 4);
+        assert_eq!(hist.len(), 1);
     }
 
     // #4, truncate file
@@ -253,6 +253,7 @@ fn file_read_write_st() {
     // #12, single-part write
     {
         let mut f = OpenOptions::new()
+            .version_limit(2)
             .create(true)
             .open(&mut repo, "/file12")
             .unwrap();
@@ -579,6 +580,7 @@ fn file_copy() {
     let mut repo = &mut env.repo;
 
     let buf = [1u8, 2u8, 3u8];
+    let buf2 = [4u8, 5u8, 6u8];
 
     {
         let mut f = OpenOptions::new()
@@ -595,20 +597,39 @@ fn file_copy() {
     repo.copy("/file", "/file2").unwrap();
     {
         let mut f = repo.open_file("/file2").unwrap();
-        let mut dst = Vec::new();
-        let result = f.read_to_end(&mut dst).unwrap();
-        assert_eq!(result, buf.len());
-        assert_eq!(&dst[..], &buf[..]);
+        verify_content(&mut f, &buf);
     }
 
     // #3, copy to file itself
     repo.copy("/file", "/file").unwrap();
     {
         let mut f = repo.open_file("/file").unwrap();
+        verify_content(&mut f, &buf);
+    }
+
+    // #4, copy to file has multiple versions
+    {
+        let mut f = OpenOptions::new()
+            .version_limit(4)
+            .create(true)
+            .open(&mut repo, "/file3")
+            .unwrap();
+        f.write_once(&buf2[..]).unwrap();
+    }
+    repo.copy("/file", "/file3").unwrap();
+    {
+        let mut f = repo.open_file("/file3").unwrap();
+        verify_content(&mut f, &buf);
+
+        let history = f.history().unwrap();
+        assert_eq!(history.len(), 3);
+
+        let ver_num = history.last().unwrap().num();
+        let mut rdr = f.version_reader(ver_num - 1).unwrap();
         let mut dst = Vec::new();
-        let result = f.read_to_end(&mut dst).unwrap();
-        assert_eq!(result, buf.len());
-        assert_eq!(&dst[..], &buf[..]);
+        let result = rdr.read_to_end(&mut dst).unwrap();
+        assert_eq!(result, buf2.len());
+        assert_eq!(&dst[..], &buf2[..]);
     }
 }
 

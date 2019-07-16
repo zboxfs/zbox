@@ -1,4 +1,3 @@
-use std::io;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
@@ -6,8 +5,7 @@ use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
 use super::fnode::{
-    Cache as FnodeCache, DirEntry, FileType, Fnode, FnodeRef, Metadata,
-    Reader as FnodeReader, Version, Writer as FnodeWriter,
+    Cache as FnodeCache, DirEntry, FileType, Fnode, FnodeRef, Metadata, Version,
 };
 use super::{Config, Handle, Options};
 use base::crypto::Cost;
@@ -389,14 +387,17 @@ impl Fs {
         // begin and run transaction
         let tx_handle = TxMgr::begin_trans(&self.txmgr)?;
         tx_handle.run_all(|| {
-            // truncate target file
-            Fnode::set_len(tgt.clone(), 0, tx_handle.txid)?;
+            // get current version of source
+            let ctn = {
+                let fnode = src.read().unwrap();
+                fnode.clone_current_content()?
+            };
 
-            // copy data from source to target
-            let mut rdr = FnodeReader::new_current(src.clone())?;
-            let mut wtr = FnodeWriter::new(tgt.clone(), tx_handle.txid);
-            io::copy(&mut rdr, &mut wtr)?;
-            wtr.finish()?;
+            // then add it to target
+            let mut fnode_cow = tgt.fnode.write().unwrap();
+            let fnode = fnode_cow.make_mut()?;
+            let result = fnode.add_version(ctn)?;
+            assert!(result.is_none());
 
             Ok(())
         })?;

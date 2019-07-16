@@ -136,7 +136,7 @@ impl RepoOpener {
 
     /// Sets the default maximum number of file version.
     ///
-    /// The `version_limit` must be within [1, 255], default is 10. This
+    /// The `version_limit` must be within [1, 255], default is 1. This
     /// setting is a repository-wise setting, indivisual file can overwrite it
     /// by setting [`version_limit`] in [`OpenOptions`].
     ///
@@ -152,7 +152,7 @@ impl RepoOpener {
     /// This option indicates whether data chunk should be deduped when
     /// writing data to a file. This setting is a repository-wise setting,
     /// indivisual file can overwrite it by setting [`dedup_chunk`]
-    /// in [`OpenOptions`]. Default is true.
+    /// in [`OpenOptions`]. Default is false.
     ///
     /// [`dedup_chunk`]: struct.OpenOptions.html#method.dedup_chunk
     /// [`OpenOptions`]: struct.OpenOptions.html
