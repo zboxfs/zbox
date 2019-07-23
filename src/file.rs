@@ -107,7 +107,7 @@ impl Seek for VersionReader {
 /// `File` contents support up to 255 revision versions. [`Version`] is
 /// immutable once it is created.
 ///
-/// By default, the maximum number of versions of a `File` is `10`, which is
+/// By default, the maximum number of versions of a `File` is `1`, which is
 /// configurable by [`version_limit`] on both `Repo` and `File` level. File
 /// level option takes precedence.
 ///
