@@ -340,7 +340,7 @@ impl Finish for Writer {
     fn finish(self) -> Result<()> {
         match self.inner {
             InnerWriter::Compress(inner) => {
-                let (mut wtr, result) = inner.finish();
+                let (wtr, result) = inner.finish();
                 result.map_err(Error::from)?;
                 wtr.finish()
             }
