@@ -35,6 +35,7 @@ impl NativeTransport {
 
 impl Transport for NativeTransport {
     fn get(&self, uri: &Uri, headers: &HeaderMap) -> Result<Response> {
+        trace!("get: {}", uri);
         let resp = self
             .client
             .get(&uri.to_string())
@@ -49,6 +50,7 @@ impl Transport for NativeTransport {
         headers: &HeaderMap,
         body: &[u8],
     ) -> Result<Response> {
+        trace!("put: {}", uri);
         let resp = self
             .client
             .put(&uri.to_string())
@@ -59,6 +61,7 @@ impl Transport for NativeTransport {
     }
 
     fn delete(&mut self, uri: &Uri, headers: &HeaderMap) -> Result<Response> {
+        trace!("delete: {}", uri);
         let resp = self
             .client
             .delete(&uri.to_string())
@@ -73,6 +76,7 @@ impl Transport for NativeTransport {
         headers: &HeaderMap,
         body: &[u8],
     ) -> Result<Response> {
+        trace!("delete bulk: {}", uri);
         let resp = self
             .client
             .delete(&uri.to_string())
