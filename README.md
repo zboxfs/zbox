@@ -82,12 +82,15 @@ ZboxFS supports a variety of underlying storages. Memory storage is enabled by
 default. All the other storages can be enabled individually by specifying its
 corresponding Cargo feature when building ZboxFS.
 
-| Storage        | URI identifier  | Cargo Feature  |
-| -------------- | --------------- | -------------- |
-| Memory         | "mem://"        | N/A            |
-| OS file system | "file://"       | storage-file   |
-| SQLite         | "sqlite://"     | storage-sqlite |
-| Redis          | "redis://"      | storage-redis  |
+| Storage            | URI identifier  | Cargo Feature       |
+| ------------------ | --------------- | ------------------- |
+| Memory             | "mem://"        | N/A                 |
+| OS file system     | "file://"       | storage-file        |
+| SQLite             | "sqlite://"     | storage-sqlite      |
+| Redis              | "redis://"      | storage-redis       |
+| Zbox Cloud Storage | "zbox://"       | storage-zbox-native |
+
+\* Visit [zbox.io](https://zbox.io) to learn more about Zbox Cloud Storage.
 
 How to use
 ==========

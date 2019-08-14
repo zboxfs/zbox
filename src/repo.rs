@@ -575,12 +575,15 @@ fn open_file_with_options<P: AsRef<Path>>(
 ///
 /// ZboxFS supports a variety of underlying storages, which are listed below.
 ///
-/// | Storage        | URI identifier  | Cargo Feature  |
-/// | -------------- | --------------- | -------------- |
-/// | Memory         | "mem://"        | N/A            |
-/// | OS file system | "file://"       | storage-file   |
-/// | SQLite         | "sqlite://"     | storage-sqlite |
-/// | Redis          | "redis://"      | storage-redis  |
+/// | Storage            | URI identifier  | Cargo Feature       |
+/// | ------------------ | --------------- | ------------------- |
+/// | Memory             | "mem://"        | N/A                 |
+/// | OS file system     | "file://"       | storage-file        |
+/// | SQLite             | "sqlite://"     | storage-sqlite      |
+/// | Redis              | "redis://"      | storage-redis       |
+/// | Zbox Cloud Storage | "zbox://"       | storage-zbox-native |
+///
+/// \* Visit [zbox.io](https://zbox.io) to learn more about Zbox Cloud Storage.
 ///
 /// By default, only memory storage is enabled. To use other storages, you need
 /// to specify it as dependency features in your Cargo.toml.
