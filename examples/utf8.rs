@@ -1,3 +1,9 @@
+//! This example is to demonstrate how to use UTF8 string in ZboxFS.
+//!
+//! To run this example, use the command below:
+//!
+//! $ cargo run --example utf8
+
 extern crate zbox;
 
 use zbox::{init_env, RepoOpener};
