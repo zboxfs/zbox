@@ -116,7 +116,7 @@ Add the following dependency to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-zbox = "0.8.3"
+zbox = "0.8.4"
 ```
 
 If you don't want to install libsodium by yourself, simply specify
@@ -125,7 +125,7 @@ verify and build libsodium.
 
 ```toml
 [dependencies]
-zbox = { version = "0.8.3", features = ["libsodium-bundled"] }
+zbox = { version = "0.8.4", features = ["libsodium-bundled"] }
 ```
 
 ## Example
