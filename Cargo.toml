@@ -60,12 +60,12 @@ storage-zbox = ["http", "serde_json"]
 libsodium-bundled = []
 
 [dependencies]
-cfg-if = "0.1.6"
-env_logger = "0.6.0"
-log = "0.4.6"
+cfg-if = "0.1.9"
+env_logger = "0.6.2"
+log = "0.4.8"
 rmp-serde = "0.13.7"
-serde = "1.0.80"
-serde_derive = "1.0.80"
+serde = "1.0.99"
+serde_derive = "1.0.99"
 lazy_static = { version = "1.2.0", optional = true }
 libsqlite3-sys = { version = "0.15.0", optional = true }
 redis = { version = "0.10.0", optional = true }
@@ -74,7 +74,7 @@ serde_json = { version = "1.0.39", optional = true }
 reqwest = { version = "0.9.18", default-features = false, features = [ "rustls-tls" ], optional = true }
 
 [dependencies.linked-hash-map]
-version = "0.5.1"
+version = "0.5.2"
 features = ["serde_impl"]
 
 [target.'cfg(target_os = "android")'.dependencies]
