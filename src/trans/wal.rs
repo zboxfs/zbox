@@ -91,13 +91,17 @@ impl Wal {
         self.entries.remove(id);
     }
 
-    // recylce a wal
-    fn recyle(&self, wal_armor: &VolumeWalArmor<Self>) -> Result<()> {
+    // recycle tx entries in a wal
+    fn recycle(&self, wal_armor: &VolumeWalArmor<Self>, vol: &VolumeRef) -> Result<()> {
         for ent in self.entries.values() {
             match ent.action {
                 Action::New | Action::Update => {} // do nothing
-                Action::Delete => {
-                    wal_armor.remove_all_arms(&ent.id)?;
+                Action::Delete => match ent.ent_type {
+                    EntityType::Cow => wal_armor.remove_all_arms(&ent.id)?,
+                    EntityType::Direct => {
+                        let mut vol = vol.write().unwrap();
+                        vol.del(&ent.id)?;
+                    }
                 }
             }
         }
@@ -266,30 +270,32 @@ impl WalQueue {
         self.doing.insert(txid);
     }
 
+    fn recycle_trans(&mut self) -> Result<()> {
+        // get retiree from the end of done queue
+        let retiree_txid = self.done.front().unwrap();
+        let retiree_id = Wal::derive_id(*retiree_txid);
+
+        // load the retired wal
+        debug!("recycle tx#{}", retiree_txid);
+        match self.wal_armor.load_item(&retiree_id) {
+            Ok(retiree) => {
+                // recycle and remove the wal
+                retiree.recycle(&self.wal_armor, &self.vol)?;
+                self.wal_armor.remove_all_arms(&retiree_id)
+            }
+            Err(ref err) if *err == Error::NotFound => {
+                // wal is already recycled and removed, do nothing
+                // here but skip it
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
+    }
+
     fn commit_trans(&mut self, wal: Wal) -> Result<()> {
         // recycle the retired trans
         while self.done.len() >= Self::COMMITTED_QUEUE_SIZE {
-            {
-                // get retiree from end of queue
-                let retiree_txid = self.done.front().unwrap();
-                let retiree_id = Wal::derive_id(*retiree_txid);
-
-                // load the retired wal
-                debug!("recycle tx#{}", retiree_txid);
-                match self.wal_armor.load_item(&retiree_id) {
-                    Ok(retiree) => {
-                        // recycle and remove the wal
-                        retiree.recyle(&self.wal_armor)?;
-                        self.wal_armor.remove_all_arms(&retiree_id)?;
-                    }
-                    Err(ref err) if *err == Error::NotFound => {
-                        // wal is already recycled and removed, do nothing
-                        // here but skip it
-                    }
-                    Err(err) => return Err(err),
-                }
-            }
-
+            self.recycle_trans()?;
             self.done.pop_front();
         }
 

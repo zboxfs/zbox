@@ -91,13 +91,15 @@ impl Trans {
     pub fn commit(&mut self, vol: &VolumeRef) -> Result<Wal> {
         debug!("commit tx#{}, cohorts: {}", self.txid, self.cohorts.len());
 
-        //debug!("trans.commit: cohorts: {:#?}", self.cohorts);
+        //dbg!(&self.cohorts);
 
         // save wal if it is not saved yet
         if !self.wal_saved {
             self.wal_armor.save_item(&mut self.wal)?;
             self.wal_saved = true;
         }
+
+        let mut ent_in_use = Vec::new();
 
         // commit each entity
         for entity in self.cohorts.values() {
@@ -107,16 +109,26 @@ impl Trans {
             if ent.action() == Action::Delete {
                 let using_cnt = Arc::strong_count(&entity);
                 if using_cnt > 1 {
-                    error!(
-                        "cannot delete entity in use (using: {})",
-                        using_cnt,
-                    );
-                    return Err(Error::InUse);
+                    ent_in_use.push(ent.id().clone());
                 }
             }
 
             // commit entity
             ent.commit(&vol)?;
+        }
+
+        // make sure all deleted entities are not used
+        for id in ent_in_use {
+            let entity = self.cohorts.get(&id).unwrap();
+            let ent = entity.read().unwrap();
+            let using_cnt = Arc::strong_count(&entity);
+            if using_cnt > 1 {
+                error!(
+                    "deleted entity({:?}) still in use (using: {})",
+                    ent.id(), using_cnt,
+                );
+                return Err(Error::InUse);
+            }
         }
 
         Ok(self.wal.clone())

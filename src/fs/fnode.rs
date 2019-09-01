@@ -533,7 +533,7 @@ impl Fnode {
     }
 
     // remove a specified version and its associated content
-    fn remove_ver(&mut self, ver_num: usize) -> Result<()> {
+    fn remove_version(&mut self, ver_num: usize) -> Result<()> {
         let idx = self
             .vers
             .iter()
@@ -554,45 +554,44 @@ impl Fnode {
         Ok(())
     }
 
-    pub fn clear_vers(&mut self) -> Result<()> {
+    pub fn clear_versions(&mut self) -> Result<()> {
         let ver_nums: Vec<usize> = self.vers.iter().map(|v| v.num).collect();
         for ver_num in ver_nums {
-            self.remove_ver(ver_num)?;
+            self.remove_version(ver_num)?;
         }
         Ok(())
     }
 
-    // add a new version
-    // return content if it is not duplicated, none if it is duplicated
-    pub fn add_version(&mut self, content: Content) -> Result<Option<Content>> {
+    // add a new content version to fnode
+    // return true if the content is not duplicated, otherwise return false
+    pub fn add_version(&mut self, content: Content) -> Result<bool> {
         assert!(self.is_file());
 
-        // dedup content and add the new version
-        let (is_deduped, deduped_id) = {
+        // try to dedup content in store
+        let (no_dup, deduped_id) = {
             let mut store = self.store.write().unwrap();
             let store = store.make_mut()?;
             store.dedup_content(&content)?
         };
 
-        // create a new version
+        // create a new version and append to version list
         let ver =
             Version::new(self.curr_ver_num() + 1, &deduped_id, content.len());
         self.mtime = ver.ctime;
         self.vers.push_back(ver);
 
-        // remove the oldest version
-        if self.vers.len() > self.opts.version_limit as usize {
-            let retire = self.vers.front().unwrap().num;
-            self.remove_ver(retire)?;
+        // if content is not duplicated, link the content
+        if no_dup {
+            content.link(&self.store)?;
         }
 
-        if is_deduped {
-            // duplicate content found
-            Ok(None)
-        } else {
-            // no content duplication
-            Ok(Some(content))
+        // evict retired version if any
+        if self.vers.len() > self.opts.version_limit as usize {
+            let retire = self.vers.front().unwrap().num;
+            self.remove_version(retire)?;
         }
+
+        Ok(no_dup)
     }
 
     /// Get reader for sepcified version number
@@ -648,10 +647,7 @@ impl Fnode {
 
             // dedup content, if it is not duplicated then link the content
             let fnode = fnode_cow.make_mut()?;
-            if let Some(content) = fnode.add_version(new_ctn)? {
-                // content is not duplicated
-                content.link(&handle.store)?;
-            }
+            fnode.add_version(new_ctn)?;
         }
 
         Ok(())
@@ -708,12 +704,14 @@ impl Reader {
 }
 
 impl Read for Reader {
+    #[inline]
     fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
         self.rdr.read(buf)
     }
 }
 
 impl Seek for Reader {
+    #[inline]
     fn seek(&mut self, pos: SeekFrom) -> IoResult<u64> {
         self.rdr.seek(pos)
     }
@@ -752,15 +750,9 @@ impl Writer {
 
         // dedup content and add deduped content as a new version
         let fnode = fnode_cow.make_mut()?;
-        match fnode.add_version(merged_ctn)? {
-            Some(content) => {
-                // content is not duplicated
-                content.link(&handle.store)?;
-            }
-            None => {
-                // content is duplicated, unlink the stage content
-                stg_ctn.unlink_weak(&mut fnode.chk_map, &handle.store)?;
-            }
+        if !fnode.add_version(merged_ctn)? {
+            // content is duplicated, weak unlink the stage content
+            stg_ctn.unlink_weak(&mut fnode.chk_map, &handle.store)?;
         }
 
         // udpate fnode chunk map

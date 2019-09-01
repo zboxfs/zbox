@@ -16,7 +16,7 @@ use base::crypto::Hash;
 use base::RefCnt;
 use error::{Error, Result};
 use trans::cow::{Cow, CowRef, Cowable, IntoCow};
-use trans::trans::Action;
+use trans::trans::{Action, Transable};
 use trans::{Eid, Id, TxMgrRef, Txid};
 use volume::VolumeRef;
 
@@ -132,7 +132,7 @@ impl Store {
 
     /// Dedup content based on its hash
     pub fn dedup_content(&mut self, content: &Content) -> Result<(bool, Eid)> {
-        let mut deduped = true;
+        let mut no_dup = false;
         let ent = self
             .content_map
             .entry(content.hash().clone())
@@ -143,9 +143,9 @@ impl Store {
             let ctn = content.clone().into_cow(&self.txmgr)?;
             let ctn = ctn.read().unwrap();
             ent.content_id = ctn.id().clone();
-            deduped = false;
+            no_dup = true;
         }
-        Ok((deduped, ent.content_id.clone()))
+        Ok((no_dup, ent.content_id.clone()))
     }
 
     /// Decrease content reference in store
@@ -174,9 +174,6 @@ impl Store {
 
     /// Remove segment and its associated segment data
     pub fn remove_segment(&mut self, seg_cow: &mut Cow<Segment>) -> Result<()> {
-        // add segment to tx for deletion
-        seg_cow.make_del()?;
-
         // add segment data to transaction for deletion
         SegData::add_to_trans(
             seg_cow.data_id(),
@@ -185,11 +182,8 @@ impl Store {
             &self.txmgr,
         )?;
 
-        // remove seg and seg data from cache
-        self.segdata_cache.remove(seg_cow.data_id());
-        self.seg_cache.remove(seg_cow.id());
-
-        Ok(())
+        // add segment to tx for deletion
+        seg_cow.make_del()
     }
 
     /// Shrink segment
@@ -202,13 +196,15 @@ impl Store {
         // add segment to tx for update
         let seg = seg_cow.make_mut()?;
 
-        // load old segment data and then remove it from cache
+        // load the segment data for shrinking, because it is going to be
+        // shrank we remove it from cache immediately
         let seg_data = {
             self.segdata_cache.get(seg.data_id(), &self.vol)?;
             self.segdata_cache.remove(seg.data_id()).unwrap()
         };
 
-        // add old segment data to transaction for deletion
+        // add the old segment data to transaction for deletion as it will
+        // be replaced by a new one after shrinking
         SegData::add_to_trans(
             seg.data_id(),
             Action::Delete,
@@ -216,7 +212,7 @@ impl Store {
             &self.txmgr,
         )?;
 
-        // shrink segment
+        // shrink the segment
         seg.shrink(&seg_data, txid, &self.txmgr, &self.vol)
     }
 }
@@ -229,7 +225,23 @@ impl Debug for Store {
     }
 }
 
-impl Cowable for Store {}
+impl Cowable for Store {
+    fn on_commit(&mut self, _vol: &VolumeRef) -> Result<()> {
+        // remove deleted segment from cache
+        self.seg_cache.remove_by(|cow_ref| {
+            let seg_cow = cow_ref.read().unwrap();
+            seg_cow.in_trans() && seg_cow.action() == Action::Delete
+        });
+
+        // remove deleted segment data from cache
+        self.segdata_cache.remove_by(|segdata_ref| {
+            let segdata = segdata_ref.read().unwrap();
+            segdata.in_trans() && segdata.action() == Action::Delete
+        });
+
+        Ok(())
+    }
+}
 
 impl<'de> IntoCow<'de> for Store {}
 

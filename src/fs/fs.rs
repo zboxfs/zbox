@@ -397,7 +397,7 @@ impl Fs {
             let mut fnode_cow = tgt.fnode.write().unwrap();
             let fnode = fnode_cow.make_mut()?;
             let result = fnode.add_version(ctn)?;
-            assert!(result.is_none());
+            assert!(!result);
 
             Ok(())
         })?;
@@ -424,7 +424,7 @@ impl Fs {
         tx_handle.run_all(move || {
             Fnode::remove_from_parent(&fnode_ref)?;
             let mut fnode = fnode_ref.write().unwrap();
-            fnode.make_mut()?.clear_vers()?;
+            fnode.make_mut()?.clear_versions()?;
             fnode.make_del()?;
             self.fcache.remove(fnode.id());
             Ok(())
@@ -540,7 +540,7 @@ impl Fs {
                 Fnode::remove_from_parent(&tgt_fnode)?;
                 let mut tgt_fnode = tgt_fnode.write().unwrap();
                 if tgt_fnode.is_file() {
-                    tgt_fnode.make_mut()?.clear_vers()?;
+                    tgt_fnode.make_mut()?.clear_versions()?;
                 }
                 tgt_fnode.make_del()?;
                 self.fcache.remove(tgt_fnode.id());

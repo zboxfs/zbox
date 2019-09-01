@@ -14,7 +14,13 @@ use error::{Error, Result};
 use volume::{Arm, ArmAccess, Armor, Seq, VolumeArmor, VolumeRef};
 
 /// Trait for entity can be wrapped in cow
-pub trait Cowable: Debug + Default + Clone + Send + Sync {}
+pub trait Cowable: Debug + Default + Clone + Send + Sync {
+    fn on_commit(&mut self, _vol: &VolumeRef) -> Result<()> {
+        Ok(())
+    }
+
+    fn on_complete_commit(&mut self) {}
+}
 
 /// Copy-on-write wrapper
 #[derive(Default, Deserialize, Serialize)]
@@ -118,6 +124,12 @@ where
         self.action = Some(action);
 
         Ok(())
+    }
+
+    /// Check if cow is in transaction
+    #[inline]
+    pub fn in_trans(&self) -> bool {
+        self.txid.is_some()
     }
 
     /// Get mutable reference for inner object by cloning it
@@ -350,17 +362,23 @@ where
         match self.action {
             Some(action) => match action {
                 Action::New => {
+                    // notify inner object
+                    self.inner_mut().on_commit(vol)?;
+
                     // toggle arm temporarily because save() will toggle it
                     self.arm.toggle();
 
                     self.save(vol).or_else(|err| {
                         // if saving cow failed, arm will not be switched,
-                        // so we need to switch it here
+                        // so we need to switch it back here
                         self.arm.toggle();
                         Err(err)
                     })
                 }
                 Action::Update => {
+                    // notify inner object
+                    self.other_inner_mut().on_commit(vol)?;
+
                     // save old inner object first
                     let old = self.curr_mut().take();
 
@@ -378,6 +396,9 @@ where
                     result
                 }
                 Action::Delete => {
+                    // notify inner object
+                    self.inner_mut().on_commit(vol)?;
+
                     // do nothing here, actual deletion will be delayed
                     // after 2 txs
                     Ok(())
@@ -514,6 +535,16 @@ where
     pub fn remove(&self, id: &Eid) -> Option<CowRef<T>> {
         let mut lru = self.lru.write().unwrap();
         lru.remove(id)
+    }
+
+    // remove items by filter
+    pub fn remove_by<P: FnMut(&CowRef<T>) -> bool>(&self, mut filter: P) {
+        let mut lru = self.lru.write().unwrap();
+        lru.entries()
+            .filter(|ent| filter(ent.get()))
+            .for_each(|ent| {
+                ent.remove();
+            });
     }
 }
 

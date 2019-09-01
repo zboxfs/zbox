@@ -3,7 +3,7 @@ use std::fmt::{self, Debug};
 use std::hash::Hash;
 use std::marker::PhantomData;
 
-use linked_hash_map::LinkedHashMap;
+use linked_hash_map::{Entries, LinkedHashMap};
 
 pub trait Meter<T> {
     fn measure(&self, item: &T) -> isize;
@@ -82,6 +82,11 @@ where
         Q: Eq + Hash,
     {
         self.map.get_refresh(k)
+    }
+
+    #[inline]
+    pub fn entries(&mut self) -> Entries<K, V> {
+        self.map.entries()
     }
 
     pub fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<V>
