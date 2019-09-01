@@ -35,9 +35,6 @@ struct RecycleMap {
     map: HashMap<usize, u16>,
 
     #[serde(skip_serializing, skip_deserializing, default)]
-    hash_key: HashKey,
-
-    #[serde(skip_serializing, skip_deserializing, default)]
     is_saved: bool,
 }
 
@@ -47,6 +44,7 @@ impl RecycleMap {
         &mut self,
         span: Span,
         local_cache: &mut LocalCache,
+        hash_key: &HashKey
     ) -> Result<()> {
         for mut sec_span in span.divide_by(BLKS_PER_SECTOR) {
             let sec_idx = sec_span.begin / BLKS_PER_SECTOR;
@@ -60,7 +58,7 @@ impl RecycleMap {
 
             // if all blocks in sector are deleted
             if dmap == u16::MAX {
-                let rel_path = sector_rel_path(sec_idx, &self.hash_key);
+                let rel_path = sector_rel_path(sec_idx, hash_key);
                 local_cache.del(&rel_path)?;
                 self.map.remove(&sec_idx);
             } else {
@@ -176,7 +174,6 @@ impl SectorMgr {
     pub fn set_crypto_ctx(&mut self, crypto: Crypto, key: Key) {
         self.crypto = crypto;
         self.hash_key = key.derive(0);
-        self.rmap.hash_key = key.derive(1);
         self.key = key;
     }
 
@@ -282,7 +279,7 @@ impl SectorMgr {
     #[inline]
     pub fn del_blocks(&mut self, span: Span) -> Result<()> {
         let mut local_cache = self.local_cache.write().unwrap();
-        self.rmap.del_blocks(span, &mut local_cache)
+        self.rmap.del_blocks(span, &mut local_cache, &self.hash_key)
     }
 
     pub fn flush(&mut self) -> Result<()> {
