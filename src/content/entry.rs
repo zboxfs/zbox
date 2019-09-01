@@ -330,7 +330,8 @@ impl EntryList {
                 store.remove_segment(&mut seg_cow)?;
                 chk_map.remove_segment(seg_cow.id());
             } else if seg_cow.is_shrinkable() {
-                // shrink segment if it is small enought
+                // shrink segment if it is small enough and remove retired
+                // chunks from chunk map
                 let retired = store.shrink_segment(&mut seg_cow)?;
                 chk_map.remove_chunks(seg_cow.id(), &retired);
             }
