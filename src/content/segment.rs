@@ -46,17 +46,26 @@ impl SegData {
         txid: Txid,
         txmgr: &TxMgrRef,
     ) -> Result<()> {
-        let mut seg_data = Self::new(data_id); // dummy segment data
-        seg_data.action = Some(action);
+        // create a segment data stub and add it to transaction.
+        // Note: because it is just a stub in tx, only id is used and its data
+        // element will always be empty.
+        let mut stub = Self::new(data_id);
+        stub.action = Some(action);
         let mut txmgr = txmgr.write().unwrap();
         txmgr.add_to_trans(
             data_id,
             txid,
-            seg_data.into_ref(),
+            stub.into_ref(),
             action,
             EntityType::Direct,
             Arm::default(),
         )
+    }
+
+    // Check if seg data is in transaction
+    #[inline]
+    pub fn in_trans(&self) -> bool {
+        self.action.is_some()
     }
 
     fn load(id: &Eid, vol: &VolumeRef) -> Result<Self> {
@@ -189,6 +198,16 @@ impl DataCache {
         let mut lru = self.lru.write().unwrap();
         lru.remove(id)
     }
+
+    // remove items by filter
+    pub fn remove_by<P: FnMut(&SegDataRef) -> bool>(&self, mut filter: P) {
+        let mut lru = self.lru.write().unwrap();
+        lru.entries()
+            .filter(|ent| filter(ent.get()))
+            .for_each(|ent| {
+                ent.remove();
+            });
+    }
 }
 
 /// Segment
@@ -243,13 +262,13 @@ impl Segment {
         let chunk = Chunk::new(self.len, data_len);
         self.chunks.push(chunk);
         self.len += data_len;
-        self.used += data_len;
     }
 
     pub fn ref_chunk(&mut self, idx: usize) -> Result<u32> {
         let refcnt = self[idx].inc_ref()?;
         if refcnt == 1 {
             self.used += self[idx].len;
+            assert!(self.used <= self.len);
         }
         Ok(refcnt)
     }
@@ -288,7 +307,7 @@ impl Segment {
         let mut buf = Vec::new();
         let mut retired = Vec::new();
 
-        debug!("shrink segment from {} to {}", self.len, self.used);
+        debug!("shrink segment data {:?} from {} to {}", self.data_id, self.len, self.used);
 
         // re-position chunks
         let seg_data = seg_data_ref.read().unwrap();
@@ -304,14 +323,15 @@ impl Segment {
         }
         assert_eq!(buf.len(), self.used);
 
-        // write new segment data to volume
-        // and add a dummy segment data to transaction
+        // write the new shrank segment data to volume and add a segment data
+        // stub to transaction
         let new_data_id = Eid::new();
-        let new_seg_data = SegData::new(&new_data_id);
+        let mut new_seg_data = SegData::new(&new_data_id);
+        new_seg_data.data = buf;
         new_seg_data.save(vol)?;
         SegData::add_to_trans(&new_data_id, Action::New, txid, txmgr)?;
 
-        // update segment
+        // update segment's length and its associated segment data id
         self.len = self.used;
         self.data_id = new_data_id;
 
@@ -416,7 +436,7 @@ impl Writer {
         // create a new segment
         let seg = Segment::new();
 
-        // add a dummy segment data to tx, the actual data will be directly
+        // add a segment data stub to tx, the actual data will be directly
         // written using volume writer instead of writing to the segment data
         SegData::add_to_trans(
             &seg.data_id,
