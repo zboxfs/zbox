@@ -31,8 +31,8 @@ Features
   no knowledge can be leaked to underlying storage
 - State-of-the-art cryptography: AES-256-GCM (hardware), XChaCha20-Poly1305,
   Argon2 password hashing and etc., powered by [libsodium]
-- Support multiple storages, including memory, OS file system, RDBMS, Key-value
-  object store and more
+- Support varieties of underlying storages, including memory, OS file system,
+  RDBMS, Key-value object store and more
 - Files and directories are packed into same-sized blocks to eliminate metadata
   leakage
 - Content-based data chunk deduplication and file-based deduplication
@@ -68,7 +68,7 @@ Below is the feature comparison list.
 | Content versioning          | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
 | COW semantics               | :heavy_check_mark:       | partial                  | :heavy_multiplication_x: |
 | ACID Transaction            | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
-| Multiple storages           | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
+| Varieties of storages           | :heavy_check_mark:       | :heavy_multiplication_x: | :heavy_multiplication_x: |
 | API access                  | :heavy_check_mark:       | through VFS              | through VFS              |
 | Symbolic links              | :heavy_multiplication_x: | :heavy_check_mark:       | depends on inner FS      |
 | Users and permissions       | :heavy_multiplication_x: | :heavy_check_mark:       | :heavy_check_mark:       |
