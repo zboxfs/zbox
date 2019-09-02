@@ -307,7 +307,10 @@ impl Segment {
         let mut buf = Vec::new();
         let mut retired = Vec::new();
 
-        debug!("shrink segment data {:?} from {} to {}", self.data_id, self.len, self.used);
+        debug!(
+            "shrink segment data {:?} from {} to {}",
+            self.data_id, self.len, self.used
+        );
 
         // re-position chunks
         let seg_data = seg_data_ref.read().unwrap();

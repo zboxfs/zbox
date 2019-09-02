@@ -92,7 +92,11 @@ impl Wal {
     }
 
     // recycle tx entries in a wal
-    fn recycle(&self, wal_armor: &VolumeWalArmor<Self>, vol: &VolumeRef) -> Result<()> {
+    fn recycle(
+        &self,
+        wal_armor: &VolumeWalArmor<Self>,
+        vol: &VolumeRef,
+    ) -> Result<()> {
         for ent in self.entries.values() {
             match ent.action {
                 Action::New | Action::Update => {} // do nothing
@@ -102,7 +106,7 @@ impl Wal {
                         let mut vol = vol.write().unwrap();
                         vol.del(&ent.id)?;
                     }
-                }
+                },
             }
         }
         Ok(())

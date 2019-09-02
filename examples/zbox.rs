@@ -51,9 +51,7 @@ fn main() {
 
     // read latest file content and display file history
     {
-        let mut f = OpenOptions::new()
-            .open(&mut repo, &filename)
-            .unwrap();
+        let mut f = OpenOptions::new().open(&mut repo, &filename).unwrap();
         let mut content = Vec::new();
         f.read_to_end(&mut content).unwrap();
         dbg!(content);

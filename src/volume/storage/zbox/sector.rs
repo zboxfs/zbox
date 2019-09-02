@@ -44,7 +44,7 @@ impl RecycleMap {
         &mut self,
         span: Span,
         local_cache: &mut LocalCache,
-        hash_key: &HashKey
+        hash_key: &HashKey,
     ) -> Result<()> {
         for mut sec_span in span.divide_by(BLKS_PER_SECTOR) {
             let sec_idx = sec_span.begin / BLKS_PER_SECTOR;

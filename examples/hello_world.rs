@@ -6,7 +6,7 @@
 
 extern crate zbox;
 
-use std::io::{Read, Write, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Write};
 use zbox::{init_env, OpenOptions, RepoOpener};
 
 fn main() {

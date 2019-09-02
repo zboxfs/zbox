@@ -125,7 +125,8 @@ impl Trans {
             if using_cnt > 1 {
                 error!(
                     "deleted entity({:?}) still in use (using: {})",
-                    ent.id(), using_cnt,
+                    ent.id(),
+                    using_cnt,
                 );
                 return Err(Error::InUse);
             }
