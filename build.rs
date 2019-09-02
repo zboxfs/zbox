@@ -22,6 +22,11 @@ const LIBSODIUM_NAME: &'static str = "libsodium-1.0.17";
 const LIBSODIUM_URL: &'static str =
     "https://download.libsodium.org/libsodium/releases/libsodium-1.0.17.tar.gz";
 
+// skip the build script when building doc on docs.rs
+#[cfg(feature = "docs-rs")]
+fn main() {}
+
+#[cfg(not(feature = "docs-rs"))]
 fn main() {
     #[cfg(feature = "libsodium-bundled")]
     download_and_install_libsodium();

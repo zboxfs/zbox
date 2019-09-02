@@ -12,8 +12,9 @@ categories = ["filesystem", "cryptography"]
 license = "Apache-2.0"
 build = "build.rs"
 
+# This feature will be enabled during the docs.rs build
 [package.metadata.docs.rs]
-features = [ "libsodium-bundled" ]
+features = ["docs-rs"]
 
 [badges]
 travis-ci = { repository = "zboxfs/zbox" }
@@ -58,6 +59,9 @@ storage-zbox = ["http", "serde_json"]
 
 # build-in libsodium dependency
 libsodium-bundled = []
+
+# feature for documentation build on docs.rs
+docs-rs = []
 
 [dependencies]
 cfg-if = "0.1.9"
