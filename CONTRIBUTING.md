@@ -109,7 +109,7 @@ reproduce the failed test case. Please check more details in the
 Run the fuzz test separately:
 
  ```bash
- cargo test --tests fuzz_test -- --nocapture
+ cargo test --tests fuzz_test --features storage-file -- --nocapture
  ```
 
 ### Run random IO error test
