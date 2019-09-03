@@ -199,11 +199,15 @@ impl DataCache {
         lru.remove(id)
     }
 
-    // remove items by filter
-    pub fn remove_by<P: FnMut(&SegDataRef) -> bool>(&self, mut filter: P) {
+    // remove deleted segment data from cache
+    pub fn remove_deleted(&self) {
         let mut lru = self.lru.write().unwrap();
         lru.entries()
-            .filter(|ent| filter(ent.get()))
+            .filter(|ent| {
+                let cow_ref = ent.get();
+                let cow = cow_ref.read().unwrap();
+                cow.in_trans() && cow.action() == Action::Delete
+            })
             .for_each(|ent| {
                 ent.remove();
             });

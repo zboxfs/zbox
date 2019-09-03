@@ -16,7 +16,7 @@ use base::crypto::Hash;
 use base::RefCnt;
 use error::{Error, Result};
 use trans::cow::{Cow, CowRef, Cowable, IntoCow};
-use trans::trans::{Action, Transable};
+use trans::trans::Action;
 use trans::{Eid, Id, TxMgrRef, Txid};
 use volume::VolumeRef;
 
@@ -226,24 +226,10 @@ impl Debug for Store {
 
 impl Cowable for Store {
     fn on_commit(&mut self, _vol: &VolumeRef) -> Result<()> {
-        // remove deleted content from cache
-        self.content_cache.remove_by(|cow_ref| {
-            let ctn_cow = cow_ref.read().unwrap();
-            ctn_cow.in_trans() && ctn_cow.action() == Action::Delete
-        });
-
-        // remove deleted segment from cache
-        self.seg_cache.remove_by(|cow_ref| {
-            let seg_cow = cow_ref.read().unwrap();
-            seg_cow.in_trans() && seg_cow.action() == Action::Delete
-        });
-
-        // remove deleted segment data from cache
-        self.segdata_cache.remove_by(|segdata_ref| {
-            let segdata = segdata_ref.read().unwrap();
-            segdata.in_trans() && segdata.action() == Action::Delete
-        });
-
+        // remove deleted objects from cache
+        self.content_cache.remove_deleted();
+        self.seg_cache.remove_deleted();
+        self.segdata_cache.remove_deleted();
         Ok(())
     }
 }

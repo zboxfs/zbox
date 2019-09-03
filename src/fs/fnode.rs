@@ -16,6 +16,7 @@ use content::{
 };
 use error::{Error, Result};
 use trans::cow::{Cow, CowCache, CowRef, CowWeakRef, Cowable, IntoCow};
+use trans::trans::{Action, Transable};
 use trans::{Eid, Id, TxMgrRef, Txid};
 use volume::VolumeRef;
 
@@ -669,7 +670,26 @@ impl Debug for Fnode {
     }
 }
 
-impl Cowable for Fnode {}
+impl Cowable for Fnode {
+    fn on_commit(&mut self, _vol: &VolumeRef) -> Result<()> {
+        // remove deleted fnode from sub nodes cache
+        self.sub_nodes
+            .entries()
+            .filter(|ent| {
+                ent.get()
+                    .upgrade()
+                    .map(|fnode_ref| {
+                        let cow = fnode_ref.read().unwrap();
+                        cow.in_trans() && cow.action() == Action::Delete
+                    })
+                    .unwrap_or(false)
+            })
+            .for_each(|ent| {
+                ent.remove();
+            });
+        Ok(())
+    }
+}
 
 impl<'de> IntoCow<'de> for Fnode {}
 
