@@ -12,9 +12,9 @@ use std::path::PathBuf;
 #[cfg(not(target_os = "windows"))]
 use std::process::Command;
 
-const LZ4_NAME: &'static str = "lz4-1.9.1";
+const LZ4_NAME: &'static str = "lz4-1.9.2";
 const LZ4_URL: &'static str =
-    "https://github.com/lz4/lz4/archive/v1.9.1.tar.gz";
+    "https://github.com/lz4/lz4/archive/v1.9.2.tar.gz";
 
 #[cfg(all(feature = "libsodium-bundled", not(target_os = "windows")))]
 const LIBSODIUM_NAME: &'static str = "libsodium-1.0.17";
