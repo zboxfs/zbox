@@ -155,8 +155,8 @@ impl Store {
         &mut self,
         content_id: &Eid,
     ) -> Result<Option<ContentRef>> {
+        let ctn_ref = self.get_content(content_id)?;
         {
-            let ctn_ref = self.get_content(content_id)?;
             let ctn = ctn_ref.read().unwrap();
             let refcnt = self
                 .content_map
@@ -168,8 +168,7 @@ impl Store {
             }
             self.content_map.remove(ctn.hash()).unwrap();
         }
-
-        Ok(self.content_cache.remove(content_id))
+        Ok(Some(ctn_ref))
     }
 
     /// Remove segment and its associated segment data
@@ -227,6 +226,12 @@ impl Debug for Store {
 
 impl Cowable for Store {
     fn on_commit(&mut self, _vol: &VolumeRef) -> Result<()> {
+        // remove deleted content from cache
+        self.content_cache.remove_by(|cow_ref| {
+            let ctn_cow = cow_ref.read().unwrap();
+            ctn_cow.in_trans() && ctn_cow.action() == Action::Delete
+        });
+
         // remove deleted segment from cache
         self.seg_cache.remove_by(|cow_ref| {
             let seg_cow = cow_ref.read().unwrap();
