@@ -120,7 +120,7 @@ fn download_and_build_lz4() {
     if !lz4_lib_file.exists() {
         let output = Command::new("make")
             .current_dir(&lz4_dir)
-            .env("CFLAGS", "-fPIC -O3")
+            .arg("MOREFLAGS='-fPIC'")
             .arg("BUILD_SHARED=no")
             .arg("lib-release")
             .output()
