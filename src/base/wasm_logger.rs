@@ -3,7 +3,7 @@ use log::{Level, Log, Metadata, Record, SetLoggerError};
 use wasm_bindgen::prelude::*;
 
 // import JS functions from 'worker_logger.js' (in browser binding repo)
-#[wasm_bindgen(raw_module = "../worker_logger")]
+#[wasm_bindgen(raw_module = "../js/worker_logger")]
 extern "C" {
     fn log(lvl: &str, file: &str, line: &str, msg: &str);
 }

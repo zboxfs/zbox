@@ -7,7 +7,7 @@ use wasm_bindgen::JsValue;
 use super::CacheBackend;
 use error::{Error, Result};
 
-#[wasm_bindgen(raw_module = "../cache_backend")]
+#[wasm_bindgen(raw_module = "../js/cache_backend")]
 extern "C" {
     fn contains(rel_path: &str) -> bool;
     fn get(rel_path: &str) -> JsValue;
