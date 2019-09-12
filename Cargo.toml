@@ -95,14 +95,13 @@ tempdir = "0.3.7"
 rand = "0.6.5"
 rand_xorshift = "0.1.1"
 
-[target.'cfg(not(target_os = "windows"))'.build-dependencies]
+[build-dependencies]
 pkg-config = "0.3.14"
+cc = "1.0.45"
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
 libflate = "0.1"
-pkg-config = "0.3.14"
 reqwest = { version = "0.9.18", default-features = false, features = [ "rustls-tls" ] }
 tar = "0.4"
 tempfile = "3.0"
 zip = "0.5"
-cc = "1"

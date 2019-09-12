@@ -1,4 +1,5 @@
 extern crate pkg_config;
+extern crate cc;
 
 #[cfg(target_os = "windows")]
 extern crate libflate;
@@ -9,12 +10,8 @@ extern crate tar;
 
 use std::env;
 use std::path::PathBuf;
-#[cfg(not(target_os = "windows"))]
+#[cfg(feature = "libsodium-bundled")]
 use std::process::Command;
-
-const LZ4_NAME: &'static str = "lz4-1.9.2";
-const LZ4_URL: &'static str =
-    "https://github.com/lz4/lz4/archive/v1.9.2.tar.gz";
 
 #[cfg(all(feature = "libsodium-bundled", not(target_os = "windows")))]
 const LIBSODIUM_NAME: &'static str = "libsodium-1.0.17";
@@ -69,141 +66,25 @@ fn main() {
             println!("cargo:rustc-link-lib=static=lz4");
         }
     } else {
-        download_and_build_lz4();
-    }
-}
-
-// This function download lz4 source files from GitHub and build static library
-// for non-windows target.
-#[cfg(not(target_os = "windows"))]
-fn download_and_build_lz4() {
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let lz4_file = format!("{}.tar.gz", LZ4_NAME);
-    let lz4_dir = out_dir.join(LZ4_NAME);
-    let lz4_lib_dir = lz4_dir.join("lib");
-    let lz4_lib_file = lz4_lib_dir.join("liblz4.a");
-
-    // check if command tools exist
-    Command::new("curl")
-        .arg("--version")
-        .output()
-        .expect("curl not found");
-    Command::new("tar")
-        .arg("--version")
-        .output()
-        .expect("tar not found");
-    Command::new("make")
-        .arg("--version")
-        .output()
-        .expect("make not found");
-
-    if !lz4_dir.exists() {
-        let output = Command::new("curl")
-            .current_dir(&out_dir)
-            .args(&[LZ4_URL, "-sSfL", "-o", &lz4_file])
-            .output()
-            .expect("failed to download lz4");
-        if !output.status.success() {
-            panic!("failed to download lz4");
-        }
-
-        let output = Command::new("tar")
-            .current_dir(&out_dir)
-            .args(&["zxf", &lz4_file])
-            .output()
-            .expect("failed to unpack lz4");
-        if !output.status.success() {
-            panic!("failed to unpack lz4");
+        // build lz4 static library
+        let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+        if !out_dir.join("liblz4.a").exists() {
+            let mut compiler = cc::Build::new();
+            compiler.file("vendor/lz4/lz4.c")
+                .file("vendor/lz4/lz4frame.c")
+                .file("vendor/lz4/lz4hc.c")
+                .file("vendor/lz4/xxhash.c")
+                .define("XXH_NAMESPACE", "LZ4_")
+                .opt_level(3)
+                .debug(false)
+                .pic(true)
+                .shared_flag(false);
+            if !cfg!(windows) {
+                compiler.static_flag(true);
+            }
+            compiler.compile("liblz4.a");
         }
     }
-
-    if !lz4_lib_file.exists() {
-        let output = Command::new("make")
-            .current_dir(&lz4_dir)
-            .arg("MOREFLAGS='-fPIC'")
-            .arg("BUILD_SHARED=no")
-            .arg("lib-release")
-            .output()
-            .expect("failed to compile lz4");
-        if !output.status.success() {
-            panic!("failed to compile lz4");
-        }
-    }
-
-    assert!(&lz4_lib_file.exists(), "lz4 lib was not created");
-
-    println!("cargo:rustc-link-search=native={}", lz4_lib_dir.display());
-    println!("cargo:rustc-link-lib=static=lz4");
-}
-
-// This function download lz4 source files from GitHub and build for
-// Windows and msvc target.
-#[cfg(all(target_os = "windows", target_env = "msvc"))]
-fn download_and_build_lz4() {
-    use libflate::non_blocking::gzip::Decoder;
-    use tar::Archive;
-
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let lz4_dir = out_dir.join(LZ4_NAME);
-    let lz4_lib_file = out_dir.join("liblz4.lib");
-
-    if !lz4_dir.exists() {
-        let response = reqwest::get(LZ4_URL).unwrap();
-        let decoder = Decoder::new(response);
-        let mut ar = Archive::new(decoder);
-        ar.unpack(&out_dir).unwrap();
-    }
-
-    if !lz4_lib_file.exists() {
-        let files =
-            ["lib/lz4.c", "lib/lz4hc.c", "lib/lz4frame.c", "lib/xxhash.c"]
-                .into_iter()
-                .map(|f| lz4_dir.join(f));
-
-        cc::Build::new().files(files).compile("liblz4");
-    }
-
-    assert!(&lz4_lib_file.exists(), "lz4 lib was not created");
-
-    println!("cargo:rustc-link-search=native={}", lz4_dir.display());
-    println!("cargo:rustc-link-lib=static=liblz4");
-}
-
-// This function download lz4 pre-built static lib file from GitHub for
-// Windows and mingw target.
-#[cfg(all(target_os = "windows", target_env = "gnu"))]
-fn download_and_build_lz4() {
-    use std::path::PathBuf;
-
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let lz4_lib_dir = out_dir.join(LZ4_NAME);
-    let lz4_lib_file = lz4_lib_dir.join("liblz4_static.lib");
-
-    if !lz4_lib_dir.exists() {
-        fs::create_dir(&lz4_lib_dir).unwrap();
-    }
-
-    if !lz4_lib_file.exists() {
-        let mut tmpfile = tempfile::tempfile().unwrap();
-        reqwest::get(LZ4_URL)
-            .unwrap()
-            .copy_to(&mut tmpfile)
-            .unwrap();
-        let mut zip = zip::ZipArchive::new(tmpfile).unwrap();
-        let mut lib = zip.by_name("static/liblz4_static.lib").unwrap();
-        let mut liblz4_file = OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(&lz4_lib_file)
-            .unwrap();
-        io::copy(&mut lib, &mut liblz4_file).unwrap();
-    }
-
-    assert!(&lz4_lib_file.exists(), "lz4 lib was not created");
-
-    println!("cargo:rustc-link-search=native={}", lz4_lib_dir.display());
-    println!("cargo:rustc-link-lib=static=liblz4_static");
 }
 
 // This downloads function and builds the libsodium from source for linux and
