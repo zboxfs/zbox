@@ -179,7 +179,7 @@ impl HttpClient {
                 )?)
             }
 
-            #[cfg(feature = "storage-zbox-jni")]
+            #[cfg(feature = "storage-zbox-android")]
             {
                 Box::new(super::transport::jni::JniTransport::new(
                     Self::DEFAULT_TIMEOUT,

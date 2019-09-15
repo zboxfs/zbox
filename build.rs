@@ -1,5 +1,5 @@
-extern crate pkg_config;
 extern crate cc;
+extern crate pkg_config;
 
 #[cfg(target_os = "windows")]
 extern crate libflate;
@@ -70,7 +70,8 @@ fn main() {
         let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
         if !out_dir.join("liblz4.a").exists() {
             let mut compiler = cc::Build::new();
-            compiler.file("vendor/lz4/lz4.c")
+            compiler
+                .file("vendor/lz4/lz4.c")
                 .file("vendor/lz4/lz4frame.c")
                 .file("vendor/lz4/lz4hc.c")
                 .file("vendor/lz4/xxhash.c")

@@ -4,7 +4,7 @@ pub(super) mod faulty;
 #[cfg(feature = "storage-zbox-native")]
 pub(super) mod native;
 
-#[cfg(feature = "storage-zbox-jni")]
+#[cfg(feature = "storage-zbox-android")]
 pub(super) mod jni;
 
 #[cfg(target_arch = "wasm32")]

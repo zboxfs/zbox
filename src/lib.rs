@@ -144,7 +144,11 @@ pub use self::fs::fnode::{DirEntry, FileType, Metadata, Version};
 pub use self::repo::{OpenOptions, Repo, RepoInfo, RepoOpener};
 pub use self::trans::Eid;
 
-#[cfg(feature = "storage-faulty")]
+#[cfg(any(
+    feature = "storage-faulty",
+    feature = "storage-zbox-faulty",
+    target_os = "android"
+))]
 #[macro_use]
 extern crate lazy_static;
 
@@ -163,15 +167,11 @@ extern crate http;
 #[cfg(feature = "storage-zbox")]
 extern crate serde_json;
 
-#[cfg(feature = "storage-zbox-faulty")]
-#[macro_use]
-extern crate lazy_static;
-
 #[cfg(feature = "storage-zbox-native")]
 extern crate reqwest;
 
 #[cfg(target_os = "android")]
-extern crate android_logger;
+extern crate jni;
 
 #[cfg(target_arch = "wasm32")]
 extern crate wasm_bindgen;

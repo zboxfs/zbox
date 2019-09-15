@@ -19,7 +19,6 @@ use error::{Error, Result};
 pub enum CacheType {
     Mem,
     File,
-    Browser,
 }
 
 impl FromStr for CacheType {
@@ -30,7 +29,6 @@ impl FromStr for CacheType {
         match s {
             "mem" => Ok(CacheType::Mem),
             "file" => Ok(CacheType::File),
-            "browser" => Ok(CacheType::Browser),
             _ => Err(Error::InvalidUri),
         }
     }

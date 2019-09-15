@@ -79,23 +79,13 @@ impl LocalCache {
             CacheType::File => {
                 #[cfg(target_arch = "wasm32")]
                 {
-                    return Err(Error::InvalidUri);
-                }
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    let base = base.join(repo_id);
-                    Box::new(super::file::FileBackend::new(&base))
-                }
-            }
-            CacheType::Browser => {
-                #[cfg(target_arch = "wasm32")]
-                {
                     let _ = base;
                     Box::new(super::browser::WasmBackend::new())
                 }
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    return Err(Error::InvalidUri);
+                    let base = base.join(repo_id);
+                    Box::new(super::file::FileBackend::new(&base))
                 }
             }
         };

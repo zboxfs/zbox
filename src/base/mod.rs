@@ -18,11 +18,17 @@ pub use self::version::Version;
 
 use std::sync::{Arc, Once, RwLock, ONCE_INIT};
 
-#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+#[cfg(target_arch = "wasm32")]
 use log::Level;
 
 #[cfg(target_os = "android")]
-use android_logger::{self, Filter};
+use std::ptr::NonNull;
+
+#[cfg(target_os = "android")]
+use std::sync::Mutex;
+
+#[cfg(target_os = "android")]
+use jni::{JNIEnv, JavaVM};
 
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 use env_logger;
@@ -37,20 +43,27 @@ pub fn zbox_version() -> String {
 
 static INIT: Once = ONCE_INIT;
 
+#[cfg(target_os = "android")]
+lazy_static! {
+    // global JVM pointer
+    pub static ref JVM: Mutex<JavaVM> = unsafe {
+        let p = NonNull::dangling();
+        Mutex::new(JavaVM::from_raw(p.as_ptr()).unwrap())
+    };
+}
+
 cfg_if! {
     if #[cfg(target_os = "android")] {
-        pub fn init_env() {
+        pub fn init_env(env: JNIEnv) {
             // only call the initialisation code once globally
             INIT.call_once(|| {
-                android_logger::init_once(
-                    Filter::default()
-                        .with_min_level(Level::Trace)
-                        .with_allowed_module_path("zbox::base")
-                        .with_allowed_module_path("zbox::fs::fs")
-                        .with_allowed_module_path("zbox::trans::txmgr"),
-                    Some("zboxfs"),
-                );
                 crypto::Crypto::init().expect("Initialise crypto failed");
+
+                // save global JVM pointer
+                let jvm = env.get_java_vm().unwrap();
+                let mut jvm_ptr = JVM.lock().unwrap();
+                *jvm_ptr = jvm;
+
                 info!(
                     "{} - Zero-details, privacy-focused in-app file system",
                     zbox_version()

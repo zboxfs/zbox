@@ -7,7 +7,7 @@ use jni::objects::{JObject, JValue};
 use jni::{JNIEnv, JavaVM};
 
 use super::{Response, Transport};
-use binding::jni_lib::JVM;
+use base::JVM;
 use error::{Error, Result};
 
 // create URL parameter for JNI call
@@ -73,19 +73,15 @@ fn do_request<'a>(
     };
 
     // call request function on Java side
-    let ret = match env.call_static_method(
-        "io/zbox/fs/transport/HttpTransport",
-        method,
-        sig,
-        &params,
-    ) {
-        Ok(resp_obj) => Ok(resp_obj.l().unwrap()),
-        Err(err) => {
-            // clear exception to prevent it from being thrown in Java side
-            env.exception_clear().unwrap();
-            Err(Error::from(err))
-        }
-    };
+    let ret = env
+        .call_static_method(
+            "io/zbox/fs/transport/HttpTransport",
+            method,
+            sig,
+            &params,
+        )
+        .map(|resp_obj| resp_obj.l().unwrap())
+        .map_err(Error::from);
 
     // clear local reference
     env.delete_local_ref(param_url.l().unwrap()).unwrap();

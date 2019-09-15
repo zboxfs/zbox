@@ -22,7 +22,7 @@ use serde_json::Error as JsonError;
 #[cfg(feature = "storage-zbox-native")]
 use reqwest::Error as ReqwestError;
 
-#[cfg(feature = "storage-zbox-jni")]
+#[cfg(feature = "storage-zbox-android")]
 use jni::errors::Error as JniError;
 
 /// The error type for operations with [`Repo`] and [`File`].
@@ -99,7 +99,7 @@ pub enum Error {
     #[cfg(feature = "storage-zbox-native")]
     Reqwest(ReqwestError),
 
-    #[cfg(feature = "storage-zbox-jni")]
+    #[cfg(feature = "storage-zbox-android")]
     Jni(JniError),
 
     #[cfg(target_arch = "wasm32")]
@@ -179,7 +179,7 @@ impl Display for Error {
             #[cfg(feature = "storage-zbox-native")]
             Error::Reqwest(ref err) => err.fmt(f),
 
-            #[cfg(feature = "storage-zbox-jni")]
+            #[cfg(feature = "storage-zbox-android")]
             Error::Jni(ref err) => err.fmt(f),
 
             #[cfg(target_arch = "wasm32")]
@@ -259,7 +259,7 @@ impl StdError for Error {
             #[cfg(feature = "storage-zbox-native")]
             Error::Reqwest(ref err) => err.description(),
 
-            #[cfg(feature = "storage-zbox-jni")]
+            #[cfg(feature = "storage-zbox-android")]
             Error::Jni(ref err) => err.description(),
 
             #[cfg(target_arch = "wasm32")]
@@ -288,7 +288,7 @@ impl StdError for Error {
             #[cfg(feature = "storage-zbox-native")]
             Error::Reqwest(ref err) => Some(err),
 
-            #[cfg(feature = "storage-zbox-jni")]
+            #[cfg(feature = "storage-zbox-android")]
             Error::Jni(ref err) => Some(err),
 
             _ => None,
@@ -355,7 +355,7 @@ impl From<ReqwestError> for Error {
     }
 }
 
-#[cfg(feature = "storage-zbox-jni")]
+#[cfg(feature = "storage-zbox-android")]
 impl From<JniError> for Error {
     fn from(err: JniError) -> Error {
         Error::Jni(err)
@@ -433,7 +433,7 @@ impl Into<i32> for Error {
             #[cfg(feature = "storage-zbox-native")]
             Error::Reqwest(_) => -2063,
 
-            #[cfg(feature = "storage-zbox-jni")]
+            #[cfg(feature = "storage-zbox-android")]
             Error::Jni(_) => -2064,
 
             #[cfg(target_arch = "wasm32")]
@@ -513,7 +513,7 @@ impl PartialEq for Error {
                 a.status() == b.status()
             }
 
-            #[cfg(feature = "storage-zbox-jni")]
+            #[cfg(feature = "storage-zbox-android")]
             (&Error::Jni(ref a), &Error::Jni(ref b)) => {
                 a.kind().description() == b.kind().description()
             }

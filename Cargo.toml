@@ -54,6 +54,9 @@ storage-zbox-faulty = ["storage-zbox", "lazy_static"]
 # zbox storage with native transport
 storage-zbox-native = ["storage-zbox", "reqwest"]
 
+# zbox storage with android storage as local cache backend
+storage-zbox-android = ["storage-zbox"]
+
 # zbox storage base dependencies
 storage-zbox = ["http", "serde_json"]
 
@@ -82,7 +85,8 @@ version = "0.5.2"
 features = ["serde_impl"]
 
 [target.'cfg(target_os = "android")'.dependencies]
-android_logger = "0.7.0"
+lazy_static = "1.2.0"
+jni = "0.13.1"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = { version = "0.2.50", features = ["serde-serialize"] }
