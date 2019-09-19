@@ -2,7 +2,7 @@ language: rust
 rust:
   - stable
 cache:
-  cargo: true
+  cargo: false
   directories:
     - $TRAVIS_BUILD_DIR/libsodium
 dist: xenial
