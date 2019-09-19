@@ -38,7 +38,7 @@ use env_logger;
 /// This method return ZboxFS version as a string, e.g. "ZboxFS 0.8.0".
 #[inline]
 pub fn zbox_version() -> String {
-    format!("ZboxFS {}", Version::lib_version())
+    format!("ZboxFS v{}", Version::lib_version())
 }
 
 static INIT: Once = ONCE_INIT;
