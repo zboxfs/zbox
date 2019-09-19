@@ -9,17 +9,12 @@ mod time;
 pub(crate) mod utils;
 pub(crate) mod version;
 pub(crate) mod vio;
-#[cfg(target_arch = "wasm32")]
-mod wasm_logger;
 
 pub use self::refcnt::RefCnt;
 pub use self::time::Time;
 pub use self::version::Version;
 
 use std::sync::{Arc, Once, RwLock, ONCE_INIT};
-
-#[cfg(target_arch = "wasm32")]
-use log::Level;
 
 #[cfg(target_os = "android")]
 use std::ptr::NonNull;
@@ -70,20 +65,6 @@ cfg_if! {
                 );
             });
         }
-    } else if #[cfg(target_arch = "wasm32")] {
-        pub fn init_env(level: Option<Level>) {
-            INIT.call_once(|| {
-                if let Some(lvl) = level {
-                    wasm_logger::init(lvl)
-                        .expect("Initialise wasm logger failed");
-                }
-                crypto::Crypto::init().expect("Initialise crypto failed");
-                info!(
-                    "{} - Zero-details, privacy-focused in-app file system",
-                    zbox_version()
-                );
-            });
-        }
     } else {
         /// Initialise ZboxFS environment.
         ///
@@ -92,7 +73,10 @@ cfg_if! {
         /// This method can be called more than one time.
         pub fn init_env() {
             INIT.call_once(|| {
-                env_logger::try_init().ok();
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    env_logger::try_init().ok();
+                }
                 crypto::Crypto::init().expect("Initialise crypto failed");
                 info!(
                     "{} - Zero-details, privacy-focused in-app file system",
