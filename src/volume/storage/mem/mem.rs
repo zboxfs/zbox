@@ -167,7 +167,7 @@ mod tests {
         let seed = RandomSeed::from(&[0u8; RANDOM_SEED_SIZE]);
         Crypto::random_buf_deterministic(&mut buf, &seed);
 
-        let mut ms = MemStorage::new();
+        let mut ms = MemStorage::new("foo");
         let span = Span::new(0, BLK_CNT);
 
         // write

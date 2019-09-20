@@ -982,7 +982,7 @@ mod tests {
 
         let crypto = Crypto::new(Cost::default(), Cipher::Aes).unwrap();
         let key = Key::new_empty();
-        let mut depot = super::super::mem::MemStorage::new();
+        let mut depot = super::super::mem::MemStorage::new("foo");
         depot.init(crypto.clone(), key.derive(0)).unwrap();
 
         const DATA_LEN: usize = 32 * 1024 * 1024;
