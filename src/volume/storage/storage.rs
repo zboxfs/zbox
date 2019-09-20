@@ -25,13 +25,17 @@ fn parse_uri(uri: &str) -> Result<Box<dyn Storable>> {
 
     // extract storage string
     let idx = uri.find("://").ok_or(Error::InvalidUri)?;
-    let part = &uri[..idx];
+    let loc = &uri[idx + 3..];
+    if loc.is_empty() {
+        return Err(Error::InvalidUri);
+    }
+    let storage_type = &uri[..idx];
 
-    match part {
+    match storage_type {
         "mem" => {
             #[cfg(feature = "storage-mem")]
             {
-                Ok(Box::new(super::mem::MemStorage::new()))
+                Ok(Box::new(super::mem::MemStorage::new(loc)))
             }
             #[cfg(not(feature = "storage-mem"))]
             {
@@ -41,7 +45,7 @@ fn parse_uri(uri: &str) -> Result<Box<dyn Storable>> {
         "file" => {
             #[cfg(feature = "storage-file")]
             {
-                let path = std::path::Path::new(&uri[idx + 3..]);
+                let path = std::path::Path::new(loc);
                 let depot = super::file::FileStorage::new(path);
                 Ok(Box::new(depot))
             }
@@ -53,7 +57,7 @@ fn parse_uri(uri: &str) -> Result<Box<dyn Storable>> {
         "sqlite" => {
             #[cfg(feature = "storage-sqlite")]
             {
-                let depot = super::sqlite::SqliteStorage::new(&uri[idx + 3..]);
+                let depot = super::sqlite::SqliteStorage::new(loc);
                 Ok(Box::new(depot))
             }
             #[cfg(not(feature = "storage-sqlite"))]
@@ -64,7 +68,7 @@ fn parse_uri(uri: &str) -> Result<Box<dyn Storable>> {
         "redis" => {
             #[cfg(feature = "storage-redis")]
             {
-                let depot = super::redis::RedisStorage::new(&uri[idx + 3..])?;
+                let depot = super::redis::RedisStorage::new(loc)?;
                 Ok(Box::new(depot))
             }
             #[cfg(not(feature = "storage-redis"))]
@@ -75,7 +79,7 @@ fn parse_uri(uri: &str) -> Result<Box<dyn Storable>> {
         "faulty" => {
             #[cfg(feature = "storage-faulty")]
             {
-                let depot = super::faulty::FaultyStorage::new(&uri[idx + 3..]);
+                let depot = super::faulty::FaultyStorage::new(loc);
                 Ok(Box::new(depot))
             }
             #[cfg(not(feature = "storage-faulty"))]
@@ -86,7 +90,7 @@ fn parse_uri(uri: &str) -> Result<Box<dyn Storable>> {
         "zbox" => {
             #[cfg(feature = "storage-zbox")]
             {
-                let depot = super::zbox::ZboxStorage::new(&uri[idx + 3..])?;
+                let depot = super::zbox::ZboxStorage::new(loc)?;
                 Ok(Box::new(depot))
             }
             #[cfg(not(feature = "storage-zbox"))]

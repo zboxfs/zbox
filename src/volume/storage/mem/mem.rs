@@ -19,7 +19,7 @@ pub struct MemStorage {
 }
 
 impl MemStorage {
-    pub fn new() -> Self {
+    pub fn new(_loc: &str) -> Self {
         MemStorage {
             super_blk_map: HashMap::new(),
             wal_map: HashMap::new(),
