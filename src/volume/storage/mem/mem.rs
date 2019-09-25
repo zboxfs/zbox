@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::{self, Debug};
+use std::sync::Mutex;
 
 use base::crypto::{Crypto, Key};
 use base::IntoRef;
@@ -9,19 +10,18 @@ use volume::address::Span;
 use volume::storage::Storable;
 use volume::BLK_SIZE;
 
-/// Mem Storage
-#[derive(Clone)]
-pub struct MemStorage {
+// memory storage depot
+struct Depot {
     super_blk_map: HashMap<u64, Vec<u8>>,
     wal_map: HashMap<Eid, Vec<u8>>,
     blk_map: HashMap<usize, Vec<u8>>,
     addr_map: HashMap<Eid, Vec<u8>>,
 }
 
-impl MemStorage {
-    pub fn new(_loc: &str) -> Self {
-        MemStorage {
-            super_blk_map: HashMap::new(),
+impl Depot {
+    pub fn new() -> Self {
+        Depot {
+            super_blk_map: HashMap::with_capacity(2),
             wal_map: HashMap::new(),
             blk_map: HashMap::new(),
             addr_map: HashMap::new(),
@@ -29,10 +29,30 @@ impl MemStorage {
     }
 }
 
+lazy_static! {
+    // static hashmap to keep memory storage depots
+    static ref STORAGES: Mutex<HashMap<String, Depot>> =
+        Mutex::new(HashMap::with_capacity(1));
+}
+
+/// Mem Storage
+#[derive(Clone)]
+pub struct MemStorage {
+    loc: String,
+}
+
+impl MemStorage {
+    pub fn new(loc: &str) -> Self {
+        MemStorage {
+            loc: loc.to_string(),
+        }
+    }
+}
+
 impl Storable for MemStorage {
     #[inline]
     fn exists(&self) -> Result<bool> {
-        Ok(false)
+        Ok(STORAGES.lock().unwrap().contains_key(&self.loc))
     }
 
     #[inline]
@@ -40,8 +60,9 @@ impl Storable for MemStorage {
         Ok(())
     }
 
-    #[inline]
     fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
+        let mut storages = STORAGES.lock().unwrap();
+        storages.insert(self.loc.to_string(), Depot::new());
         Ok(())
     }
 
@@ -51,59 +72,73 @@ impl Storable for MemStorage {
     }
 
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
-        self.super_blk_map
+        let storages = STORAGES.lock().unwrap();
+        let depot = storages.get(&self.loc).ok_or(Error::NotFound)?;
+        depot
+            .super_blk_map
             .get(&suffix)
             .cloned()
             .ok_or(Error::NotFound)
     }
 
-    #[inline]
     fn put_super_block(&mut self, super_blk: &[u8], suffix: u64) -> Result<()> {
-        self.super_blk_map.insert(suffix, super_blk.to_vec());
+        let mut storages = STORAGES.lock().unwrap();
+        let depot = storages.get_mut(&self.loc).unwrap();
+        depot.super_blk_map.insert(suffix, super_blk.to_vec());
         Ok(())
     }
 
-    #[inline]
     fn get_wal(&mut self, id: &Eid) -> Result<Vec<u8>> {
-        self.wal_map
+        let storages = STORAGES.lock().unwrap();
+        let depot = storages.get(&self.loc).unwrap();
+        depot
+            .wal_map
             .get(id)
             .map(|wal| wal.to_owned())
             .ok_or(Error::NotFound)
     }
 
-    #[inline]
     fn put_wal(&mut self, id: &Eid, wal: &[u8]) -> Result<()> {
-        self.wal_map.insert(id.clone(), wal.to_vec());
+        let mut storages = STORAGES.lock().unwrap();
+        let depot = storages.get_mut(&self.loc).unwrap();
+        depot.wal_map.insert(id.clone(), wal.to_vec());
         Ok(())
     }
 
-    #[inline]
     fn del_wal(&mut self, id: &Eid) -> Result<()> {
-        self.wal_map.remove(id);
+        let mut storages = STORAGES.lock().unwrap();
+        let depot = storages.get_mut(&self.loc).unwrap();
+        depot.wal_map.remove(id);
         Ok(())
     }
 
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
-        self.addr_map.get(id).cloned().ok_or(Error::NotFound)
+        let storages = STORAGES.lock().unwrap();
+        let depot = storages.get(&self.loc).unwrap();
+        depot.addr_map.get(id).cloned().ok_or(Error::NotFound)
     }
 
-    #[inline]
     fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
-        self.addr_map.insert(id.clone(), addr.to_vec());
+        let mut storages = STORAGES.lock().unwrap();
+        let depot = storages.get_mut(&self.loc).unwrap();
+        depot.addr_map.insert(id.clone(), addr.to_vec());
         Ok(())
     }
 
-    #[inline]
     fn del_address(&mut self, id: &Eid) -> Result<()> {
-        self.addr_map.remove(id);
+        let mut storages = STORAGES.lock().unwrap();
+        let depot = storages.get_mut(&self.loc).unwrap();
+        depot.addr_map.remove(id);
         Ok(())
     }
 
     fn get_blocks(&mut self, dst: &mut [u8], span: Span) -> Result<()> {
         assert_eq!(dst.len(), span.bytes_len());
+        let storages = STORAGES.lock().unwrap();
+        let depot = storages.get(&self.loc).unwrap();
         let mut read = 0;
         for blk_idx in span {
-            match self.blk_map.get(&blk_idx) {
+            match depot.blk_map.get(&blk_idx) {
                 Some(blk) => {
                     dst[read..read + BLK_SIZE].copy_from_slice(blk);
                     read += BLK_SIZE;
@@ -116,16 +151,20 @@ impl Storable for MemStorage {
 
     fn put_blocks(&mut self, span: Span, mut blks: &[u8]) -> Result<()> {
         assert_eq!(blks.len(), span.bytes_len());
+        let mut storages = STORAGES.lock().unwrap();
+        let depot = storages.get_mut(&self.loc).unwrap();
         for blk_idx in span {
-            self.blk_map.insert(blk_idx, blks[..BLK_SIZE].to_vec());
+            depot.blk_map.insert(blk_idx, blks[..BLK_SIZE].to_vec());
             blks = &blks[BLK_SIZE..];
         }
         Ok(())
     }
 
     fn del_blocks(&mut self, span: Span) -> Result<()> {
+        let mut storages = STORAGES.lock().unwrap();
+        let depot = storages.get_mut(&self.loc).unwrap();
         for blk_idx in span {
-            self.blk_map.remove(&blk_idx);
+            depot.blk_map.remove(&blk_idx);
         }
         Ok(())
     }
@@ -138,10 +177,12 @@ impl Storable for MemStorage {
 
 impl Debug for MemStorage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let storages = STORAGES.lock().unwrap();
+        let depot = storages.get(&self.loc).unwrap();
         f.debug_struct("MemStorage")
-            .field("super_blk_map", &self.super_blk_map.len())
-            .field("blk_map", &self.blk_map.len())
-            .field("addr_map", &self.addr_map.len())
+            .field("super_blk_map", &depot.super_blk_map.len())
+            .field("blk_map", &depot.blk_map.len())
+            .field("addr_map", &depot.addr_map.len())
             .finish()
     }
 }
@@ -168,6 +209,7 @@ mod tests {
         Crypto::random_buf_deterministic(&mut buf, &seed);
 
         let mut ms = MemStorage::new("foo");
+        ms.init(Crypto::default(), Key::new_empty()).unwrap();
         let span = Span::new(0, BLK_CNT);
 
         // write

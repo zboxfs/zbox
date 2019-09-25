@@ -59,7 +59,8 @@ cfg_if! {
         impl TestEnv {
             pub fn new() -> Self {
                 init_env();
-                let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
+                let tmpdir = TempDir::new("zbox_test")
+                    .expect("Create temp dir failed");
                 let file = tmpdir.path().join("zbox.db");
                 let uri = "sqlite://".to_string() + file.to_str().unwrap();
                 let repo = RepoOpener::new()
@@ -90,7 +91,7 @@ cfg_if! {
         impl TestEnv {
             pub fn new() -> Self {
                 init_env();
-                let uri = "mem://foo";
+                let uri = format!("mem://{}", crypto::random_u32(u32::max_value()));
                 let repo = RepoOpener::new()
                     .create_new(true)
                     .open(&uri, "pwd")

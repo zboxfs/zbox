@@ -253,9 +253,9 @@ mod tests {
     use trans::TxMgr;
     use volume::{ArmAccess, Volume};
 
-    fn setup_mem_vol() -> VolumeRef {
+    fn setup_mem_vol(loc: &str) -> VolumeRef {
         init_env();
-        let uri = "mem://foo".to_string();
+        let uri = format!("mem://{}", loc);
         let mut vol = Volume::new(&uri).unwrap();
         vol.init("pwd", &Config::default(), &Vec::new()).unwrap();
         vol.into_ref()
@@ -434,11 +434,11 @@ mod tests {
     #[test]
     fn test_trans_mem() {
         {
-            let vol = setup_mem_vol();
+            let vol = setup_mem_vol("txmgr.foo");
             trans_oper(vol);
         }
         {
-            let vol = setup_mem_vol();
+            let vol = setup_mem_vol("txmgr.bar");
             trans_abort(vol);
         }
     }

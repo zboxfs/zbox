@@ -144,11 +144,6 @@ pub use self::fs::fnode::{DirEntry, FileType, Metadata, Version};
 pub use self::repo::{OpenOptions, Repo, RepoInfo, RepoOpener};
 pub use self::trans::Eid;
 
-#[cfg(any(
-    feature = "storage-faulty",
-    feature = "storage-zbox-faulty",
-    target_os = "android"
-))]
 #[macro_use]
 extern crate lazy_static;
 

@@ -368,9 +368,9 @@ mod tests {
     use base::init_env;
     use base::utils::speed_str;
 
-    fn setup_mem_vol() -> VolumeRef {
+    fn setup_mem_vol(loc: &str) -> VolumeRef {
         init_env();
-        let uri = "mem://test".to_string();
+        let uri = format!("mem://{}", loc);
         let mut vol = Volume::new(&uri).unwrap();
         vol.init("pwd", &Config::default(), &Vec::new()).unwrap();
         vol.into_ref()
@@ -464,7 +464,7 @@ mod tests {
 
     #[test]
     fn mem_volume() {
-        let vol = setup_mem_vol();
+        let vol = setup_mem_vol("mem_volume");
         read_write_test(&vol);
     }
 
@@ -522,7 +522,7 @@ mod tests {
 
     #[test]
     fn mem_perf() {
-        let vol = setup_mem_vol();
+        let vol = setup_mem_vol("mem_perf");
         perf_test(vol, "Memory volume");
     }
 

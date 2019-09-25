@@ -94,7 +94,7 @@ fn repo_oper() {
 
     // case #5: open memory storage without create
     {
-        assert!(RepoOpener::new().open("mem://foo", &pwd).is_err());
+        assert!(RepoOpener::new().open("mem://tests.repo", &pwd).is_err());
     }
 
     // case #6: test create_new option

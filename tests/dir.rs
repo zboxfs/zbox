@@ -86,6 +86,7 @@ fn dir_read() {
     assert_eq!(dirs.len(), 2);
     let dirs = repo.read_dir("/ccc").unwrap();
     assert_eq!(dirs.len(), 0);
+    assert!(repo.read_dir("non-exists").is_err());
 }
 
 #[test]

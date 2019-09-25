@@ -876,8 +876,9 @@ mod tests {
     #[test]
     fn mem_depot() {
         init_env();
-        let storage = Storage::new("mem://foo").unwrap();
+        let mut storage = Storage::new("mem://storage.mem_depot").unwrap();
         assert!(!storage.exists().unwrap());
+        storage.init(Cost::default(), Cipher::default()).unwrap();
         test_depot(storage.into_ref());
     }
 
@@ -957,7 +958,7 @@ mod tests {
     #[test]
     fn mem_perf() {
         init_env();
-        let mut storage = Storage::new("mem://foo").unwrap();
+        let mut storage = Storage::new("mem://storage.mem_perf").unwrap();
         storage.init(Cost::default(), Cipher::default()).unwrap();
         let storage = storage.into_ref();
         perf_test(&storage, "Memory storage");
@@ -982,7 +983,7 @@ mod tests {
 
         let crypto = Crypto::new(Cost::default(), Cipher::Aes).unwrap();
         let key = Key::new_empty();
-        let mut depot = super::super::mem::MemStorage::new("foo");
+        let mut depot = super::super::mem::MemStorage::new("crypto_perf_test");
         depot.init(crypto.clone(), key.derive(0)).unwrap();
 
         const DATA_LEN: usize = 32 * 1024 * 1024;

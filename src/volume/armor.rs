@@ -332,7 +332,7 @@ mod tests {
     #[test]
     fn volume_armor() {
         init_env();
-        let mut vol = Volume::new("mem://foo").unwrap();
+        let mut vol = Volume::new("mem://volume_armor").unwrap();
         vol.init("pwd", &Config::default(), &Vec::new()).unwrap();
         let varm = VolumeArmor::<Item>::new(&vol.into_ref());
 

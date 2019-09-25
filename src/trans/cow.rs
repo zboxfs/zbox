@@ -563,9 +563,9 @@ mod tests {
     use trans::{Eid, TxMgr};
     use volume::Volume;
 
-    fn setup_vol() -> VolumeRef {
+    fn setup_vol(loc: &str) -> VolumeRef {
         init_env();
-        let uri = "mem://foo".to_string();
+        let uri = format!("mem://{}", loc);
         let mut vol = Volume::new(&uri).unwrap();
         vol.init("pwd", &Config::default(), &Vec::new()).unwrap();
         vol.into_ref()
@@ -590,7 +590,7 @@ mod tests {
 
     #[test]
     fn inner_obj_ref() {
-        let vol = setup_vol();
+        let vol = setup_vol("inner_obj_ref");
         let txmgr = TxMgr::new(&Eid::new(), &vol).into_ref();
         let val = 42;
         let obj = Obj::new(val);

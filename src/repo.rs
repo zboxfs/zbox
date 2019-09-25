@@ -663,10 +663,6 @@ pub struct Repo {
 
 impl Repo {
     /// Returns whether the URI points at an existing repository.
-    ///
-    /// Existence check depends on the underlying storage implementation, for
-    /// memory storage, it always returns false. For file storage, it will
-    /// return if the specified path exists on the OS file system.
     #[inline]
     pub fn exists(uri: &str) -> Result<bool> {
         Fs::exists(uri)
