@@ -117,6 +117,7 @@ fn run_select_blob(stmt: *mut ffi::sqlite3_stmt) -> Result<Vec<u8>> {
 
 /// Sqlite Storage
 pub struct SqliteStorage {
+    is_attached: bool, // attached to sqlite db
     filename: CString,
     db: *mut ffi::sqlite3,
     stmts: Vec<*mut ffi::sqlite3_stmt>,
@@ -124,6 +125,7 @@ pub struct SqliteStorage {
 
 impl SqliteStorage {
     // table name constants
+    const TBL_REPO_LOCK: &'static str = "repo_lock";
     const TBL_SUPER_BLOCK: &'static str = "super_block";
     const TBL_WALS: &'static str = "wals";
     const TBL_ADDRESSES: &'static str = "addresses";
@@ -131,9 +133,10 @@ impl SqliteStorage {
 
     pub fn new(filename: &str) -> Self {
         SqliteStorage {
+            is_attached: false,
             filename: CString::new(filename).unwrap(),
             db: ptr::null_mut(),
-            stmts: Vec::new(),
+            stmts: Vec::with_capacity(14),
         }
     }
 
@@ -158,11 +161,31 @@ impl SqliteStorage {
     // prepare and cache all sql statements
     fn prepare_stmts(&mut self) -> Result<()> {
         // check if all statements are prepared
-        if self.stmts.len() == 11 {
+        if self.stmts.len() == 14 {
             return Ok(());
         }
 
         self.stmts.clear();
+
+        // repo lock sql
+        self.prepare_sql(format!(
+            "
+            SELECT lock FROM {} WHERE lock = 1
+        ",
+            Self::TBL_REPO_LOCK
+        ))?;
+        self.prepare_sql(format!(
+            "
+            INSERT OR REPLACE INTO {}(lock) VALUES (1)
+        ",
+            Self::TBL_REPO_LOCK
+        ))?;
+        self.prepare_sql(format!(
+            "
+            DELETE FROM {} WHERE lock = 1
+        ",
+            Self::TBL_REPO_LOCK
+        ))?;
 
         // super block sql
         self.prepare_sql(format!(
@@ -240,6 +263,24 @@ impl SqliteStorage {
 
         Ok(())
     }
+
+    fn lock_repo(&mut self) -> Result<()> {
+        let stmt = self.stmts[0];
+        reset_stmt(stmt)?;
+        let result = unsafe { ffi::sqlite3_step(stmt) };
+        match result {
+            ffi::SQLITE_ROW => Err(Error::RepoOpened), // repo is locked
+            ffi::SQLITE_DONE => {
+                // repo is not locked yet, lock it now
+                let stmt = self.stmts[1];
+                reset_stmt(stmt)?;
+                run_dml(stmt)?;
+                self.is_attached = true;
+                Ok(())
+            }
+            _ => Err(Error::from(ffi::Error::new(result))),
+        }
+    }
 }
 
 impl Storable for SqliteStorage {
@@ -287,6 +328,9 @@ impl Storable for SqliteStorage {
         let sql = format!(
             "
             CREATE TABLE {} (
+                lock        INTEGER
+            );
+            CREATE TABLE {} (
                 suffix      INTEGER PRIMARY KEY,
                 data        BLOB
             );
@@ -303,6 +347,7 @@ impl Storable for SqliteStorage {
                 data        BLOB
             );
         ",
+            Self::TBL_REPO_LOCK,
             Self::TBL_SUPER_BLOCK,
             Self::TBL_WALS,
             Self::TBL_ADDRESSES,
@@ -320,23 +365,21 @@ impl Storable for SqliteStorage {
         };
         check_result(result)?;
 
-        // prepare statements
         self.prepare_stmts()?;
-
-        Ok(())
+        self.lock_repo()
     }
 
     #[inline]
     fn open(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
-        // prepare statements
-        self.prepare_stmts()
+        self.prepare_stmts()?;
+        self.lock_repo()
     }
 
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
         // prepare statements
         self.prepare_stmts()?;
 
-        let stmt = self.stmts[0];
+        let stmt = self.stmts[3];
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
@@ -345,7 +388,7 @@ impl Storable for SqliteStorage {
     }
 
     fn put_super_block(&mut self, super_blk: &[u8], suffix: u64) -> Result<()> {
-        let stmt = self.stmts[1];
+        let stmt = self.stmts[4];
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
@@ -355,7 +398,7 @@ impl Storable for SqliteStorage {
     }
 
     fn get_wal(&mut self, id: &Eid) -> Result<Vec<u8>> {
-        let stmt = self.stmts[2];
+        let stmt = self.stmts[5];
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
@@ -365,7 +408,7 @@ impl Storable for SqliteStorage {
     }
 
     fn put_wal(&mut self, id: &Eid, wal: &[u8]) -> Result<()> {
-        let stmt = self.stmts[3];
+        let stmt = self.stmts[6];
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
@@ -376,7 +419,7 @@ impl Storable for SqliteStorage {
     }
 
     fn del_wal(&mut self, id: &Eid) -> Result<()> {
-        let stmt = self.stmts[4];
+        let stmt = self.stmts[7];
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
@@ -386,7 +429,7 @@ impl Storable for SqliteStorage {
     }
 
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
-        let stmt = self.stmts[5];
+        let stmt = self.stmts[8];
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
@@ -396,7 +439,7 @@ impl Storable for SqliteStorage {
     }
 
     fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
-        let stmt = self.stmts[6];
+        let stmt = self.stmts[9];
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
@@ -407,7 +450,7 @@ impl Storable for SqliteStorage {
     }
 
     fn del_address(&mut self, id: &Eid) -> Result<()> {
-        let stmt = self.stmts[7];
+        let stmt = self.stmts[10];
         reset_stmt(stmt)?;
 
         // bind parameters and run sql
@@ -417,7 +460,7 @@ impl Storable for SqliteStorage {
     }
 
     fn get_blocks(&mut self, dst: &mut [u8], span: Span) -> Result<()> {
-        let stmt = self.stmts[8];
+        let stmt = self.stmts[11];
 
         let mut read = 0;
         for blk_idx in span {
@@ -436,7 +479,7 @@ impl Storable for SqliteStorage {
     }
 
     fn put_blocks(&mut self, span: Span, mut blks: &[u8]) -> Result<()> {
-        let stmt = self.stmts[9];
+        let stmt = self.stmts[12];
 
         for blk_idx in span {
             // reset statement and binding
@@ -454,7 +497,7 @@ impl Storable for SqliteStorage {
     }
 
     fn del_blocks(&mut self, span: Span) -> Result<()> {
-        let stmt = self.stmts[10];
+        let stmt = self.stmts[13];
 
         for blk_idx in span {
             // reset statement and binding
@@ -476,11 +519,24 @@ impl Storable for SqliteStorage {
 
 impl Drop for SqliteStorage {
     fn drop(&mut self) {
+        // release repo lock and ignore the result
+        if self.is_attached {
+            let stmt = self.stmts[2];
+            let _ = reset_stmt(stmt).and_then(|_| unsafe {
+                ffi::sqlite3_step(stmt);
+                Ok(())
+            });
+            self.is_attached = false;
+        }
+
+        // release statements
         unsafe {
             for stmt in self.stmts.iter() {
                 ffi::sqlite3_finalize(*stmt);
             }
         }
+
+        // close db connection
         let result = unsafe { ffi::sqlite3_close(self.db) };
         if result != ffi::SQLITE_OK {
             if panicking() {

@@ -34,7 +34,7 @@ impl Response {
 
         // 409 conflict error means remote session is already opened
         if status == StatusCode::CONFLICT {
-            return Err(Error::Opened);
+            return Err(Error::RepoOpened);
         }
 
         if !status.is_success() {

@@ -442,6 +442,15 @@ impl Testable for Tester {
 
             Action::Reopen => {
                 let info = fuzzer.repo_handle.repo.info().unwrap();
+
+                // assign a dummy repo to close existing repo
+                let dummy_repo = RepoOpener::new()
+                    .create(true)
+                    .open("mem://dummy_repo", "pwd")
+                    .unwrap();
+                fuzzer.repo_handle.repo = dummy_repo;
+
+                // re-open repo
                 let result = skip_faulty!(
                     RepoOpener::new().open(info.uri(), Fuzzer::PWD)
                 );

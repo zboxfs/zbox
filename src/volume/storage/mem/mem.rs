@@ -12,6 +12,7 @@ use volume::BLK_SIZE;
 
 // memory storage depot
 struct Depot {
+    is_opened: bool,
     super_blk_map: HashMap<u64, Vec<u8>>,
     wal_map: HashMap<Eid, Vec<u8>>,
     blk_map: HashMap<usize, Vec<u8>>,
@@ -19,8 +20,9 @@ struct Depot {
 }
 
 impl Depot {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Depot {
+            is_opened: false,
             super_blk_map: HashMap::with_capacity(2),
             wal_map: HashMap::new(),
             blk_map: HashMap::new(),
@@ -38,14 +40,27 @@ lazy_static! {
 /// Mem Storage
 #[derive(Clone)]
 pub struct MemStorage {
+    is_attached: bool, // attached to depot flag
     loc: String,
 }
 
 impl MemStorage {
     pub fn new(loc: &str) -> Self {
         MemStorage {
+            is_attached: false,
             loc: loc.to_string(),
         }
+    }
+
+    fn lock_repo(&mut self) -> Result<()> {
+        let mut storages = STORAGES.lock().unwrap();
+        let depot = storages.get_mut(&self.loc).unwrap();
+        if depot.is_opened {
+            return Err(Error::RepoOpened);
+        }
+        depot.is_opened = true;
+        self.is_attached = true;
+        Ok(())
     }
 }
 
@@ -61,14 +76,16 @@ impl Storable for MemStorage {
     }
 
     fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
-        let mut storages = STORAGES.lock().unwrap();
-        storages.insert(self.loc.to_string(), Depot::new());
-        Ok(())
+        {
+            let mut storages = STORAGES.lock().unwrap();
+            storages.insert(self.loc.to_string(), Depot::new());
+        }
+        self.lock_repo()
     }
 
     #[inline]
     fn open(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
-        Ok(())
+        self.lock_repo()
     }
 
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
@@ -172,6 +189,17 @@ impl Storable for MemStorage {
     #[inline]
     fn flush(&mut self) -> Result<()> {
         Ok(())
+    }
+}
+
+impl Drop for MemStorage {
+    fn drop(&mut self) {
+        if self.is_attached {
+            let mut storages = STORAGES.lock().unwrap();
+            if let Some(depot) = storages.get_mut(&self.loc) {
+                depot.is_opened = false;
+            }
+        }
     }
 }
 

@@ -11,6 +11,12 @@ use volume::address::Span;
 use volume::storage::Storable;
 use volume::BLK_SIZE;
 
+// redis key for repo lock
+#[inline]
+fn repo_lock_key() -> String {
+    format!("repo_lock:")
+}
+
 // redis key for super block
 #[inline]
 fn super_blk_key(suffix: u64) -> String {
@@ -37,6 +43,7 @@ fn blk_key(blk_idx: usize) -> String {
 
 /// Redis Storage
 pub struct RedisStorage {
+    is_attached: bool, // attached to redis
     client: Client,
     conn: Option<Mutex<Connection>>,
 }
@@ -53,7 +60,11 @@ impl RedisStorage {
         };
         let client = Client::open(url.as_str())?;
 
-        Ok(RedisStorage { client, conn: None })
+        Ok(RedisStorage {
+            is_attached: false,
+            client,
+            conn: None,
+        })
     }
 
     fn get_bytes(&self, key: &str) -> Result<Vec<u8>> {
@@ -91,6 +102,20 @@ impl RedisStorage {
             None => unreachable!(),
         }
     }
+
+    fn lock_repo(&mut self) -> Result<()> {
+        let key = repo_lock_key();
+        match self.get_bytes(&key) {
+            Ok(_) => Err(Error::RepoOpened), // repo is locked
+            Err(ref err) if *err == Error::NotFound => {
+                // repo is not locked yet, lock it now
+                self.set_bytes(&key, &Vec::new())?;
+                self.is_attached = true;
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
+    }
 }
 
 impl Storable for RedisStorage {
@@ -109,49 +134,57 @@ impl Storable for RedisStorage {
 
     #[inline]
     fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
-        Ok(())
+        self.lock_repo()
     }
 
     #[inline]
     fn open(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
-        Ok(())
+        self.lock_repo()
     }
 
+    #[inline]
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
         let key = super_blk_key(suffix);
         self.get_bytes(&key)
     }
 
+    #[inline]
     fn put_super_block(&mut self, super_blk: &[u8], suffix: u64) -> Result<()> {
         let key = super_blk_key(suffix);
         self.set_bytes(&key, super_blk)
     }
 
+    #[inline]
     fn get_wal(&mut self, id: &Eid) -> Result<Vec<u8>> {
         let key = wal_key(id);
         self.get_bytes(&key)
     }
 
+    #[inline]
     fn put_wal(&mut self, id: &Eid, wal: &[u8]) -> Result<()> {
         let key = wal_key(id);
         self.set_bytes(&key, wal)
     }
 
+    #[inline]
     fn del_wal(&mut self, id: &Eid) -> Result<()> {
         let key = wal_key(id);
         self.del(&key)
     }
 
+    #[inline]
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
         let key = addr_key(id);
         self.get_bytes(&key)
     }
 
+    #[inline]
     fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
         let key = addr_key(id);
         self.set_bytes(&key, addr)
     }
 
+    #[inline]
     fn del_address(&mut self, id: &Eid) -> Result<()> {
         let key = addr_key(id);
         self.del(&key)
@@ -191,6 +224,17 @@ impl Storable for RedisStorage {
     #[inline]
     fn flush(&mut self) -> Result<()> {
         Ok(())
+    }
+}
+
+impl Drop for RedisStorage {
+    fn drop(&mut self) {
+        if self.is_attached {
+            // remove repo lock and ignore errors
+            let key = repo_lock_key();
+            let _ = self.del(&key);
+            self.is_attached = false;
+        }
     }
 }
 

@@ -15,6 +15,7 @@ use volume::storage::Storable;
 
 /// File Storage
 pub struct FileStorage {
+    is_attached: bool, // attached to underlying os file system
     base: PathBuf,
     wal_base: PathBuf,
     idx_mgr: IndexMgr,
@@ -22,6 +23,9 @@ pub struct FileStorage {
 }
 
 impl FileStorage {
+    // repo lock file name
+    const REPO_LOCK_FILE_NAME: &'static str = ".repo_lock";
+
     // super block file name
     const SUPER_BLK_FILE_NAME: &'static str = "super_blk";
 
@@ -43,6 +47,7 @@ impl FileStorage {
         );
 
         FileStorage {
+            is_attached: false,
             base: base.to_path_buf(),
             wal_base: base.join(Self::WAL_DIR),
             idx_mgr,
@@ -64,6 +69,11 @@ impl FileStorage {
     }
 
     #[inline]
+    fn lock_path(&self) -> PathBuf {
+        self.base.join(Self::REPO_LOCK_FILE_NAME)
+    }
+
+    #[inline]
     fn index_dir(&self) -> PathBuf {
         self.base.join(Self::INDEX_DIR)
     }
@@ -79,6 +89,19 @@ impl FileStorage {
         let hash_key = key.derive(Self::SUBKEY_ID_SECTOR);
         self.sec_mgr
             .set_crypto_ctx(crypto.clone(), key.clone(), hash_key);
+    }
+
+    fn lock_repo(&mut self) -> Result<()> {
+        let lock_path = self.lock_path();
+        if lock_path.exists() {
+            return Err(Error::RepoOpened);
+        }
+        let _ = vio::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&lock_path)?;
+        self.is_attached = true;
+        Ok(())
     }
 }
 
@@ -106,13 +129,16 @@ impl Storable for FileStorage {
         self.set_crypto_ctx(crypto, key);
 
         // initialise index manager
-        self.idx_mgr.init()
+        self.idx_mgr.init()?;
+
+        self.lock_repo()
     }
 
     #[inline]
     fn open(&mut self, crypto: Crypto, key: Key) -> Result<()> {
         self.set_crypto_ctx(crypto, key.clone());
-        self.idx_mgr.open()
+        self.idx_mgr.open()?;
+        self.lock_repo()
     }
 
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
@@ -202,6 +228,16 @@ impl Storable for FileStorage {
     #[inline]
     fn flush(&mut self) -> Result<()> {
         self.idx_mgr.flush()
+    }
+}
+
+impl Drop for FileStorage {
+    fn drop(&mut self) {
+        if self.is_attached {
+            // remove repo lock file and ignore errors
+            let _ = vio::remove_file(self.lock_path());
+            self.is_attached = false;
+        }
     }
 }
 
