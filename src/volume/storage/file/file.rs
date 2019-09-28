@@ -91,14 +91,18 @@ impl FileStorage {
             .set_crypto_ctx(crypto.clone(), key.clone(), hash_key);
     }
 
-    fn lock_repo(&mut self) -> Result<()> {
+    fn lock_repo(&mut self, force: bool) -> Result<()> {
         let lock_path = self.lock_path();
         if lock_path.exists() {
-            return Err(Error::RepoOpened);
+            if force {
+                warn!("Repo was locked, forced to open");
+            } else {
+                return Err(Error::RepoOpened);
+            }
         }
         let _ = vio::OpenOptions::new()
             .write(true)
-            .create_new(true)
+            .create(true)
             .open(&lock_path)?;
         self.is_attached = true;
         Ok(())
@@ -131,14 +135,14 @@ impl Storable for FileStorage {
         // initialise index manager
         self.idx_mgr.init()?;
 
-        self.lock_repo()
+        self.lock_repo(false)
     }
 
     #[inline]
-    fn open(&mut self, crypto: Crypto, key: Key) -> Result<()> {
+    fn open(&mut self, crypto: Crypto, key: Key, force: bool) -> Result<()> {
         self.set_crypto_ctx(crypto, key.clone());
         self.idx_mgr.open()?;
-        self.lock_repo()
+        self.lock_repo(force)
     }
 
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
@@ -324,7 +328,7 @@ mod tests {
         // re-open storage
         drop(fs);
         let mut fs = FileStorage::new(&dir);
-        fs.open(Crypto::default(), Key::new_empty()).unwrap();
+        fs.open(Crypto::default(), Key::new_empty(), false).unwrap();
 
         // wal 1 is deleted, wal 2 should still be there
         assert_eq!(fs.get_wal(&id).unwrap_err(), Error::NotFound);
@@ -364,7 +368,7 @@ mod tests {
         // re-open storage
         drop(fs);
         let mut fs = FileStorage::new(&dir);
-        fs.open(Crypto::default(), Key::new_empty()).unwrap();
+        fs.open(Crypto::default(), Key::new_empty(), false).unwrap();
 
         // address 1 is deleted, address 2 should still be there
         assert_eq!(fs.get_address(&id).unwrap_err(), Error::NotFound);
@@ -421,7 +425,7 @@ mod tests {
         // re-open storage
         drop(fs);
         let mut fs = FileStorage::new(&dir);
-        fs.open(Crypto::default(), Key::new_empty()).unwrap();
+        fs.open(Crypto::default(), Key::new_empty(), false).unwrap();
 
         // blocks should still be there
         let blk = &mut tgt[..BLK_SIZE];

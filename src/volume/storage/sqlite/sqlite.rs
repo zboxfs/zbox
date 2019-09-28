@@ -264,12 +264,21 @@ impl SqliteStorage {
         Ok(())
     }
 
-    fn lock_repo(&mut self) -> Result<()> {
+    fn lock_repo(&mut self, force: bool) -> Result<()> {
         let stmt = self.stmts[0];
         reset_stmt(stmt)?;
         let result = unsafe { ffi::sqlite3_step(stmt) };
         match result {
-            ffi::SQLITE_ROW => Err(Error::RepoOpened), // repo is locked
+            ffi::SQLITE_ROW => {
+                // repo is locked
+                if force {
+                    warn!("Repo was locked, forced to open");
+                    self.is_attached = true;
+                    Ok(())
+                } else {
+                    Err(Error::RepoOpened)
+                }
+            }
             ffi::SQLITE_DONE => {
                 // repo is not locked yet, lock it now
                 let stmt = self.stmts[1];
@@ -366,13 +375,13 @@ impl Storable for SqliteStorage {
         check_result(result)?;
 
         self.prepare_stmts()?;
-        self.lock_repo()
+        self.lock_repo(false)
     }
 
     #[inline]
-    fn open(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
+    fn open(&mut self, _crypto: Crypto, _key: Key, force: bool) -> Result<()> {
         self.prepare_stmts()?;
-        self.lock_repo()
+        self.lock_repo(force)
     }
 
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {

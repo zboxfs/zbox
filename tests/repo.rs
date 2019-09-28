@@ -214,6 +214,29 @@ fn repo_oper() {
 
         Repo::repair_super_block(&path, &pwd).unwrap();
     }
+
+    // case #11: test repo exclusive access
+    {
+        let path = base.clone() + "/repo11";
+        let _repo = RepoOpener::new()
+            .create_new(true)
+            .open(&path, &pwd)
+            .unwrap();
+        assert_eq!(
+            RepoOpener::new().open(&path, &pwd).unwrap_err(),
+            Error::RepoOpened
+        );
+    }
+
+    // case #12: test force open repo
+    {
+        let path = base.clone() + "/repo12";
+        let _repo = RepoOpener::new()
+            .create_new(true)
+            .open(&path, &pwd)
+            .unwrap();
+        let _repo2 = RepoOpener::new().force(true).open(&path, &pwd).unwrap();
+    }
 }
 
 fn smoke_test(uri: String) {

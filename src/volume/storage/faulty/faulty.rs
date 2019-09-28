@@ -62,7 +62,7 @@ impl Storable for FaultyStorage {
         Ok(())
     }
 
-    fn open(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
+    fn open(&mut self, _crypto: Crypto, _key: Key, _force: bool) -> Result<()> {
         self.ctlr.make_random_error()?;
 
         let inner = self.inner.read().unwrap();

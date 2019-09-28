@@ -52,7 +52,7 @@ pub trait Storable: Debug + Send + Sync {
     fn init(&mut self, crypto: Crypto, key: Key) -> Result<()>;
 
     // open a storage
-    fn open(&mut self, crypto: Crypto, key: Key) -> Result<()>;
+    fn open(&mut self, crypto: Crypto, key: Key, force: bool) -> Result<()>;
 
     // super block read/write, must not buffered
     // write no need to be atomic, but must gurantee any successful
@@ -106,7 +106,7 @@ impl Storable for DummyStorage {
     }
 
     #[inline]
-    fn open(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
+    fn open(&mut self, _crypto: Crypto, _key: Key, _force: bool) -> Result<()> {
         unimplemented!()
     }
 

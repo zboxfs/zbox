@@ -156,13 +156,18 @@ impl Fs {
     }
 
     /// Open fs
-    pub fn open(uri: &str, pwd: &str, read_only: bool) -> Result<Fs> {
+    pub fn open(
+        uri: &str,
+        pwd: &str,
+        read_only: bool,
+        force: bool,
+    ) -> Result<Fs> {
         let mut vol = Volume::new(uri)?;
 
         info!("open repo: {}, read_only: {}", vol.info().uri, read_only);
 
         // open volume
-        let payload = vol.open(pwd)?;
+        let payload = vol.open(pwd, force)?;
         let vol = vol.into_ref();
 
         // deserialize payload

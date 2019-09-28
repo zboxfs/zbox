@@ -87,7 +87,7 @@ impl Volume {
     }
 
     /// Open volume, return super block payload and meta payload
-    pub fn open(&mut self, pwd: &str) -> Result<Vec<u8>> {
+    pub fn open(&mut self, pwd: &str, force: bool) -> Result<Vec<u8>> {
         let mut storage = self.storage.write().unwrap();
         storage.connect()?;
 
@@ -104,6 +104,7 @@ impl Volume {
             super_blk.head.cost,
             super_blk.head.cipher,
             super_blk.body.key.clone(),
+            force,
         )?;
 
         // set up info
@@ -448,7 +449,7 @@ mod tests {
         // re-open volume
         drop(vol);
         let mut vol = Volume::new(&uri).unwrap();
-        let buf = vol.open(&pwd).unwrap();
+        let buf = vol.open(&pwd, false).unwrap();
         assert_eq!(&buf[..], &payload[..]);
         {
             let storage = vol.storage.write().unwrap();

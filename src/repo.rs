@@ -67,6 +67,7 @@ pub struct RepoOpener {
     create: bool,
     create_new: bool,
     read_only: bool,
+    force: bool,
 }
 
 impl RepoOpener {
@@ -169,6 +170,17 @@ impl RepoOpener {
         self
     }
 
+    /// Sets the option to open repo regardless repo lock.
+    ///
+    /// Normally, repo will be exclusively locked once it is opened. But when
+    /// this option is set to true, the repo will be opened regardless the repo
+    /// lock. This option breaks exclusive access to repo, so use it cautiously.
+    /// Default is false.
+    pub fn force(&mut self, force: bool) -> &mut Self {
+        self.force = force;
+        self
+    }
+
     /// Opens a repository at URI with the password and options specified by
     /// `self`.
     ///
@@ -244,12 +256,12 @@ impl RepoOpener {
                 if self.create_new {
                     return Err(Error::AlreadyExists);
                 }
-                Repo::open(uri, pwd, self.read_only)
+                Repo::open(uri, pwd, self.read_only, self.force)
             } else {
                 Repo::create(uri, pwd, &self.cfg)
             }
         } else {
-            Repo::open(uri, pwd, self.read_only)
+            Repo::open(uri, pwd, self.read_only, self.force)
         }
     }
 }
@@ -677,8 +689,13 @@ impl Repo {
 
     // open repo
     #[inline]
-    fn open(uri: &str, pwd: &str, read_only: bool) -> Result<Repo> {
-        let fs = Fs::open(uri, pwd, read_only)?;
+    fn open(
+        uri: &str,
+        pwd: &str,
+        read_only: bool,
+        force: bool,
+    ) -> Result<Repo> {
+        let fs = Fs::open(uri, pwd, read_only, force)?;
         Ok(Repo { fs })
     }
 

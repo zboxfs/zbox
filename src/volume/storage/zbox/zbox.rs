@@ -184,7 +184,7 @@ impl Storable for ZboxStorage {
         Ok(())
     }
 
-    fn open(&mut self, crypto: Crypto, key: Key) -> Result<()> {
+    fn open(&mut self, crypto: Crypto, key: Key, _force: bool) -> Result<()> {
         self.set_crypto_ctx(crypto, key);
         {
             let mut local_cache = self.local_cache.write().unwrap();

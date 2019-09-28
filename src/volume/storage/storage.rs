@@ -182,12 +182,19 @@ impl Storage {
         self.depot.init(self.crypto.clone(), self.key.derive(0))
     }
 
-    pub fn open(&mut self, cost: Cost, cipher: Cipher, key: Key) -> Result<()> {
+    pub fn open(
+        &mut self,
+        cost: Cost,
+        cipher: Cipher,
+        key: Key,
+        force: bool,
+    ) -> Result<()> {
         self.crypto = Crypto::new(cost, cipher)?;
         self.key = key;
 
         // open depot
-        self.depot.open(self.crypto.clone(), self.key.derive(0))
+        self.depot
+            .open(self.crypto.clone(), self.key.derive(0), force)
     }
 
     #[inline]

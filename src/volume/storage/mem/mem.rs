@@ -52,11 +52,15 @@ impl MemStorage {
         }
     }
 
-    fn lock_repo(&mut self) -> Result<()> {
+    fn lock_repo(&mut self, force: bool) -> Result<()> {
         let mut storages = STORAGES.lock().unwrap();
         let depot = storages.get_mut(&self.loc).unwrap();
         if depot.is_opened {
-            return Err(Error::RepoOpened);
+            if force {
+                warn!("Repo was locked, forced to open");
+            } else {
+                return Err(Error::RepoOpened);
+            }
         }
         depot.is_opened = true;
         self.is_attached = true;
@@ -80,12 +84,12 @@ impl Storable for MemStorage {
             let mut storages = STORAGES.lock().unwrap();
             storages.insert(self.loc.to_string(), Depot::new());
         }
-        self.lock_repo()
+        self.lock_repo(false)
     }
 
     #[inline]
-    fn open(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
-        self.lock_repo()
+    fn open(&mut self, _crypto: Crypto, _key: Key, force: bool) -> Result<()> {
+        self.lock_repo(force)
     }
 
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {

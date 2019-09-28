@@ -103,18 +103,23 @@ impl RedisStorage {
         }
     }
 
-    fn lock_repo(&mut self) -> Result<()> {
+    fn lock_repo(&mut self, force: bool) -> Result<()> {
         let key = repo_lock_key();
         match self.get_bytes(&key) {
-            Ok(_) => Err(Error::RepoOpened), // repo is locked
-            Err(ref err) if *err == Error::NotFound => {
-                // repo is not locked yet, lock it now
-                self.set_bytes(&key, &Vec::new())?;
-                self.is_attached = true;
-                Ok(())
+            Ok(_) => {
+                // repo is locked
+                if force {
+                    warn!("Repo was locked, forced to open");
+                } else {
+                    return Err(Error::RepoOpened);
+                }
             }
-            Err(err) => Err(err),
+            Err(ref err) if *err == Error::NotFound => {}
+            Err(err) => return Err(err),
         }
+        self.set_bytes(&key, &Vec::new())?;
+        self.is_attached = true;
+        Ok(())
     }
 }
 
@@ -134,12 +139,12 @@ impl Storable for RedisStorage {
 
     #[inline]
     fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
-        self.lock_repo()
+        self.lock_repo(false)
     }
 
     #[inline]
-    fn open(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
-        self.lock_repo()
+    fn open(&mut self, _crypto: Crypto, _key: Key, force: bool) -> Result<()> {
+        self.lock_repo(force)
     }
 
     #[inline]
