@@ -52,7 +52,7 @@ impl Volume {
         payload: &[u8],
     ) -> Result<()> {
         let mut storage = self.storage.write().unwrap();
-        storage.connect()?;
+        storage.connect(false)?;
 
         // initialise storage
         storage.init(cfg.cost, cfg.cipher)?;
@@ -89,7 +89,7 @@ impl Volume {
     /// Open volume, return super block payload and meta payload
     pub fn open(&mut self, pwd: &str, force: bool) -> Result<Vec<u8>> {
         let mut storage = self.storage.write().unwrap();
-        storage.connect()?;
+        storage.connect(force)?;
 
         // load super block from storage
         let super_blk = SuperBlk::load(pwd, &mut storage)?;
@@ -123,7 +123,7 @@ impl Volume {
     /// Try to repair super block
     pub fn repair_super_block(&mut self, pwd: &str) -> Result<()> {
         let mut storage = self.storage.write().unwrap();
-        storage.connect()?;
+        storage.connect(false)?;
         SuperBlk::repair(pwd, &mut storage)
     }
 

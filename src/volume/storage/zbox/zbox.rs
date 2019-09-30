@@ -168,9 +168,9 @@ impl Storable for ZboxStorage {
     }
 
     #[inline]
-    fn connect(&mut self) -> Result<()> {
+    fn connect(&mut self, force: bool) -> Result<()> {
         let mut local_cache = self.local_cache.write().unwrap();
-        local_cache.connect()
+        local_cache.connect(force)
     }
 
     fn init(&mut self, crypto: Crypto, key: Key) -> Result<()> {

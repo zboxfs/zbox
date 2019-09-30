@@ -131,7 +131,7 @@ impl Storable for RedisStorage {
         conn.exists::<&str, bool>(&key).map_err(Error::from)
     }
 
-    fn connect(&mut self) -> Result<()> {
+    fn connect(&mut self, _force: bool) -> Result<()> {
         let conn = self.client.get_connection()?;
         self.conn = Some(Mutex::new(conn));
         Ok(())

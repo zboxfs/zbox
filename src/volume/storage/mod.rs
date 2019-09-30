@@ -46,7 +46,7 @@ pub trait Storable: Debug + Send + Sync {
     fn exists(&self) -> Result<bool>;
 
     // make connection to storage
-    fn connect(&mut self) -> Result<()>;
+    fn connect(&mut self, force: bool) -> Result<()>;
 
     // initial a storage
     fn init(&mut self, crypto: Crypto, key: Key) -> Result<()>;
@@ -96,7 +96,7 @@ impl Storable for DummyStorage {
     }
 
     #[inline]
-    fn connect(&mut self) -> Result<()> {
+    fn connect(&mut self, _force: bool) -> Result<()> {
         unimplemented!()
     }
 

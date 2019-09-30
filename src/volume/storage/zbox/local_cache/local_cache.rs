@@ -112,8 +112,8 @@ impl LocalCache {
     }
 
     #[inline]
-    pub fn connect(&mut self) -> Result<()> {
-        self.client.open_session()?;
+    pub fn connect(&mut self, force: bool) -> Result<()> {
+        self.client.open_session(force)?;
         Ok(())
     }
 

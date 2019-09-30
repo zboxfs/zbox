@@ -75,7 +75,7 @@ impl Storable for MemStorage {
     }
 
     #[inline]
-    fn connect(&mut self) -> Result<()> {
+    fn connect(&mut self, _force: bool) -> Result<()> {
         Ok(())
     }
 

@@ -169,8 +169,8 @@ impl Storage {
     }
 
     #[inline]
-    pub fn connect(&mut self) -> Result<()> {
-        self.depot.connect()
+    pub fn connect(&mut self, force: bool) -> Result<()> {
+        self.depot.connect(force)
     }
 
     pub fn init(&mut self, cost: Cost, cipher: Cipher) -> Result<()> {

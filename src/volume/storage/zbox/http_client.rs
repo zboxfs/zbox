@@ -245,14 +245,15 @@ impl HttpClient {
     }
 
     // open remote session, return remote update sequence
-    pub fn open_session(&mut self) -> Result<u64> {
+    pub fn open_session(&mut self, force: bool) -> Result<u64> {
         if self.retry_cnt == 0 {
             debug!("open session 1st time");
         } else {
             debug!("open session, retry {}", self.retry_cnt);
         }
 
-        let uri = self.make_uri("open")?;
+        let query = "open".to_owned() + if force { "?force=true" } else { "" };
+        let uri = self.make_uri(query)?;
         let headers = self
             .headers
             .clone()
@@ -325,7 +326,7 @@ impl HttpClient {
                 // it is not expired locally but expired remotely, in this case
                 // we need to reopen the session, but just try once only
                 if err == Error::HttpStatus(StatusCode::UNAUTHORIZED) {
-                    self.open_session()?;
+                    self.open_session(false)?;
                     self.send_get_req(&uri, cache_ctl)
                 } else {
                     Err(err)
@@ -390,7 +391,7 @@ impl HttpClient {
             .or_else(|err| {
                 // try reopen remote session once if it is expired
                 if err == Error::HttpStatus(StatusCode::UNAUTHORIZED) {
-                    self.open_session()?;
+                    self.open_session(false)?;
                     self.send_put_req(&uri, offset, cache_ctl, body)
                 } else {
                     Err(err)
@@ -453,7 +454,7 @@ impl HttpClient {
         self.send_bulk_del_req(&bulk).or_else(|err| {
             // try reopen remote session once if it is expired
             if err == Error::HttpStatus(StatusCode::UNAUTHORIZED) {
-                self.open_session()?;
+                self.open_session(false)?;
                 self.send_bulk_del_req(&bulk)
             } else {
                 Err(err)
@@ -532,7 +533,7 @@ mod tests {
         let blks = vec![42u8; BLK_SIZE];
 
         // test open session
-        let update_seq = client.open_session().unwrap();
+        let update_seq = client.open_session(false).unwrap();
 
         // test put/get
         let rel_path = Path::new("data/xx/yy/test");
@@ -555,7 +556,7 @@ mod tests {
         assert_eq!(dst.len(), blks.len() + 3);
 
         // open session again should fail
-        assert_eq!(client.open_session().unwrap_err(), Error::Opened);
+        assert_eq!(client.open_session(false).unwrap_err(), Error::Opened);
 
         // test delete
         client.del(&rel_path).unwrap();
@@ -565,7 +566,7 @@ mod tests {
         // close session and open it again
         drop(client);
         let mut client = HttpClient::new(&repo_id, &access_key).unwrap();
-        let new_update_seq = client.open_session().unwrap();
+        let new_update_seq = client.open_session(false).unwrap();
         assert_eq!(new_update_seq, update_seq + 1);
     }
 
@@ -580,7 +581,7 @@ mod tests {
         let blks = vec![42u8; BLK_SIZE];
         let delay = time::Duration::from_secs(180);
 
-        client.open_session().unwrap();
+        client.open_session(false).unwrap();
         let rel_path = Path::new("test");
         client
             .put(&rel_path, 0, CacheControl::NoCache, &blks[..])

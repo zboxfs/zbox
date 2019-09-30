@@ -309,7 +309,7 @@ impl Storable for SqliteStorage {
         Ok(result == ffi::SQLITE_OK)
     }
 
-    fn connect(&mut self) -> Result<()> {
+    fn connect(&mut self, _force: bool) -> Result<()> {
         let result = unsafe {
             ffi::sqlite3_open_v2(
                 self.filename.as_ptr(),
