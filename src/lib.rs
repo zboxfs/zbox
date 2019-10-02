@@ -12,7 +12,7 @@
 //! - [`File`] provides similar file I/O methods to [`std::fs::File`]
 //!
 //! [`init_env`] initialises the environment and should be called once before
-//! any other methods provied by ZboxFS.
+//! any other methods provided by ZboxFS.
 //!
 //! After repository is opened by [`RepoOpener`], all of the other functions
 //! provided by ZboxFS will be thread-safe.

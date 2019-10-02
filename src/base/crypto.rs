@@ -645,7 +645,7 @@ impl Default for Key {
     }
 }
 
-/// Crypto cipher primitivies.
+/// Crypto cipher primitives.
 ///
 /// See <https://download.libsodium.org/doc/secret-key_cryptography/aead> for
 /// more details.
