@@ -699,7 +699,7 @@ impl Repo {
         Ok(Repo { fs })
     }
 
-    /// Get repository metadata infomation.
+    /// Get repository metadata information.
     pub fn info(&self) -> Result<RepoInfo> {
         let meta = self.fs.info();
         Ok(RepoInfo {
@@ -716,12 +716,12 @@ impl Repo {
         })
     }
 
-    /// Reset password for the respository.
+    /// Reset password for the repository.
     ///
     /// Note: if this method failed due to IO error, super block might be
-    /// damaged. If so, use
+    /// damaged. If it is the case, use
     /// [repair_super_block](struct.Repo.html#method.repair_super_block)
-    /// to restore super block before re-open the repo.
+    /// to restore super block before re-opening the repo.
     pub fn reset_password(
         &mut self,
         old_pwd: &str,
@@ -880,7 +880,7 @@ impl Repo {
 
     /// Copies the content of one file to another.
     ///
-    /// This mthod will overwrite the content of `to`.
+    /// This method will overwrite the content of `to`.
     ///
     /// If `from` and `to` both point to the same file, this method is no-op.
     ///

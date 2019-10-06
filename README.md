@@ -275,4 +275,4 @@ file for details.
 [zboxfs/base]: https://github.com/zboxfs/zbox-docker-base
 [zboxfs/wasm]: https://github.com/zboxfs/zbox-docker-wasm
 [zboxfs/nodejs]: https://github.com/zboxfs/zbox-docker-nodejs
-[zboxfs/android]: https://github.com/zboxfs/zbox-docker-android
+[zboxfs/android]: https://github.com/zboxfs/zbox-android

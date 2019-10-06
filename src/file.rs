@@ -119,7 +119,7 @@ impl Seek for VersionReader {
 /// # Writing
 ///
 /// The file content is cached internally for deduplication and will be handled
-/// automatically, thus calling [`flush`] is **not** recommendated.
+/// automatically, thus calling [`flush`] is **not** recommended.
 ///
 /// `File` is multi-versioned, each time updating its content will create a new
 /// permanent [`Version`]. There are two ways of writing data to a file:
@@ -193,13 +193,13 @@ impl Seek for VersionReader {
 ///
 /// As `File` can contain multiple versions, [`Read`] operation can be
 /// associated with different versions. By default, reading on `File` object is
-/// always binded to the latest version. To read a specific version, a
+/// always bound to the latest version. To read a specific version, a
 /// [`VersionReader`], which supports [`Read`] trait as well, can be used.
 ///
 /// ## Examples
 ///
 /// Read the file content while it is in writing, notice that reading is always
-/// binded to latest content version.
+/// bound to latest content version.
 ///
 /// ```
 /// use std::io::prelude::*;

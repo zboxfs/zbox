@@ -28,9 +28,9 @@ use jni::{JNIEnv, JavaVM};
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 use env_logger;
 
-/// Get ZboxFS version string.
+/// Get ZboxFS library version string.
 ///
-/// This method return ZboxFS version as a string, e.g. "ZboxFS v0.8.0".
+/// This method return ZboxFS library version as a string, e.g. "ZboxFS v0.8.0".
 #[inline]
 pub fn zbox_version() -> String {
     format!("ZboxFS v{}", Version::lib_version())
