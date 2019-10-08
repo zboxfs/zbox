@@ -138,7 +138,7 @@ impl RepoOpener {
     /// Sets the default maximum number of file version.
     ///
     /// The `version_limit` must be within [1, 255], default is 1. This
-    /// setting is a repository-wise setting, indivisual file can overwrite it
+    /// setting is a repository-wise setting, individual file can overwrite it
     /// by setting [`version_limit`] in [`OpenOptions`].
     ///
     /// [`version_limit`]: struct.OpenOptions.html#method.version_limit
@@ -152,7 +152,7 @@ impl RepoOpener {
     ///
     /// This option indicates whether data chunk should be deduped when
     /// writing data to a file. This setting is a repository-wise setting,
-    /// indivisual file can overwrite it by setting [`dedup_chunk`]
+    /// individual file can overwrite it by setting [`dedup_chunk`]
     /// in [`OpenOptions`]. Default is false.
     ///
     /// [`dedup_chunk`]: struct.OpenOptions.html#method.dedup_chunk
@@ -193,15 +193,14 @@ impl RepoOpener {
     /// identifier    authority         path          parameters
     /// ```
     ///
-    /// Only `identifier` and `path` is required, all the others are optional.
+    /// Only `identifier` and `path` are required, all the others are optional.
     ///
     /// Supported storage:
     ///
     /// - Memory storage, URI identifier is `mem://`
     ///
-    ///   As memory stoage is volatile, it is always be used with `create`
-    ///   option. It doesn't make sense to open an existing memory storage,
-    ///   thus the string after identifier is arbitrary.
+    ///   After the identifier is a name to distinguish a particular memory
+    ///   storage location.
     ///
     ///   For example, `mem://foobar`.
     ///
@@ -393,8 +392,8 @@ impl OpenOptions {
 
     /// Sets the maximum number of file versions allowed.
     ///
-    /// The `version_limit` must be within [1, 255]. It will fall back to
-    /// repository's [`version_limit`] if it is not set.
+    /// The `version_limit` must be within [1, 255], default is 1. It will fall
+    /// back to repository's [`version_limit`] if it is not set.
     ///
     /// [`version_limit`]: struct.RepoOpener.html#method.version_limit
     pub fn version_limit(&mut self, version_limit: u8) -> &mut OpenOptions {
@@ -431,6 +430,12 @@ impl OpenOptions {
 }
 
 /// Information about a repository.
+///
+/// This structure is returned from the [`Repo::info`] represents known metadata
+/// about a repository such as its volume ID, version, URI, creation times and
+/// etc.
+///
+/// [`Repo::info`]: struct.Repo.html#method.info
 #[derive(Debug)]
 pub struct RepoInfo {
     volume_id: Eid,

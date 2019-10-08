@@ -125,7 +125,7 @@ impl Version {
 ///
 /// This structure is returned from the [`File::metadata`] and
 /// [`Repo::metadata`] represents known metadata about a file such as its type,
-/// size, modification times, etc.
+/// size, modification times and etc.
 ///
 /// [`File::metadata`]: struct.File.html#method.metadata
 /// [`Repo::metadata`]: struct.Repo.html#method.metadata
