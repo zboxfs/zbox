@@ -106,7 +106,7 @@ For reference documentation, please visit [documentation](https://docs.rs/zbox).
 - 64-bit Debian-based Linux, such as Ubuntu
 - 64-bit macOS
 - 64-bit Windows
-- 64-bit Android, API level >= 21 (in progress)
+- 64-bit Android, API level >= 21
 
 32-bit and other OS are `NOT` supported yet.
 
@@ -116,7 +116,7 @@ Add the following dependency to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-zbox = "0.8.6"
+zbox = "0.8.7"
 ```
 
 If you don't want to install libsodium by yourself, simply specify
@@ -125,7 +125,7 @@ verify and build libsodium.
 
 ```toml
 [dependencies]
-zbox = { version = "0.8.6", features = ["libsodium-bundled"] }
+zbox = { version = "0.8.7", features = ["libsodium-bundled"] }
 ```
 
 ## Example
