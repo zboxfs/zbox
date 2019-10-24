@@ -67,8 +67,8 @@ libsodium-bundled = []
 docs-rs = []
 
 [dependencies]
-cfg-if = "0.1.9"
-env_logger = "0.6.2"
+cfg-if = "0.1.10"
+env_logger = "0.7.1"
 log = "0.4.8"
 rmp-serde = "0.13.7"
 serde = "1.0.99"
