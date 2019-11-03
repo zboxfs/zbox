@@ -904,7 +904,7 @@ mod tests {
     fn sqlite_depot() {
         init_env();
         let mut storage = Storage::new("sqlite://:memory:").unwrap();
-        storage.connect().unwrap();
+        storage.connect(false).unwrap();
         storage.init(Cost::default(), Cipher::default()).unwrap();
         test_depot(storage.into_ref());
     }
@@ -914,7 +914,7 @@ mod tests {
     fn redis_depot() {
         init_env();
         let mut storage = Storage::new("redis://127.0.0.1").unwrap();
-        storage.connect().unwrap();
+        storage.connect(false).unwrap();
         storage.init(Cost::default(), Cipher::default()).unwrap();
         test_depot(storage.into_ref());
     }
@@ -927,7 +927,7 @@ mod tests {
             "zbox://accessKey456@repo456?cache_type=mem&cache_size=1mb",
         )
         .unwrap();
-        storage.connect().unwrap();
+        storage.connect(false).unwrap();
         storage.init(Cost::default(), Cipher::default()).unwrap();
         test_depot(storage.into_ref());
     }

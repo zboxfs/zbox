@@ -70,7 +70,7 @@ impl RedisStorage {
     fn get_bytes(&self, key: &str) -> Result<Vec<u8>> {
         match self.conn {
             Some(ref conn) => {
-                let conn = conn.lock().unwrap();
+                let mut conn = conn.lock().unwrap();
                 if !conn.exists::<&str, bool>(key)? {
                     return Err(Error::NotFound);
                 }
@@ -84,7 +84,7 @@ impl RedisStorage {
     fn set_bytes(&self, key: &str, val: &[u8]) -> Result<()> {
         match self.conn {
             Some(ref conn) => {
-                let conn = conn.lock().unwrap();
+                let mut conn = conn.lock().unwrap();
                 conn.set(key, val)?;
                 Ok(())
             }
@@ -95,7 +95,7 @@ impl RedisStorage {
     fn del(&self, key: &str) -> Result<()> {
         match self.conn {
             Some(ref conn) => {
-                let conn = conn.lock().unwrap();
+                let mut conn = conn.lock().unwrap();
                 conn.del(key)?;
                 Ok(())
             }
@@ -126,7 +126,7 @@ impl RedisStorage {
 impl Storable for RedisStorage {
     fn exists(&self) -> Result<bool> {
         // check super block existence to determine if repo exists
-        let conn = self.client.get_connection()?;
+        let mut conn = self.client.get_connection()?;
         let key = super_blk_key(0);
         conn.exists::<&str, bool>(&key).map_err(Error::from)
     }
@@ -261,7 +261,7 @@ mod tests {
     fn redis_storage() {
         init_env();
         let mut rs = RedisStorage::new("127.0.0.1").unwrap();
-        rs.connect().unwrap();
+        rs.connect(false).unwrap();
         rs.init(Crypto::default(), Key::new_empty()).unwrap();
 
         let id = Eid::new();
@@ -312,8 +312,8 @@ mod tests {
         // re-open
         drop(rs);
         let mut rs = RedisStorage::new("127.0.0.1").unwrap();
-        rs.connect().unwrap();
-        rs.open(Crypto::default(), Key::new_empty()).unwrap();
+        rs.connect(false).unwrap();
+        rs.open(Crypto::default(), Key::new_empty(), false).unwrap();
 
         rs.get_blocks(&mut dst[..BLK_SIZE], Span::new(0, 1))
             .unwrap();

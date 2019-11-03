@@ -585,7 +585,7 @@ mod tests {
         let dir = tmpdir.path().join("storage.db");
         let mut ss = SqliteStorage::new(dir.to_str().unwrap());
 
-        ss.connect().unwrap();
+        ss.connect(false).unwrap();
         ss.init(Crypto::default(), Key::new_empty()).unwrap();
 
         let id = Eid::new();
@@ -633,8 +633,8 @@ mod tests {
         // re-open
         drop(ss);
         let mut ss = SqliteStorage::new(dir.to_str().unwrap());
-        ss.connect().unwrap();
-        ss.open(Crypto::default(), Key::new_empty()).unwrap();
+        ss.connect(false).unwrap();
+        ss.open(Crypto::default(), Key::new_empty(), false).unwrap();
 
         ss.get_blocks(&mut dst[..BLK_SIZE], Span::new(0, 1))
             .unwrap();
