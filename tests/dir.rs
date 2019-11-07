@@ -182,7 +182,7 @@ fn dir_copy() {
     }
     repo.create_dir_all("/ccc/ccc1/ccc11").unwrap();
 
-    // #0: wrong cases
+    // #0: special cases
     repo.copy_dir_all("/aaa", "/aaa").unwrap();
     assert_eq!(
         repo.copy_dir_all("/non-exist", "/xxx").unwrap_err(),
