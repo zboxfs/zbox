@@ -885,11 +885,11 @@ impl Repo {
 
     /// Copies the content of one file to another.
     ///
-    /// This method will overwrite the content of `to`.
-    ///
-    /// If `from` and `to` both point to the same file, this method is no-op.
+    /// This method will **overwrite** the content of `to`.
     ///
     /// `from` and `to` must be absolute paths to regular files.
+    ///
+    /// If `from` and `to` both point to the same file, this method is no-op.
     #[inline]
     pub fn copy<P: AsRef<Path>, Q: AsRef<Path>>(
         &mut self,
@@ -897,6 +897,29 @@ impl Repo {
         to: Q,
     ) -> Result<()> {
         self.fs.copy(from.as_ref(), to.as_ref())
+    }
+
+    /// Copies a directory to another recursively.
+    ///
+    /// This method will **overwrite** the content of files in `to` with
+    /// the files in `from` which have same relative location.
+    ///
+    /// `from` and `to` must be absolute paths to directories.
+    ///
+    /// If `to` is not empty, the entire directory tree of `from` will be
+    /// merged to `to`.
+    ///
+    /// This method will stop if any errors happened.
+    ///
+    /// If `from` and `to` both point to the same directory, this method is
+    /// no-op.
+    #[inline]
+    pub fn copy_dir_all<P: AsRef<Path>, Q: AsRef<Path>>(
+        &mut self,
+        from: P,
+        to: Q,
+    ) -> Result<()> {
+        self.fs.copy_dir_all(from.as_ref(), to.as_ref())
     }
 
     /// Removes a regular file from the repository.

@@ -368,7 +368,7 @@ impl Fs {
             match self.open_fnode(to) {
                 Ok(tgt) => {
                     {
-                        // if target and source is same fnode, do nothing
+                        // if target and source are same fnode, do nothing
                         if Arc::ptr_eq(&tgt.fnode, &src) {
                             return Ok(());
                         }
@@ -406,6 +406,60 @@ impl Fs {
 
             Ok(())
         })?;
+
+        Ok(())
+    }
+
+    /// Copy a dir to another recursively
+    pub fn copy_dir_all(&mut self, from: &Path, to: &Path) -> Result<()> {
+        if self.read_only {
+            return Err(Error::ReadOnly);
+        }
+
+        // if target and source are same fnode, do nothing
+        if from == to {
+            return Ok(());
+        }
+
+        if to.starts_with(from) {
+            return Err(Error::InvalidArgument);
+        }
+
+        // sanity check source and target
+        {
+            let src = self.resolve(from)?;
+            {
+                let fnode = src.read().unwrap();
+                if !fnode.is_dir() {
+                    return Err(Error::NotDir);
+                }
+            }
+
+            match self.resolve(to) {
+                Ok(tgt) => {
+                    assert!(!Arc::ptr_eq(&tgt, &src));
+                    let fnode = tgt.read().unwrap();
+                    if !fnode.is_dir() {
+                        return Err(Error::NotDir);
+                    }
+                }
+                Err(ref err) if *err == Error::NotFound => {
+                    // create target dir if it doesn't exist
+                    self.create_fnode(to, FileType::Dir, Options::default())?;
+                }
+                Err(err) => return Err(err),
+            }
+        }
+
+        // copy dir tree
+        for child in self.read_dir(from)? {
+            let child_from = child.path();
+            let child_to = to.join(child.file_name());
+            match child.metadata().file_type() {
+                FileType::File => self.copy(&child_from, &child_to)?,
+                FileType::Dir => self.copy_dir_all(&child_from, &child_to)?,
+            }
+        }
 
         Ok(())
     }

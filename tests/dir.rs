@@ -160,4 +160,61 @@ fn dir_rename() {
     // rename dir to root
     repo.create_dir("/4").unwrap();
     assert_eq!(repo.rename("/4", "/").unwrap_err(), Error::IsRoot);
+
+    // rename dir to its parent
+    repo.create_dir_all("/5/1").unwrap();
+    assert_eq!(repo.rename("/5/1", "/5").unwrap_err(), Error::NotEmpty);
+}
+
+#[test]
+fn dir_copy() {
+    let mut env = common::TestEnv::new();
+    let repo = &mut env.repo;
+
+    repo.create_dir_all("/aaa/aaa1/aaa11").unwrap();
+    repo.create_dir_all("/aaa/aaa1/aaa12").unwrap();
+    repo.create_dir_all("/aaa/aaa2/").unwrap();
+    repo.create_dir("/aaa/aaa2/xxx").unwrap();
+    repo.create_dir_all("/bbb/bbb1").unwrap();
+    repo.create_dir("/bbb/aaa2").unwrap();
+    {
+        let _ = repo.create_file("/bbb/bbb2").unwrap();
+    }
+    repo.create_dir_all("/ccc/ccc1/ccc11").unwrap();
+
+    // #0: wrong cases
+    repo.copy_dir_all("/aaa", "/aaa").unwrap();
+    assert_eq!(
+        repo.copy_dir_all("/non-exist", "/xxx").unwrap_err(),
+        Error::NotFound
+    );
+    assert_eq!(
+        repo.copy_dir_all("/", "/aaa/aaa1").unwrap_err(),
+        Error::InvalidArgument
+    );
+    assert_eq!(
+        repo.copy_dir_all("/aaa", "/aaa/aaa1").unwrap_err(),
+        Error::InvalidArgument
+    );
+
+    // #1: copy to non-exist dir
+    repo.copy_dir_all("/aaa", "/xxx").unwrap();
+    assert!(repo.path_exists("/xxx").unwrap());
+    assert!(repo.path_exists("/xxx/aaa1").unwrap());
+    assert!(repo.path_exists("/xxx/aaa1/aaa11").unwrap());
+    assert!(repo.path_exists("/xxx/aaa2").unwrap());
+    assert!(repo.path_exists("/xxx/aaa2/xxx").unwrap());
+
+    // #2: copy to existing dir, this will merge to target dir
+    repo.copy_dir_all("/aaa", "/bbb").unwrap();
+    assert!(repo.path_exists("/bbb/bbb1").unwrap());
+    assert!(repo.path_exists("/bbb/aaa1").unwrap());
+    assert!(repo.path_exists("/bbb/aaa1/aaa11").unwrap());
+    assert!(repo.path_exists("/bbb/aaa2").unwrap());
+    assert!(repo.path_exists("/bbb/aaa2/xxx").unwrap());
+    assert!(repo.is_file("/bbb/bbb2").unwrap());
+
+    // #3: copy from child to parent
+    repo.copy_dir_all("/ccc/ccc1", "/ccc").unwrap();
+    assert!(repo.path_exists("/ccc/ccc11").unwrap());
 }
