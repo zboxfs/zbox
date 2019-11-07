@@ -14,7 +14,7 @@ use volume::BLK_SIZE;
 // redis key for repo lock
 #[inline]
 fn repo_lock_key() -> String {
-    format!("repo_lock:")
+    "repo_lock:".to_string()
 }
 
 // redis key for super block
