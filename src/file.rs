@@ -118,8 +118,11 @@ impl Seek for VersionReader {
 ///
 /// # Writing
 ///
-/// The file content is cached internally for deduplication and will be handled
+/// File content is cached internally for deduplication and will be handled
 /// automatically, thus calling [`flush`] is **not** recommended.
+///
+/// `File` can be sent to multiple threads, but only thread can modify it at
+/// a time, which is similar to a `RwLock`.
 ///
 /// `File` is multi-versioned, each time updating its content will create a new
 /// permanent [`Version`]. There are two ways of writing data to a file:
