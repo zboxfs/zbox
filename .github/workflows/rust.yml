@@ -20,7 +20,7 @@ jobs:
       working-directory: $GITHUB_WORKSPACE
       env:
         LIBSODIUM: libsodium-1.0.17
-        LIBSODIUM-DIR: ./libsodium
+        LIBSODIUM-DIR: $GITHUB_WORKSPACE/libsodium
       
     - name: Build
       run: cargo build --verbose
