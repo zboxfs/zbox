@@ -12,12 +12,11 @@ jobs:
       
     - name: Build libsodium
       run: |
-        mkdir -p $LIBSODIUM-DIR
         wget -nv https://download.libsodium.org/libsodium/releases/$LIBSODIUM.tar.gz
         ls
-        tar -xzvf $LIBSODIUM.tar.gz -C $LIBSODIUM-DIR
-        ls $LIBSODIUM-DIR
-        cd $LIBSODIUM-DIR && ./configure --prefix=/usr && make && sudo make install
+        tar -xzvf $LIBSODIUM.tar.gz
+        ls $LIBSODIUM
+        cd $LIBSODIUM && ./configure --prefix=/usr && make && sudo make install
       env:
         LIBSODIUM: libsodium-1.0.17
         LIBSODIUM-DIR: ./libsodium
