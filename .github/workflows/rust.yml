@@ -9,7 +9,21 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
+      
+    - name: Build libsodium
+      run: |
+        mkdir -p $LIBSODIUM-DIR
+        wget https://download.libsodium.org/libsodium/releases/$LIBSODIUM.tar.gz
+        tar -xzf $LIBSODIUM.tar.gz -C $LIBSODIUM-DIR
+        cd $LIBSODIUM-DIR
+        ./configure --prefix=/usr && make && sudo make install
+      working-directory: $GITHUB_WORKSPACE
+      env:
+        LIBSODIUM: libsodium-1.0.17
+        LIBSODIUM-DIR: ./libsodium
+      
     - name: Build
       run: cargo build --verbose
+      
     - name: Run tests
       run: cargo test --verbose
