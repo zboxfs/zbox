@@ -12,7 +12,7 @@ jobs:
       
     - name: Build libsodium
       run: |
-        mkdir -p $LIBSODIUM-DIR
+        pwd
       working-directory: $GITHUB_WORKSPACE
       env:
         LIBSODIUM: libsodium-1.0.17
