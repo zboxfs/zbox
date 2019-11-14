@@ -17,7 +17,7 @@ jobs:
       uses: actions/cache@v1
       with:
         path: $LIBSODIUM
-        key: ${{ runner.os }}-libsodium
+        key: ${{ runner.os }}-libsodium-1.0.17
         
     - name: Build libsodium
       if: steps.cache-libsodium.outputs.cache-hit != 'true'
