@@ -24,10 +24,9 @@ jobs:
     - name: Build libsodium
       if: steps.cache-libsodium.outputs.cache-hit != 'true'
       run: |
-        echo $HOME
-        echo $GITHUB_WORKSPACE
         wget -nv https://download.libsodium.org/libsodium/releases/$LIBSODIUM.tar.gz
         tar -xzf $LIBSODIUM.tar.gz
+        echo $LIBSODIUM_INSTALL
         cd $LIBSODIUM && ./configure --prefix=$LIBSODIUM_INSTALL && make && sudo make install
       
     - name: Build ZboxFS
