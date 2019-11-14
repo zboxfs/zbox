@@ -1,4 +1,4 @@
-name: Rust
+name: build
 
 on: [push]
 
@@ -11,29 +11,29 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
-      
+
     - name: Cache libsodium
       id: cache-libsodium
       uses: actions/cache@v1
       with:
         path: libsodium-1.0.17
         key: ${{ runner.os }}-libsodium-1.0.17
-        
+
     - name: Build libsodium
       if: steps.cache-libsodium.outputs.cache-hit != 'true'
       run: |
         wget -nv https://download.libsodium.org/libsodium/releases/$LIBSODIUM.tar.gz
         tar -xzf $LIBSODIUM.tar.gz
         cd $LIBSODIUM && ./configure --prefix=/usr && make
-      
+
     - name: Install libsodium
       run: cd $LIBSODIUM && sudo make install
-      
+
     - name: Build ZboxFS
       run: cargo build
-      
+
     - name: Run ZboxFS tests
       run: cargo test
-    
+
     - name: Run ZboxFS file storage tests
       run: cargo test --features storage-file

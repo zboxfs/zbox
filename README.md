@@ -1,10 +1,10 @@
 <img src="https://zboxfs.github.io/zbox/images/logo.svg" alt="ZboxFS Logo" height="96" /> ZboxFS
 ======
-[![Travis](https://img.shields.io/travis/zboxfs/zbox.svg?style=flat-square)](https://travis-ci.org/zboxfs/zbox)
-[![Crates.io](https://img.shields.io/crates/d/zbox.svg?style=flat-square)](https://crates.io/crates/zbox)
-[![Crates.io](https://img.shields.io/crates/v/zbox.svg?style=flat-square)](https://crates.io/crates/zbox)
-[![GitHub last commit](https://img.shields.io/github/last-commit/zboxfs/zbox.svg?style=flat-square)](https://github.com/zboxfs/zbox)
-[![license](https://img.shields.io/github/license/zboxfs/zbox.svg?style=flat-square)](https://github.com/zboxfs/zbox)
+[![GitHub action](https://github.com/zboxfs/zbox/workflows/build/badge.svg)](https://github.com/zboxfs/zbox/actions)
+[![Crates.io](https://img.shields.io/crates/d/zbox.svg)](https://crates.io/crates/zbox)
+[![Crates.io](https://img.shields.io/crates/v/zbox.svg)](https://crates.io/crates/zbox)
+[![GitHub last commit](https://img.shields.io/github/last-commit/zboxfs/zbox.svg)](https://github.com/zboxfs/zbox)
+[![license](https://img.shields.io/github/license/zboxfs/zbox.svg)](https://github.com/zboxfs/zbox)
 [![GitHub stars](https://img.shields.io/github/stars/zboxfs/zbox.svg?style=social&label=Stars)](https://github.com/zboxfs/zbox)
 
 ZboxFS is a zero-details, privacy-focused in-app file system. Its goal is
