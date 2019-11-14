@@ -16,7 +16,7 @@ jobs:
       id: cache-libsodium
       uses: actions/cache@v1
       with:
-        path: $LIBSODIUM
+        path: libsodium-1.0.17
         key: ${{ runner.os }}-libsodium-1.0.17
         
     - name: Build libsodium
