@@ -2,9 +2,11 @@ name: Rust
 
 on: [push]
 
+env:
+  LIBSODIUM: libsodium-1.0.17
+
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -14,7 +16,7 @@ jobs:
       id: cache-libsodium
       uses: actions/cache@v1
       with:
-        path: libsodium-1.0.17
+        path: $LIBSODIUM
         key: ${{ runner.os }}-libsodium
         
     - name: Build libsodium
@@ -23,11 +25,12 @@ jobs:
         wget -nv https://download.libsodium.org/libsodium/releases/$LIBSODIUM.tar.gz
         tar -xzf $LIBSODIUM.tar.gz
         cd $LIBSODIUM && ./configure --prefix=/usr && make && sudo make install
-      env:
-        LIBSODIUM: libsodium-1.0.17
       
-    - name: Build
-      run: cargo build --verbose
+    - name: Build ZboxFS
+      run: cargo build
       
-    - name: Run tests
-      run: cargo test --verbose
+    - name: Run ZboxFS tests
+      run: cargo test
+    
+    - name: Run ZboxFS file storage tests
+      run: cargo test --features storage-file
