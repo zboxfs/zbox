@@ -4,6 +4,9 @@ on: [push]
 
 env:
   LIBSODIUM: libsodium-1.0.17
+  LIBSODIUM-INSTALL: $HOME
+  SODIUM_LIB_DIR: $LIBSODIUM-INSTALL/lib
+  SODIUM_STATIC: true
 
 jobs:
   build:
@@ -16,15 +19,15 @@ jobs:
       id: cache-libsodium
       uses: actions/cache@v1
       with:
-        path: $LIBSODIUM
-        key: ${{ runner.os }}-libsodium
+        path: $SODIUM_LIB_DIR
+        key: ${{ runner.os }}-$LIBSODIUM
         
     - name: Build libsodium
       if: steps.cache-libsodium.outputs.cache-hit != 'true'
       run: |
         wget -nv https://download.libsodium.org/libsodium/releases/$LIBSODIUM.tar.gz
         tar -xzf $LIBSODIUM.tar.gz
-        cd $LIBSODIUM && ./configure --prefix=/usr && make && sudo make install
+        cd $LIBSODIUM && ./configure --prefix=$LIBSODIUM-INSTALL && make && sudo make install
       
     - name: Build ZboxFS
       run: cargo build
