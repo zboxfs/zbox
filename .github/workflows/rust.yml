@@ -10,16 +10,21 @@ jobs:
     steps:
     - uses: actions/checkout@v1
       
+    - name: Cache libsodium
+      id: cache-libsodium
+      uses: actions/cache@v1
+      with:
+        path: libsodium-1.0.17
+        key: {{ runner.os }}-libsodium
+        
     - name: Build libsodium
+      if: steps.cache-libsodium.outputs.cache-hit != 'true'
       run: |
         wget -nv https://download.libsodium.org/libsodium/releases/$LIBSODIUM.tar.gz
-        ls
-        tar -xzvf $LIBSODIUM.tar.gz
-        ls $LIBSODIUM
+        tar -xzf $LIBSODIUM.tar.gz
         cd $LIBSODIUM && ./configure --prefix=/usr && make && sudo make install
       env:
         LIBSODIUM: libsodium-1.0.17
-        LIBSODIUM-DIR: ./libsodium
       
     - name: Build
       run: cargo build --verbose
