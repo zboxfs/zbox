@@ -4,8 +4,8 @@ on: [push]
 
 env:
   LIBSODIUM: libsodium-1.0.17
-  LIBSODIUM_INSTALL: ${HOME}
-  SODIUM_LIB_DIR: $LIBSODIUM_INSTALL/lib
+  LIBSODIUM_INSTALL: /var/libsodium
+  SODIUM_LIB_DIR: /var/libsodium/lib
 
 jobs:
   build:
@@ -24,6 +24,7 @@ jobs:
     - name: Build libsodium
       if: steps.cache-libsodium.outputs.cache-hit != 'true'
       run: |
+        mkdir -p $LIBSODIUM_INSTALL
         wget -nv https://download.libsodium.org/libsodium/releases/$LIBSODIUM.tar.gz
         tar -xzf $LIBSODIUM.tar.gz
         echo $LIBSODIUM_INSTALL
