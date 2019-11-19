@@ -50,6 +50,7 @@ pub enum Error {
     NotInSync,
     RepoOpened,
     RepoClosed,
+    RepoExists,
 
     InTrans,
     NotInTrans,
@@ -128,6 +129,7 @@ impl Display for Error {
             Error::NotInSync => write!(f, "Repo is not in sync"),
             Error::RepoOpened => write!(f, "Repo is opened"),
             Error::RepoClosed => write!(f, "Repo is closed"),
+            Error::RepoExists => write!(f, "Repo already exists"),
 
             Error::InTrans => write!(f, "Already in transaction"),
             Error::NotInTrans => write!(f, "Not in transaction"),
@@ -210,6 +212,7 @@ impl StdError for Error {
             Error::NotInSync => "Repo is not in sync",
             Error::RepoOpened => "Repo is opened",
             Error::RepoClosed => "Repo is closed",
+            Error::RepoExists => "Repo already exists",
 
             Error::InTrans => "Already in transaction",
             Error::NotInTrans => "Not in transaction",
@@ -384,6 +387,7 @@ impl Into<i32> for Error {
             Error::NotInSync => -1025,
             Error::RepoOpened => -1026,
             Error::RepoClosed => -1027,
+            Error::RepoExists => -1028,
 
             Error::InTrans => -1030,
             Error::NotInTrans => -1031,
@@ -464,6 +468,7 @@ impl PartialEq for Error {
             (&Error::NotInSync, &Error::NotInSync) => true,
             (&Error::RepoOpened, &Error::RepoOpened) => true,
             (&Error::RepoClosed, &Error::RepoClosed) => true,
+            (&Error::RepoExists, &Error::RepoExists) => true,
 
             (&Error::InTrans, &Error::InTrans) => true,
             (&Error::NotInTrans, &Error::NotInTrans) => true,

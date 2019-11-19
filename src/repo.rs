@@ -253,7 +253,7 @@ impl RepoOpener {
             }
             if Repo::exists(uri)? {
                 if self.create_new {
-                    return Err(Error::AlreadyExists);
+                    return Err(Error::RepoExists);
                 }
                 Repo::open(uri, pwd, self.read_only, self.force)
             } else {

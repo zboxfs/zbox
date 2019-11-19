@@ -109,7 +109,7 @@ fn repo_oper() {
                 .create_new(true)
                 .open(&path, &pwd)
                 .unwrap_err(),
-            Error::AlreadyExists
+            Error::RepoExists
         );
         RepoOpener::new().create(true).open(&path, &pwd).unwrap();
     }
