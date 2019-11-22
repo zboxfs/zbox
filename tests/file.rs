@@ -35,6 +35,9 @@ fn verify_content(f: &mut File, buf: &[u8]) {
     let result = rdr.read_to_end(&mut dst).unwrap();
     assert_eq!(result, buf.len());
     assert_eq!(&dst[..], &buf[..]);
+    let ver = rdr.version().unwrap();
+    assert_eq!(ver_num, ver.num());
+    assert_eq!(result, ver.content_len());
 }
 
 #[test]

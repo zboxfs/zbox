@@ -515,8 +515,8 @@ impl Fnode {
         }
     }
 
-    // get specified version
-    fn ver(&self, ver_num: usize) -> Option<&Version> {
+    /// get a specified version
+    pub fn ver(&self, ver_num: usize) -> Option<&Version> {
         self.vers.iter().find(|v| v.num == ver_num)
     }
 
@@ -720,6 +720,11 @@ impl Reader {
         let ver = fnode.curr_ver_num();
         let rdr = fnode.version_reader(ver)?;
         Ok(Reader { ver, rdr })
+    }
+
+    #[inline]
+    pub fn version_num(&self) -> usize {
+        self.ver
     }
 }
 

@@ -30,6 +30,15 @@ impl VersionReader {
             rdr,
         })
     }
+
+    /// Returns the content version associated with this reader.
+    pub fn version(&self) -> Result<Version> {
+        let fnode = self.handle.fnode.read().unwrap();
+        fnode
+            .ver(self.rdr.version_num())
+            .map(|v| v.clone())
+            .ok_or(Error::NoVersion)
+    }
 }
 
 impl Read for VersionReader {
