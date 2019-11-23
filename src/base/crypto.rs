@@ -449,9 +449,8 @@ impl HashState {
 /// Password hash operation limit.
 ///
 /// It represents a maximum amount of computations to perform. Higher level
-/// will require more CPU cycles to compute.
-///
-/// It is used with [MemLimit](enum.MemLimit.html).
+/// will require more CPU cycles to compute. It is often used with
+/// [MemLimit](enum.MemLimit.html).
 ///
 /// For interactive, online operations, `OpsLimit::Interactive` and
 /// `MemLimit::Interactive` provide base line for these two parameters. This
@@ -506,9 +505,7 @@ impl From<i32> for OpsLimit {
 /// Password hash memory limit.
 ///
 /// It represents a maximum amount of memory required to perform password
-/// hashing.
-///
-/// It is used with [OpsLimit](enum.OpsLimit.html).
+/// hashing. It is often used with [OpsLimit](enum.OpsLimit.html).
 ///
 /// For interactive, online operations, `OpsLimit::Interactive` and
 /// `MemLimit::Interactive` provide base line for these two parameters. This
@@ -651,10 +648,19 @@ impl Default for Key {
 /// more details.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 pub enum Cipher {
-    /// XChaCha20-Poly1305
+    /// XChaCha20-Poly1305-IETF
+    /// - Key size: 256 bits
+    /// - Nonce size: 192 bits
+    /// - Block size: 512 bits
+    /// - MAC size: 128 bits
     Xchacha = 0,
 
-    /// AES256-GCM, hardware only
+    /// AES256-GCM, requires hardware support the Intel SSSE3 extensions,
+    /// as well as the `aesni` and `pclmul` instructions.
+    /// - Key size: 256 bits
+    /// - Nonce size: 96 bits
+    /// - Block size: 128 bits
+    /// - MAC size: 128 bits
     Aes = 1,
 }
 

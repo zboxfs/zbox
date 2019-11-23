@@ -180,7 +180,7 @@ impl Metadata {
 ///
 /// An instance of `DirEntry` represents an entry inside of a directory in the
 /// repository. Each entry can be inspected via methods to learn about the
-/// full path or other metadata.
+/// absolute path or other metadata.
 ///
 /// [`read_dir`]: struct.Repo.html#method.read_dir
 #[derive(Debug)]
@@ -191,7 +191,7 @@ pub struct DirEntry {
 }
 
 impl DirEntry {
-    /// Returns the full path to the file that this entry represents.
+    /// Returns the absolute path to the file that this entry represents.
     pub fn path(&self) -> &Path {
         self.path.as_path()
     }
