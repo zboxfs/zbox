@@ -609,6 +609,13 @@ impl Fs {
             Fnode::add_child(&tgt_parent, &src, &name)
         })
     }
+
+    /// Destroy the whole file system
+    #[inline]
+    pub fn destroy(uri: &str) -> Result<()> {
+        let mut vol = Volume::new(uri)?;
+        vol.destroy()
+    }
 }
 
 impl Drop for Fs {

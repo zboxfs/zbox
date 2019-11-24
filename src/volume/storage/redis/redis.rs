@@ -1,7 +1,7 @@
 use std::fmt::{self, Debug};
 use std::sync::Mutex;
 
-use redis::{Client, Commands, Connection};
+use redis::{self, Client, Commands, Connection};
 
 use base::crypto::{Crypto, Key};
 use base::IntoRef;
@@ -229,6 +229,22 @@ impl Storable for RedisStorage {
     #[inline]
     fn flush(&mut self) -> Result<()> {
         Ok(())
+    }
+
+    fn destroy(&mut self) -> Result<()> {
+        let key = repo_lock_key();
+        if self.get_bytes(&key).is_ok() {
+            // repo is locked
+            warn!("Destroy an opened repo");
+        }
+        match self.conn {
+            Some(ref conn) => {
+                let mut conn = conn.lock().unwrap();
+                redis::cmd("FLUSHDB").execute(&mut *conn);
+                Ok(())
+            }
+            None => unreachable!(),
+        }
     }
 }
 

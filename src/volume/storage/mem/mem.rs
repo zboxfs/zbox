@@ -57,7 +57,7 @@ impl MemStorage {
         let depot = storages.get_mut(&self.loc).unwrap();
         if depot.is_opened {
             if force {
-                warn!("Repo was locked, forced to open");
+                warn!("Repo is locked, forced to open");
             } else {
                 return Err(Error::RepoOpened);
             }
@@ -192,6 +192,16 @@ impl Storable for MemStorage {
 
     #[inline]
     fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn destroy(&mut self) -> Result<()> {
+        let mut storages = STORAGES.lock().unwrap();
+        if let Some(depot) = storages.remove(&self.loc) {
+            if depot.is_opened {
+                warn!("Destroyed an opened repo");
+            }
+        }
         Ok(())
     }
 }

@@ -303,6 +303,11 @@ impl Storage {
     pub fn flush(&mut self) -> Result<()> {
         self.depot.flush()
     }
+
+    #[inline]
+    pub fn destroy(&mut self) -> Result<()> {
+        self.depot.destroy()
+    }
 }
 
 impl Default for Storage {

@@ -233,6 +233,15 @@ impl Storable for FileStorage {
     fn flush(&mut self) -> Result<()> {
         self.idx_mgr.flush()
     }
+
+    #[inline]
+    fn destroy(&mut self) -> Result<()> {
+        if self.lock_path().exists() {
+            warn!("Destroy an opened repo");
+        }
+        let _ = vio::remove_dir_all(&self.base)?;
+        Ok(())
+    }
 }
 
 impl Drop for FileStorage {

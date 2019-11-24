@@ -7,6 +7,7 @@ use std::thread::panicking;
 use libsqlite3_sys as ffi;
 
 use base::crypto::{Crypto, Key};
+use base::vio;
 use error::{Error, Result};
 use trans::Eid;
 use volume::address::Span;
@@ -117,8 +118,8 @@ fn run_select_blob(stmt: *mut ffi::sqlite3_stmt) -> Result<Vec<u8>> {
 
 /// Sqlite Storage
 pub struct SqliteStorage {
-    is_attached: bool, // attached to sqlite db
-    filename: CString,
+    is_attached: bool,  // attached to sqlite db
+    file_path: CString, // database file path
     db: *mut ffi::sqlite3,
     stmts: Vec<*mut ffi::sqlite3_stmt>,
 }
@@ -131,10 +132,10 @@ impl SqliteStorage {
     const TBL_ADDRESSES: &'static str = "addresses";
     const TBL_BLOCKS: &'static str = "blocks";
 
-    pub fn new(filename: &str) -> Self {
+    pub fn new(file_path: &str) -> Self {
         SqliteStorage {
             is_attached: false,
-            filename: CString::new(filename).unwrap(),
+            file_path: CString::new(file_path).unwrap(),
             db: ptr::null_mut(),
             stmts: Vec::with_capacity(14),
         }
@@ -196,7 +197,7 @@ impl SqliteStorage {
         ))?;
         self.prepare_sql(format!(
             "
-            INSERT INTO {}(suffix, data) VALUES (?, ?)
+            INSERT OR REPLACE INTO {}(suffix, data) VALUES (?, ?)
         ",
             Self::TBL_SUPER_BLOCK
         ))?;
@@ -297,7 +298,7 @@ impl Storable for SqliteStorage {
         let mut db: *mut ffi::sqlite3 = ptr::null_mut();
         let result = unsafe {
             ffi::sqlite3_open_v2(
-                self.filename.as_ptr(),
+                self.file_path.as_ptr(),
                 &mut db,
                 ffi::SQLITE_OPEN_READONLY,
                 ptr::null(),
@@ -312,7 +313,7 @@ impl Storable for SqliteStorage {
     fn connect(&mut self, _force: bool) -> Result<()> {
         let result = unsafe {
             ffi::sqlite3_open_v2(
-                self.filename.as_ptr(),
+                self.file_path.as_ptr(),
                 &mut self.db,
                 ffi::SQLITE_OPEN_READWRITE
                     | ffi::SQLITE_OPEN_CREATE
@@ -524,6 +525,23 @@ impl Storable for SqliteStorage {
     fn flush(&mut self) -> Result<()> {
         Ok(())
     }
+
+    #[inline]
+    fn destroy(&mut self) -> Result<()> {
+        if self.prepare_stmts().is_ok() {
+            let stmt = self.stmts[0];
+            reset_stmt(stmt)?;
+            match unsafe { ffi::sqlite3_step(stmt) } {
+                ffi::SQLITE_ROW => {
+                    // repo is locked
+                    warn!("Destroy an opened repo");
+                }
+                _ => {}
+            }
+        }
+        let _ = vio::remove_file(self.file_path.to_str().unwrap())?;
+        Ok(())
+    }
 }
 
 impl Drop for SqliteStorage {
@@ -560,7 +578,7 @@ impl Drop for SqliteStorage {
 impl Debug for SqliteStorage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("SqliteStorage")
-            .field("filename", &self.filename)
+            .field("file_path", &self.file_path)
             .finish()
     }
 }

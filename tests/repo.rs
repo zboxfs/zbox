@@ -1,4 +1,5 @@
 #![cfg(any(
+    feature = "storage-mem",
     feature = "storage-file",
     feature = "storage-sqlite",
     feature = "storage-redis"
@@ -15,7 +16,14 @@ use zbox::{
     init_env, Cipher, Error, MemLimit, OpenOptions, OpsLimit, Repo, RepoOpener,
 };
 
-#[cfg(feature = "storage-file")]
+#[cfg(all(
+    any(
+        feature = "storage-mem",
+        feature = "storage-file",
+        feature = "storage-sqlite"
+    ),
+    not(feature = "storage-redis")
+))]
 #[test]
 fn repo_oper() {
     init_env();
@@ -23,11 +31,27 @@ fn repo_oper() {
     let pwd = "pwd";
     let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
     let dir = tmpdir.path().to_path_buf();
-    //let dir = std::path::PathBuf::from("./tt");
-    if dir.exists() {
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-    let base = "file://".to_string() + dir.to_str().unwrap();
+    let base = {
+        #[cfg(all(
+            feature = "storage-mem",
+            not(feature = "storage-file"),
+            not(feature = "storage-sqlite"),
+            not(feature = "storage-redis")
+        ))]
+        {
+            "mem://".to_string()
+        }
+
+        #[cfg(feature = "storage-file")]
+        {
+            "file://".to_string() + dir.to_str().unwrap()
+        }
+
+        #[cfg(feature = "storage-sqlite")]
+        {
+            "sqlite://".to_string() + dir.to_str().unwrap()
+        }
+    };
 
     // case #1: create a new repo with default options and then re-open it
     let path = base.clone() + "/repo";
@@ -237,6 +261,23 @@ fn repo_oper() {
             .unwrap();
         let _repo2 = RepoOpener::new().force(true).open(&path, &pwd).unwrap();
     }
+
+    // case #13: test destroy repo
+    {
+        let path = base.clone() + "/repo13";
+        {
+            let _repo = RepoOpener::new()
+                .create_new(true)
+                .open(&path, &pwd)
+                .unwrap();
+        }
+        Repo::destroy(&path).unwrap();
+        assert!(RepoOpener::new().open(&path, &pwd).is_err());
+    }
+
+    // to suppress unused variable warning
+    drop(dir);
+    drop(tmpdir);
 }
 
 fn smoke_test(uri: String) {
@@ -280,30 +321,48 @@ fn smoke_test(uri: String) {
         let dirs = repo.read_dir("/").unwrap();
         assert_eq!(dirs.len(), 1);
     }
+
+    // destroy repo
+    {
+        Repo::destroy(&uri).unwrap();
+        assert!(RepoOpener::new().open(&uri, "pwd").is_err());
+    }
 }
 
 #[test]
 fn repo_smoke_test() {
     let tmpdir = TempDir::new("zbox_test").expect("Create temp dir failed");
-    let uri;
 
-    #[cfg(feature = "storage-file")]
-    {
-        let base = "file://".to_string() + tmpdir.path().to_str().unwrap();
-        uri = base + "/repo";
-    }
+    let uri = {
+        #[cfg(all(
+            feature = "storage-mem",
+            not(feature = "storage-file"),
+            not(feature = "storage-sqlite"),
+            not(feature = "storage-redis")
+        ))]
+        {
+            "mem://repo_smoke_test".to_string()
+        }
+        #[cfg(feature = "storage-file")]
+        {
+            let base = "file://".to_string() + tmpdir.path().to_str().unwrap();
+            base + "/repo"
+        }
 
-    #[cfg(feature = "storage-sqlite")]
-    {
-        let file = tmpdir.path().join("zbox.db");
-        uri = "sqlite://".to_string() + file.to_str().unwrap();
-    }
+        #[cfg(feature = "storage-sqlite")]
+        {
+            let file = tmpdir.path().join("zbox.db");
+            "sqlite://".to_string() + file.to_str().unwrap()
+        }
 
-    #[cfg(feature = "storage-redis")]
-    {
-        let _ = tmpdir;
-        uri = "redis://localhost:6379".to_string();
-    }
+        #[cfg(feature = "storage-redis")]
+        {
+            "redis://localhost:6379".to_string()
+        }
+    };
 
     smoke_test(uri);
+
+    // to suppress unused variable warning
+    drop(tmpdir);
 }

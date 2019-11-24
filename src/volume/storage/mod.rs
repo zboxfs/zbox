@@ -83,6 +83,9 @@ pub trait Storable: Debug + Send + Sync {
     // flush possibly buffered wal, address and block to storage,
     // storage must gurantee write is persistent
     fn flush(&mut self) -> Result<()>;
+
+    // permanently destroy this storage
+    fn destroy(&mut self) -> Result<()>;
 }
 
 /// Dummy storage
@@ -171,6 +174,11 @@ impl Storable for DummyStorage {
 
     #[inline]
     fn flush(&mut self) -> Result<()> {
+        unimplemented!()
+    }
+
+    #[inline]
+    fn destroy(&mut self) -> Result<()> {
         unimplemented!()
     }
 }

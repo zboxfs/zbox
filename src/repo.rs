@@ -727,6 +727,7 @@ impl Repo {
     /// damaged. If it is the case, use
     /// [repair_super_block](struct.Repo.html#method.repair_super_block)
     /// to restore super block before re-opening the repo.
+    #[inline]
     pub fn reset_password(
         &mut self,
         old_pwd: &str,
@@ -958,6 +959,15 @@ impl Repo {
         to: Q,
     ) -> Result<()> {
         self.fs.rename(from.as_ref(), to.as_ref())
+    }
+
+    /// Permanently destroy a repository specified by `uri`.
+    ///
+    /// This will permanently delete all files and directories in a repository
+    /// regardless it is opened or not. Use it with caution.
+    #[inline]
+    pub fn destroy(uri: &str) -> Result<()> {
+        Fs::destroy(uri)
     }
 }
 

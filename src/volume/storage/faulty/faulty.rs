@@ -58,7 +58,7 @@ impl Storable for FaultyStorage {
     fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
         let mut inner = self.inner.write().unwrap();
         assert!(!inner.contains_key(&self.loc));
-        inner.insert(self.loc.to_string(), MemStorage::new());
+        inner.insert(self.loc.to_string(), MemStorage::new("faulty"));
         Ok(())
     }
 
@@ -164,6 +164,11 @@ impl Storable for FaultyStorage {
         let mut inner = self.inner.write().unwrap();
         let ms = inner.get_refresh(&self.loc).unwrap();
         ms.flush()
+    }
+
+    #[inline]
+    fn destroy(&mut self) -> Result<()> {
+        unimplemented!()
     }
 }
 

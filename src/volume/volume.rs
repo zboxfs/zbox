@@ -174,6 +174,7 @@ impl Volume {
         storage.get_allocator()
     }
 
+    // delete a wal
     #[inline]
     pub fn del_wal(&mut self, id: &Eid) -> Result<()> {
         let mut storage = self.storage.write().unwrap();
@@ -191,6 +192,14 @@ impl Volume {
     pub fn flush(&mut self) -> Result<()> {
         let mut storage = self.storage.write().unwrap();
         storage.flush()
+    }
+
+    // permanently destroy a volume
+    #[inline]
+    pub fn destroy(&mut self) -> Result<()> {
+        let mut storage = self.storage.write().unwrap();
+        storage.connect(false)?;
+        storage.destroy()
     }
 }
 

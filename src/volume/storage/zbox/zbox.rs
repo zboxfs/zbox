@@ -270,6 +270,11 @@ impl Storable for ZboxStorage {
         let mut local_cache = self.local_cache.write().unwrap();
         local_cache.flush()
     }
+
+    #[inline]
+    fn destroy(&mut self) -> Result<()> {
+        unimplemented!()
+    }
 }
 
 impl Debug for ZboxStorage {
