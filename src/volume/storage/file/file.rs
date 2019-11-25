@@ -239,7 +239,7 @@ impl Storable for FileStorage {
         if self.lock_path().exists() {
             warn!("Destroy an opened repo");
         }
-        let _ = vio::remove_dir_all(&self.base)?;
+        vio::remove_dir_all(&self.base)?;
         Ok(())
     }
 }

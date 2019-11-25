@@ -36,7 +36,7 @@ impl VersionReader {
         let fnode = self.handle.fnode.read().unwrap();
         fnode
             .ver(self.rdr.version_num())
-            .map(|v| v.clone())
+            .cloned()
             .ok_or(Error::NoVersion)
     }
 }

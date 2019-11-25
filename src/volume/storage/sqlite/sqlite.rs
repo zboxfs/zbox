@@ -531,15 +531,12 @@ impl Storable for SqliteStorage {
         if self.prepare_stmts().is_ok() {
             let stmt = self.stmts[0];
             reset_stmt(stmt)?;
-            match unsafe { ffi::sqlite3_step(stmt) } {
-                ffi::SQLITE_ROW => {
-                    // repo is locked
-                    warn!("Destroy an opened repo");
-                }
-                _ => {}
+            if let ffi::SQLITE_ROW = unsafe { ffi::sqlite3_step(stmt) } {
+                // repo is locked
+                warn!("Destroy an opened repo");
             }
         }
-        let _ = vio::remove_file(self.file_path.to_str().unwrap())?;
+        vio::remove_file(self.file_path.to_str().unwrap())?;
         Ok(())
     }
 }
