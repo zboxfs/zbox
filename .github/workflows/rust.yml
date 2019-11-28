@@ -37,3 +37,21 @@ jobs:
 
     - name: Run ZboxFS file storage tests
       run: cargo test --features storage-file
+     
+  build-win:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v1
+      
+    - name: Download libsodium
+      run: Invoke-WebRequest https://download.libsodium.org/libsodium/releases/libsodium-1.0.17-msvc.zip -OutFile libsodium-1.0.17-msvc.zip
+      
+    - name: Build ZboxFS
+      run: cargo build
+
+    - name: Run ZboxFS tests
+      run: cargo test
+
+    - name: Run ZboxFS file storage tests
+      run: cargo test --features storage-file
