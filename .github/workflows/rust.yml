@@ -6,7 +6,7 @@ env:
   LIBSODIUM: libsodium-1.0.17
 
 jobs:
-  build:
+  build-linux:
     runs-on: ubuntu-latest
 
     steps:
@@ -46,8 +46,16 @@ jobs:
     
     steps:
     - uses: actions/checkout@v1
+    
+    - name: Cache libsodium
+      id: cache-libsodium
+      uses: actions/cache@v1
+      with:
+        path: libsodium-1.0.17
+        key: ${{ runner.os }}-libsodium-1.0.17
       
     - name: Download libsodium
+      if: steps.cache-libsodium.outputs.cache-hit != 'true'
       run: |
         Invoke-WebRequest https://download.libsodium.org/libsodium/releases/${env:LIBSODIUM}-msvc.zip -OutFile ${env:LIBSODIUM}-msvc.zip
         Expand-Archive ${env:LIBSODIUM}-msvc.zip -DestinationPath ${env:LIBSODIUM}
