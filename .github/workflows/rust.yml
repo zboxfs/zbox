@@ -40,12 +40,17 @@ jobs:
      
   build-win:
     runs-on: windows-latest
+    env:
+      SODIUM_LIB_DIR: libsodium-1.0.17\x64\Release\v141\static
+      SODIUM_STATIC: 1
     
     steps:
     - uses: actions/checkout@v1
       
     - name: Download libsodium
-      run: Invoke-WebRequest https://download.libsodium.org/libsodium/releases/libsodium-1.0.17-msvc.zip -OutFile libsodium-1.0.17-msvc.zip
+      run: |
+        Invoke-WebRequest https://download.libsodium.org/libsodium/releases/${env:LIBSODIUM}-msvc.zip -OutFile ${env:LIBSODIUM}-msvc.zip
+        Expand-Archive ${env:LIBSODIUM}-msvc.zip -DestinationPath ${env:LIBSODIUM}
       
     - name: Build ZboxFS
       run: cargo build
