@@ -14,7 +14,7 @@ a virtual file system and exclusive access to authorised application.
 
 Unlike other system-level file systems, such as [ext4], [XFS] and [Btrfs], which
 provide shared access to multiple processes, ZboxFS is a file system that runs
-in the same memory space as the application. It only provides access to one
+in the same memory space as the application. It provides access to only one
 process at a time.
 
 By abstracting IO access, ZboxFS supports a variety of underlying storage layers,
