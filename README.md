@@ -92,6 +92,83 @@ corresponding Cargo feature when building ZboxFS.
 
 \* Visit [zbox.io](https://zbox.io) to learn more about Zbox Cloud Storage.
 
+## Specs
+
+| Algorithm and data structure         | Value                             |
+| ------------------------------------ | --------------------------------- |
+| Authenticated encryption             | AES-256-GCM or XChaCha20-Poly1305 |
+| Password hash                        | Argon2                            |
+| Key derivation                       | BLAKE2B                           |
+| Content dedup                        | Rabin rolling hash                |
+| File dedup                           | Merkle tree                       |
+| Index structure                      | Log-structured merge-tree         |
+| Compression                          | LZ4 in fast mode                  |
+
+### Limits
+
+| Limit                                     | Value                        |
+| ----------------------------------------- | ---------------------------- |
+| Data block size                           | 8 KiB                        |
+| Maximum encryption frame size             | 128 KiB                      |
+| Super block size                          | 8 KiB                        |
+| Maximum data file size (file storage)     | 32 MiB                       |
+| Maximum filename length                   | No limit                     |
+| Allowable characters in directory entries | Any UTF-8 character except / |
+| Maximum pathname length                   | No limit                     |
+| Maximum file size                         | 16 EiB                       |
+| Maximum repo size                         | 16 EiB                       |
+| Max number of files                       | No limit                     |
+
+### Metadata
+
+| Metadata                                  | Value                        |
+| ----------------------------------------- | ---------------------------- |
+| Stores file owner                         | No                           |
+| POSIX file permissions                    | No                           |
+| Creation timestamps                       | Yes                          |
+| Last access / read timestamps             | No                           |
+| Last change timestamps                    | Yes                          |
+| Access control lists                      | No                           |
+| Security                                  | Integrated with crypto       |
+| Extended attributes                       | No                           |
+
+### Capabilities
+
+| Capability                                | Value                        |
+| ----------------------------------------- | ---------------------------- |
+| Hard links                                | No                           |
+| Symbolic links                            | No                           |
+| Case-sensitive                            | Yes                          |
+| Case-preserving                           | Yes                          |
+| File Change Log                           | By content versioning        |
+| Filesystem-level encryption               | Yes                          |
+| Data deduplication                        | Yes                          |
+| Data checksums                            | Integrated with crypto       |
+| Offline grow                              | No                           |
+| Online grow                               | Auto                         |
+| Offline shrink                            | No                           |
+| Online shrinnk                            | Auto                         |
+
+### Allocation and layout policies
+
+| Feature                     | Value       |
+| --------------------------- | ----------- |
+| Address allocation scheme   | Append-only |
+| Sparse files                | No          |
+| Transparent compression     | Yes         |
+| Extents                     | No          |
+| Copy on write               | Yes         |
+
+### Storage fragmentation
+
+| Fragmentation                | Value                        |
+| ---------------------------- | ---------------------------- |
+| Memory storage               | No                           |
+| File storage                 | fragment unit size < 32 MiB  |
+| RDBMS storage                | No                           |
+| Key-value storage            | No                           |
+| Zbox cloud storage           | fragment unit size < 128 KiB |
+
 How to use
 ==========
 For reference documentation, please visit [documentation](https://docs.rs/zbox).

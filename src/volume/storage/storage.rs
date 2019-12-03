@@ -598,11 +598,10 @@ pub struct Writer {
 
 impl Writer {
     pub fn new(id: &Eid, storage: &StorageRef) -> Self {
-        let stg_size;
-        {
+        let stg_size = {
             let storage = storage.read().unwrap();
-            stg_size = storage.crypto.decrypted_len(FRAME_SIZE);
-        }
+            storage.crypto.decrypted_len(FRAME_SIZE)
+        };
         let mut wtr = Writer {
             id: id.clone(),
             addr: Addr::default(),
