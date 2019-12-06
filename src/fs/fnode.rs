@@ -12,7 +12,8 @@ use super::{Handle, Options};
 use base::lru::{CountMeter, Lru, PinChecker};
 use base::Time;
 use content::{
-    ChunkMap, Content, ContentReader, StoreRef, Writer as StoreWriter,
+    ChunkMap, Content, ContentReader, StoreRef, StoreWeakRef,
+    Writer as StoreWriter,
 };
 use error::{Error, Result};
 use trans::cow::{Cow, CowCache, CowRef, CowWeakRef, Cowable, IntoCow};
@@ -236,13 +237,10 @@ pub struct Fnode {
         default = "Fnode::default_sub_nodes"
     )]
     sub_nodes: SubNodes,
-
-    #[serde(skip_serializing, skip_deserializing, default)]
-    store: StoreRef,
 }
 
 impl Fnode {
-    pub fn new(ftype: FileType, opts: Options, store: &StoreRef) -> Self {
+    pub fn new(ftype: FileType, opts: Options) -> Self {
         Fnode {
             ftype,
             opts,
@@ -253,7 +251,6 @@ impl Fnode {
             chk_map: ChunkMap::new(opts.dedup_chunk),
             parent: None,
             sub_nodes: Self::default_sub_nodes(),
-            store: store.clone(),
         }
     }
 
@@ -264,25 +261,26 @@ impl Fnode {
         ftype: FileType,
         opts: Options,
         txmgr: &TxMgrRef,
+        store: &StoreRef,
     ) -> Result<FnodeRef> {
         let kid = {
             let mut pfnode_cow = parent.write().unwrap();
-            let pfnode = pfnode_cow.make_mut()?;
+            let pfnode = pfnode_cow.make_mut(txmgr)?;
             if !pfnode.is_dir() {
                 return Err(Error::NotDir);
             }
 
             // create child fnode and add the initial version
-            let mut kid = Fnode::new(ftype, opts, &pfnode.store);
+            let mut kid = Fnode::new(ftype, opts);
             if kid.is_file() {
-                kid.add_version(Content::new())?;
+                kid.add_version(Content::new(), store, txmgr)?;
             }
 
             kid.into_cow(txmgr)?
         };
 
         // add child to parent
-        Fnode::add_child(parent, &kid, name)?;
+        Fnode::add_child(parent, &kid, name, txmgr)?;
 
         Ok(kid)
     }
@@ -343,18 +341,9 @@ impl Fnode {
     }
 
     /// Load root fnode
-    pub fn load_root(
-        root_id: &Eid,
-        txmgr: &TxMgrRef,
-        store: &StoreRef,
-        vol: &VolumeRef,
-    ) -> Result<FnodeRef> {
-        let root = Cow::<Fnode>::load(root_id, txmgr, vol)?;
-        {
-            let mut root_cow = root.write().unwrap();
-            let root = root_cow.make_mut_naive();
-            root.store = store.clone();
-        }
+    #[inline]
+    pub fn load_root(root_id: &Eid, vol: &VolumeRef) -> Result<FnodeRef> {
+        let root = Cow::<Fnode>::load(root_id, vol)?;
         Ok(root)
     }
 
@@ -382,12 +371,11 @@ impl Fnode {
             .ok_or(Error::NotFound)
             .and_then(|child| cache.get(&child.id, vol).map_err(Error::from))
             .and_then(|child| {
-                // set parent, store and volume for the child
+                // set parent for the child
                 {
                     let mut child_cow = child.write().unwrap();
                     let c = child_cow.make_mut_naive();
                     c.parent = Some(self_ref);
-                    c.store = self.store.clone();
                 }
 
                 // add to parent's sub node list
@@ -473,16 +461,17 @@ impl Fnode {
         parent: &FnodeRef,
         child: &FnodeRef,
         name: &str,
+        txmgr: &TxMgrRef,
     ) -> Result<()> {
         let mut parent_cow = parent.write().unwrap();
-        let par = parent_cow.make_mut()?;
+        let par = parent_cow.make_mut(txmgr)?;
 
         // add to child to parent's children list
         let mut kid = child.write().unwrap();
         par.kids.push(ChildEntry::new(kid.id(), kid.ftype, name));
 
         // update child's parent
-        kid.make_mut()?.parent = Some(parent.clone());
+        kid.make_mut(txmgr)?.parent = Some(parent.clone());
 
         // add to parent's sub node list and update modified time
         par.sub_nodes
@@ -493,12 +482,15 @@ impl Fnode {
     }
 
     /// Remove child fnode from parent
-    pub fn remove_from_parent(fnode: &FnodeRef) -> Result<()> {
+    pub fn remove_from_parent(
+        fnode: &FnodeRef,
+        txmgr: &TxMgrRef,
+    ) -> Result<()> {
         let child = fnode.read().unwrap();
         match child.parent {
             Some(ref parent) => {
                 let mut par = parent.write().unwrap();
-                let par = par.make_mut()?;
+                let par = par.make_mut(txmgr)?;
                 let child_idx = par
                     .kids
                     .iter()
@@ -534,7 +526,12 @@ impl Fnode {
     }
 
     // remove a specified version and its associated content
-    fn remove_version(&mut self, ver_num: usize) -> Result<()> {
+    fn remove_version(
+        &mut self,
+        ver_num: usize,
+        store: &StoreRef,
+        txmgr: &TxMgrRef,
+    ) -> Result<()> {
         let idx = self
             .vers
             .iter()
@@ -543,35 +540,44 @@ impl Fnode {
         let ver = self.vers.remove(idx).unwrap();
 
         if let Some(ctn) = {
-            let mut store = self.store.write().unwrap();
-            store.make_mut()?.deref_content(&ver.content_id)?
+            let mut store = store.write().unwrap();
+            store.make_mut(txmgr)?.deref_content(&ver.content_id)?
         } {
             // content is not used anymore, remove it
             let mut content = ctn.write().unwrap();
-            content.unlink(&mut self.chk_map, &self.store)?;
-            content.make_del()?;
+            content.unlink(&mut self.chk_map, store, txmgr)?;
+            content.make_del(txmgr)?;
         }
 
         Ok(())
     }
 
-    pub fn clear_versions(&mut self) -> Result<()> {
+    pub fn clear_versions(
+        &mut self,
+        store: &StoreRef,
+        txmgr: &TxMgrRef,
+    ) -> Result<()> {
         let ver_nums: Vec<usize> = self.vers.iter().map(|v| v.num).collect();
         for ver_num in ver_nums {
-            self.remove_version(ver_num)?;
+            self.remove_version(ver_num, store, txmgr)?;
         }
         Ok(())
     }
 
     // add a new content version to fnode
     // return true if the content is not duplicated, otherwise return false
-    pub fn add_version(&mut self, content: Content) -> Result<bool> {
+    pub fn add_version(
+        &mut self,
+        content: Content,
+        store: &StoreRef,
+        txmgr: &TxMgrRef,
+    ) -> Result<bool> {
         assert!(self.is_file());
 
         // try to dedup content in store
         let (no_dup, deduped_id) = {
-            let mut store = self.store.write().unwrap();
-            let store = store.make_mut()?;
+            let mut store = store.write().unwrap();
+            let store = store.make_mut(txmgr)?;
             store.dedup_content(&content)?
         };
 
@@ -583,33 +589,38 @@ impl Fnode {
 
         // if content is not duplicated, link the content
         if no_dup {
-            content.link(&self.store)?;
+            content.link(store, txmgr)?;
         }
 
         // evict retired version if any
         if self.vers.len() > self.opts.version_limit as usize {
             let retire = self.vers.front().unwrap().num;
-            self.remove_version(retire)?;
+            self.remove_version(retire, store, txmgr)?;
         }
 
         Ok(no_dup)
     }
 
     /// Get reader for sepcified version number
-    pub fn version_reader(&self, ver_num: usize) -> Result<ContentReader> {
+    pub fn version_reader(
+        &self,
+        ver_num: usize,
+        store: &StoreWeakRef,
+    ) -> Result<ContentReader> {
         let ver = self.ver(ver_num).ok_or(Error::NoVersion)?;
         let content = {
-            let st = self.store.read().unwrap();
+            let store = store.upgrade().ok_or(Error::RepoClosed)?;
+            let st = store.read().unwrap();
             let ctn_ref = st.get_content(&ver.content_id)?;
             let ctn = ctn_ref.read().unwrap();
             ctn.clone()
         };
-        Ok(ContentReader::new(content, &self.store))
+        Ok(ContentReader::new(content, store))
     }
 
     /// Clone a new current content
-    pub fn clone_current_content(&self) -> Result<Content> {
-        let store = self.store.read().unwrap();
+    pub fn clone_current_content(&self, store: &StoreRef) -> Result<Content> {
+        let store = store.read().unwrap();
         let curr_ctn = store.get_content(&self.curr_ver().content_id)?;
         let content = curr_ctn.read().unwrap();
         Ok(content.clone())
@@ -628,7 +639,7 @@ impl Fnode {
             // append
             let mut size = len - curr_len;
             let buf = vec![0u8; min(size, 16 * 1024)];
-            let mut wtr = Writer::new(handle.clone(), txid);
+            let mut wtr = Writer::new(handle.clone(), txid)?;
             wtr.seek(SeekFrom::Start(curr_len as u64))?;
 
             while size > 0 {
@@ -639,16 +650,18 @@ impl Fnode {
             wtr.finish()?;
         } else if curr_len > len {
             // truncate
+            let store = handle.store.upgrade().ok_or(Error::RepoClosed)?;
+            let txmgr = handle.txmgr.upgrade().ok_or(Error::RepoClosed)?;
             let mut fnode_cow = handle.fnode.write().unwrap();
             let new_ctn = {
-                let mut ctn = fnode_cow.clone_current_content()?;
-                ctn.truncate(len, &handle.store)?;
+                let mut ctn = fnode_cow.clone_current_content(&store)?;
+                ctn.truncate(len, &store)?;
                 ctn
             };
 
             // dedup content, if it is not duplicated then link the content
-            let fnode = fnode_cow.make_mut()?;
-            fnode.add_version(new_ctn)?;
+            let fnode = fnode_cow.make_mut(&txmgr)?;
+            fnode.add_version(new_ctn, &store, &txmgr)?;
         }
 
         Ok(())
@@ -708,17 +721,21 @@ pub struct Reader {
 
 impl Reader {
     /// Create a reader for specified version
-    pub fn new(fnode: FnodeRef, ver: usize) -> Result<Self> {
+    pub fn new(
+        fnode: FnodeRef,
+        ver: usize,
+        store: &StoreWeakRef,
+    ) -> Result<Self> {
         let fnode = fnode.read().unwrap();
-        let rdr = fnode.version_reader(ver)?;
+        let rdr = fnode.version_reader(ver, store)?;
         Ok(Reader { ver, rdr })
     }
 
     /// Create a reader for current version
-    pub fn new_current(fnode: FnodeRef) -> Result<Self> {
+    pub fn new_current(fnode: FnodeRef, store: &StoreWeakRef) -> Result<Self> {
         let fnode = fnode.read().unwrap();
         let ver = fnode.curr_ver_num();
-        let rdr = fnode.version_reader(ver)?;
+        let rdr = fnode.version_reader(ver, store)?;
         Ok(Reader { ver, rdr })
     }
 
@@ -750,17 +767,19 @@ pub struct Writer {
 }
 
 impl Writer {
-    pub fn new(handle: Handle, txid: Txid) -> Self {
+    pub fn new(handle: Handle, txid: Txid) -> Result<Self> {
         let chk_map = {
             let f = handle.fnode.read().unwrap();
             f.chk_map.clone()
         };
         let inner =
-            StoreWriter::new(chk_map, &handle.txmgr, &handle.store, txid);
-        Writer { inner, handle }
+            StoreWriter::new(txid, chk_map, &handle.txmgr, &handle.store)?;
+        Ok(Writer { inner, handle })
     }
 
     pub fn finish(self) -> Result<usize> {
+        let store = self.handle.store.upgrade().ok_or(Error::RepoClosed)?;
+        let txmgr = self.handle.txmgr.upgrade().ok_or(Error::RepoClosed)?;
         let (stg_ctn, chk_map) = self.inner.finish()?;
         let handle = &self.handle;
 
@@ -768,16 +787,16 @@ impl Writer {
 
         // merge stage content to current content
         let merged_ctn = {
-            let mut ctn = fnode_cow.clone_current_content()?;
-            ctn.merge_from(&stg_ctn, &handle.store)?;
+            let mut ctn = fnode_cow.clone_current_content(&store)?;
+            ctn.merge_from(&stg_ctn, &store)?;
             ctn
         };
 
         // dedup content and add deduped content as a new version
-        let fnode = fnode_cow.make_mut()?;
-        if !fnode.add_version(merged_ctn)? {
+        let fnode = fnode_cow.make_mut(&txmgr)?;
+        if !fnode.add_version(merged_ctn, &store, &txmgr)? {
             // content is duplicated, weak unlink the stage content
-            stg_ctn.unlink_weak(&mut fnode.chk_map, &handle.store)?;
+            stg_ctn.unlink_weak(&mut fnode.chk_map, &store, &txmgr)?;
         }
 
         // udpate fnode chunk map

@@ -1,6 +1,6 @@
 use std::fmt::{self, Debug};
 use std::io::{Read, Result as IoResult, Write};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, Weak};
 
 use super::allocator::AllocatorRef;
 use super::storage::{self, Storage, StorageRef};
@@ -207,6 +207,7 @@ impl IntoRef for Volume {}
 
 /// Volume reference type
 pub type VolumeRef = Arc<RwLock<Volume>>;
+pub type VolumeWeakRef = Weak<RwLock<Volume>>;
 
 /// Volume Wal Reader
 pub struct WalReader {
@@ -311,9 +312,10 @@ pub struct Writer {
 }
 
 impl Writer {
-    pub fn new(id: &Eid, vol: &VolumeRef) -> Result<Self> {
+    pub fn new(id: &Eid, vol: &VolumeWeakRef) -> Result<Self> {
+        let vol = vol.upgrade().ok_or(Error::RepoClosed)?;
         let vol = vol.read().unwrap();
-        let wtr = storage::Writer::new(id, &vol.storage);
+        let wtr = storage::Writer::new(id, &Arc::downgrade(&vol.storage))?;
         let inner = if vol.info.compress {
             let comp = Lz4EncoderBuilder::new()
                 .block_size(BlockSize::Default)
@@ -401,7 +403,7 @@ mod tests {
     }
 
     fn write_to_entity(id: &Eid, buf: &[u8], vol: &VolumeRef) {
-        let mut wtr = Writer::new(&id, &vol).unwrap();
+        let mut wtr = Writer::new(&id, &Arc::downgrade(vol)).unwrap();
         wtr.write_all(&buf).unwrap();
         wtr.finish().unwrap();
     }

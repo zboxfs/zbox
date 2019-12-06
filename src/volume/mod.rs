@@ -14,7 +14,9 @@ pub use self::armor::{
     Arm, ArmAccess, Armor, Seq, VolumeArmor, VolumeWalArmor,
 };
 pub use self::storage::StorageRef;
-pub use self::volume::{Info, Reader, Volume, VolumeRef, Writer};
+pub use self::volume::{
+    Info, Reader, Volume, VolumeRef, VolumeWeakRef, Writer,
+};
 
 #[cfg(any(feature = "storage-faulty", feature = "storage-zbox-faulty"))]
 pub use self::storage::FaultyController;

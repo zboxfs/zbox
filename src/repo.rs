@@ -622,7 +622,8 @@ fn open_file_with_options<P: AsRef<Path>>(
 /// [RepoOpener](struct.RepoOpener.html#method.open).
 ///
 /// `Repo` can only be opened once at a time. After opened, it keeps locked
-/// from other open attempts until it goes out scope.
+/// from other open attempts until it goes out of scope. Once `Repo` is dropped,
+/// any opened files or version readers won't be accessible.
 ///
 /// Optionally, `Repo` can be opened in [`read-only`] mode if you only need
 /// read access.

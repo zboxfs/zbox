@@ -7,7 +7,7 @@ use super::segment::Segment;
 use super::span::{Cutable, Extent, Span};
 use super::Store;
 use error::Result;
-use trans::{Eid, Id};
+use trans::{Eid, Id, TxMgrRef};
 
 pub(super) trait CutableList: Clone + Extent {
     type Item: Extent + Cutable;
@@ -295,11 +295,11 @@ impl EntryList {
     }
 
     // create reference relationship between content and segment
-    pub fn link(&self, store: &Store) -> Result<()> {
+    pub fn link(&self, store: &Store, txmgr: &TxMgrRef) -> Result<()> {
         for ent in self.ents.iter() {
             let seg_ref = store.get_seg(&ent.seg_id)?;
             let mut seg_cow = seg_ref.write().unwrap();
-            let seg = seg_cow.make_mut()?;
+            let seg = seg_cow.make_mut(txmgr)?;
             for span in ent.spans.iter() {
                 seg.ref_chunks(span.begin..span.end)?;
             }
@@ -313,13 +313,14 @@ impl EntryList {
         &self,
         chk_map: &mut ChunkMap,
         store: &mut Store,
+        txmgr: &TxMgrRef,
     ) -> Result<()> {
         for ent in self.ents.iter() {
             let seg_ref = store.get_seg(&ent.seg_id)?;
             let mut seg_cow = seg_ref.write().unwrap();
 
             {
-                let seg = seg_cow.make_mut()?;
+                let seg = seg_cow.make_mut(txmgr)?;
                 for span in ent.spans.iter() {
                     seg.deref_chunks(span.begin..span.end)?;
                 }

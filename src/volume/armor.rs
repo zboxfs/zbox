@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::io::{ErrorKind, Read, Write};
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
@@ -259,7 +260,7 @@ where
 
     #[inline]
     fn get_item_writer(&self, arm_id: &Eid) -> Result<Self::ItemWriter> {
-        Ok(volume::Writer::new(arm_id, &self.vol)?)
+        Ok(volume::Writer::new(arm_id, &Arc::downgrade(&self.vol))?)
     }
 
     #[inline]

@@ -9,9 +9,8 @@ pub use self::fnode::{DirEntry, FileType, Fnode, FnodeRef, Metadata, Version};
 pub use self::fs::{Fs, ShutterRef};
 
 use base::crypto::{Cipher, Cost, Crypto};
-use content::StoreRef;
-use trans::TxMgrRef;
-use volume::VolumeRef;
+use content::StoreWeakRef;
+use trans::TxMgrWeakRef;
 
 // Default file versoin limit
 const DEFAULT_VERSION_LIMIT: u8 = 1;
@@ -60,8 +59,7 @@ impl Default for Config {
 #[derive(Debug, Clone)]
 pub struct Handle {
     pub fnode: FnodeRef,
-    pub store: StoreRef,
-    pub txmgr: TxMgrRef,
-    pub vol: VolumeRef,
+    pub store: StoreWeakRef,
+    pub txmgr: TxMgrWeakRef,
     pub shutter: ShutterRef,
 }

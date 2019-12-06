@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::{self, Debug};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, Weak};
 
 use linked_hash_map::LinkedHashMap;
 
@@ -83,7 +83,7 @@ impl TxMgr {
 
         Ok(TxHandle {
             txid,
-            txmgr: txmgr.clone(),
+            txmgr: Arc::downgrade(&txmgr),
         })
     }
 
@@ -187,12 +187,13 @@ impl IntoRef for TxMgr {}
 
 /// TxMgr reference type
 pub type TxMgrRef = Arc<RwLock<TxMgr>>;
+pub type TxMgrWeakRef = Weak<RwLock<TxMgr>>;
 
 // Transaction handle
 #[derive(Debug, Default, Clone)]
 pub struct TxHandle {
     pub txid: Txid,
-    pub txmgr: TxMgrRef,
+    pub txmgr: TxMgrWeakRef,
 }
 
 impl TxHandle {
@@ -223,13 +224,15 @@ impl TxHandle {
     /// Commit a transaction
     #[inline]
     pub fn commit(&self) -> Result<()> {
-        let mut tm = self.txmgr.write().unwrap();
+        let txmgr = self.txmgr.upgrade().ok_or(Error::RepoClosed)?;
+        let mut tm = txmgr.write().unwrap();
         tm.commit_trans(self.txid)
     }
 
     /// Abort a transaction
     fn abort(&self, err: Error) -> Result<()> {
-        let mut tm = self.txmgr.write().unwrap();
+        let txmgr = self.txmgr.upgrade().ok_or(Error::RepoClosed)?;
+        let mut tm = txmgr.write().unwrap();
 
         debug!("run tx failed: {:?}", err);
         tm.abort_trans(self.txid);
@@ -322,7 +325,7 @@ mod tests {
         let tx = TxMgr::begin_trans(&tm).unwrap();
         tx.run_all(|| {
             let mut a_cow = a.write().unwrap();
-            let a = a_cow.make_mut()?;
+            let a = a_cow.make_mut(&tm)?;
             a.val = val2;
             b = Obj::new(val).into_cow(&tm)?;
             Ok(())
@@ -336,11 +339,11 @@ mod tests {
         tx.run_all(|| {
             {
                 let mut a_cow = a.write().unwrap();
-                a_cow.make_del()?;
+                a_cow.make_del(&tm)?;
             }
             drop(a);
             let mut b_cow = b.write().unwrap();
-            let b = b_cow.make_mut()?;
+            let b = b_cow.make_mut(&tm)?;
             b.val = val2;
             Ok(())
         })
@@ -351,7 +354,7 @@ mod tests {
         let tx = TxMgr::begin_trans(&tm).unwrap();
         tx.run_all(|| {
             let mut b_cow = b.write().unwrap();
-            let b = b_cow.make_mut()?;
+            let b = b_cow.make_mut(&tm)?;
             b.val = val;
             Ok(())
         })
@@ -362,7 +365,7 @@ mod tests {
         let tx = TxMgr::begin_trans(&tm).unwrap();
         tx.run_all(|| {
             let mut b_cow = b.write().unwrap();
-            let b = b_cow.make_mut()?;
+            let b = b_cow.make_mut(&tm)?;
             b.val = val2;
             Ok(())
         })
@@ -374,7 +377,7 @@ mod tests {
             let tx = TxMgr::begin_trans(&tm).unwrap();
             tx.run_all(|| {
                 let mut b_cow = b.write().unwrap();
-                let b = b_cow.make_mut()?;
+                let b = b_cow.make_mut(&tm)?;
                 b.val = val2 + i;
                 Ok(())
             })
@@ -411,7 +414,7 @@ mod tests {
             tx.run_all(|| {
                 b = Obj::new(val).into_cow(&tm)?;
                 let mut a_cow = a.write().unwrap();
-                a_cow.make_del()?;
+                a_cow.make_del(&tm)?;
                 Ok(())
             })
             .unwrap_err(),

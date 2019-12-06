@@ -201,6 +201,7 @@ fn repo_oper() {
         assert_eq!(f.metadata().unwrap_err(), Error::RepoClosed);
         assert_eq!(f.history().unwrap_err(), Error::RepoClosed);
         assert_eq!(f.curr_version().unwrap_err(), Error::RepoClosed);
+        assert_eq!(f.set_len(42).unwrap_err(), Error::RepoClosed);
     }
 
     // case #9: test file read/write after repo is dropped

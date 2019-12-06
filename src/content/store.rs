@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::{self, Debug};
 use std::io::{Result as IoResult, Seek, SeekFrom, Write};
+use std::sync::Arc;
 
 use super::chunk::ChunkMap;
 use super::chunker::{Chunker, ChunkerParams};
@@ -15,9 +16,9 @@ use super::Content;
 use base::crypto::Hash;
 use base::RefCnt;
 use error::{Error, Result};
-use trans::cow::{Cow, CowRef, Cowable, IntoCow};
+use trans::cow::{Cow, CowRef, CowWeakRef, Cowable, IntoCow};
 use trans::trans::Action;
-use trans::{Eid, Id, TxMgrRef, Txid};
+use trans::{Eid, Id, TxMgrRef, TxMgrWeakRef, Txid};
 use volume::VolumeRef;
 
 /// Content map entry
@@ -82,8 +83,8 @@ impl Store {
         Store {
             chunker_params: ChunkerParams::new(),
             content_map: HashMap::new(),
-            content_cache: ContentCache::new(Self::CONTENT_CACHE_SIZE, txmgr),
-            seg_cache: SegCache::new(Self::SEG_CACHE_SIZE, txmgr),
+            content_cache: ContentCache::new(Self::CONTENT_CACHE_SIZE),
+            seg_cache: SegCache::new(Self::SEG_CACHE_SIZE),
             segdata_cache: SegDataCache::new(Self::SEG_DATA_CACHE_SIZE),
             txmgr: txmgr.clone(),
             vol: vol.clone(),
@@ -95,13 +96,12 @@ impl Store {
         txmgr: &TxMgrRef,
         vol: &VolumeRef,
     ) -> Result<StoreRef> {
-        let store = Cow::<Store>::load(store_id, txmgr, vol)?;
+        let store = Cow::<Store>::load(store_id, vol)?;
         {
             let mut store_cow = store.write().unwrap();
             let store = store_cow.make_mut_naive();
-            store.content_cache =
-                ContentCache::new(Self::CONTENT_CACHE_SIZE, txmgr);
-            store.seg_cache = SegCache::new(Self::SEG_CACHE_SIZE, txmgr);
+            store.content_cache = ContentCache::new(Self::CONTENT_CACHE_SIZE);
+            store.seg_cache = SegCache::new(Self::SEG_CACHE_SIZE);
             store.segdata_cache = SegDataCache::new(Self::SEG_DATA_CACHE_SIZE);
             store.txmgr = txmgr.clone();
             store.vol = vol.clone();
@@ -182,7 +182,7 @@ impl Store {
         )?;
 
         // add segment to tx for deletion
-        seg_cow.make_del()
+        seg_cow.make_del(&self.txmgr)
     }
 
     /// Shrink segment
@@ -193,7 +193,7 @@ impl Store {
         let txid = Txid::current()?;
 
         // add segment to tx for update
-        let seg = seg_cow.make_mut()?;
+        let seg = seg_cow.make_mut(&self.txmgr)?;
 
         // load the segment data for shrinking, because it is going to be
         // shrank we remove it from cache immediately
@@ -212,7 +212,7 @@ impl Store {
         )?;
 
         // shrink the segment
-        seg.shrink(&seg_data, txid, &self.txmgr, &self.vol)
+        seg.shrink(&seg_data, txid, &self.txmgr, &Arc::downgrade(&self.vol))
     }
 }
 
@@ -238,6 +238,7 @@ impl<'de> IntoCow<'de> for Store {}
 
 /// Store reference type
 pub type StoreRef = CowRef<Store>;
+pub type StoreWeakRef = CowWeakRef<Store>;
 
 /// Store Writer
 #[derive(Debug)]
@@ -247,16 +248,20 @@ pub struct Writer {
 
 impl Writer {
     pub fn new(
-        chk_map: ChunkMap,
-        txmgr: &TxMgrRef,
-        store: &StoreRef,
         txid: Txid,
-    ) -> Self {
-        let st = store.read().unwrap();
-        let ctn_wtr = ContentWriter::new(chk_map, store, txid, txmgr, &st.vol);
-        Writer {
-            inner: Chunker::new(st.chunker_params.clone(), ctn_wtr),
-        }
+        chk_map: ChunkMap,
+        txmgr: &TxMgrWeakRef,
+        store: &StoreWeakRef,
+    ) -> Result<Self> {
+        let (params, vol) = {
+            let store = store.upgrade().ok_or(Error::RepoClosed)?;
+            let store = store.read().unwrap();
+            (store.chunker_params.clone(), Arc::downgrade(&store.vol))
+        };
+        let ctn_wtr = ContentWriter::new(txid, chk_map, store, txmgr, &vol);
+        Ok(Writer {
+            inner: Chunker::new(params, ctn_wtr),
+        })
     }
 
     pub fn finish(self) -> Result<(Content, ChunkMap)> {
@@ -266,16 +271,19 @@ impl Writer {
 }
 
 impl Write for Writer {
+    #[inline]
     fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
         self.inner.write(buf)
     }
 
+    #[inline]
     fn flush(&mut self) -> IoResult<()> {
         self.inner.flush()
     }
 }
 
 impl Seek for Writer {
+    #[inline]
     fn seek(&mut self, pos: SeekFrom) -> IoResult<u64> {
         self.inner.seek(pos)
     }

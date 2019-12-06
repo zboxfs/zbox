@@ -13,4 +13,4 @@ mod store;
 
 pub use self::chunk::ChunkMap;
 pub use self::content::{Content, ContentRef, Reader as ContentReader};
-pub use self::store::{Store, StoreRef, Writer};
+pub use self::store::{Store, StoreRef, StoreWeakRef, Writer};

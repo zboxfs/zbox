@@ -2,7 +2,7 @@ use std::cmp::min;
 use std::error::Error as StdError;
 use std::fmt::{self, Debug, Display};
 use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, Weak};
 
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
@@ -344,6 +344,7 @@ impl IntoRef for Storage {}
 
 /// Storage reference type
 pub type StorageRef = Arc<RwLock<Storage>>;
+pub type StorageWeakRef = Weak<RwLock<Storage>>;
 
 /// Storage Wal Reader
 #[derive(Debug)]
@@ -586,7 +587,7 @@ impl Finish for WalWriter {
 pub struct Writer {
     id: Eid,
     addr: Addr,
-    storage: StorageRef,
+    storage: StorageWeakRef,
 
     // encrypted frame
     frame: Vec<u8>,
@@ -597,8 +598,9 @@ pub struct Writer {
 }
 
 impl Writer {
-    pub fn new(id: &Eid, storage: &StorageRef) -> Self {
+    pub fn new(id: &Eid, storage: &StorageWeakRef) -> Result<Self> {
         let stg_size = {
+            let storage = storage.upgrade().ok_or(Error::RepoClosed)?;
             let storage = storage.read().unwrap();
             storage.crypto.decrypted_len(FRAME_SIZE)
         };
@@ -612,7 +614,7 @@ impl Writer {
         };
         wtr.frame.shrink_to_fit();
         wtr.stg.shrink_to_fit();
-        wtr
+        Ok(wtr)
     }
 
     // encrypt to frame and write to depot
@@ -621,7 +623,8 @@ impl Writer {
             return Ok(());
         }
 
-        let mut storage = self.storage.write().unwrap();
+        let storage = self.storage.upgrade().ok_or(Error::RepoClosed)?;
+        let mut storage = storage.write().unwrap();
 
         // encrypt source data to frame
         let enc_len = storage.crypto.encrypt_to(
@@ -680,7 +683,8 @@ impl Finish for Writer {
         self.write_frame()?;
 
         // if the old address exists, remove all of its blocks
-        let mut storage = self.storage.write().unwrap();
+        let storage = self.storage.upgrade().ok_or(Error::RepoClosed)?;
+        let mut storage = storage.write().unwrap();
         match storage.get_address(&self.id) {
             Ok(old_addr) => {
                 storage.remove_address_blocks(&old_addr)?;
@@ -739,7 +743,7 @@ mod tests {
         *buf.last_mut().unwrap() = 42;
 
         // write
-        let mut wtr = Writer::new(&id, storage);
+        let mut wtr = Writer::new(&id, &Arc::downgrade(storage)).unwrap();
         wtr.write_all(&buf).unwrap();
         wtr.finish().unwrap();
 
@@ -761,8 +765,8 @@ mod tests {
         *buf2.last_mut().unwrap() = 43;
 
         // write
-        let mut wtr = Writer::new(&id, storage);
-        let mut wtr2 = Writer::new(&id2, storage);
+        let mut wtr = Writer::new(&id, &Arc::downgrade(storage)).unwrap();
+        let mut wtr2 = Writer::new(&id2, &Arc::downgrade(storage)).unwrap();
         let mut written = 0;
         while written < buf_len {
             let wlen = min(frm_size, buf_len - written);
@@ -827,7 +831,7 @@ mod tests {
         *buf.last_mut().unwrap() = 42;
 
         // write #1
-        let mut wtr = Writer::new(&id, storage);
+        let mut wtr = Writer::new(&id, &Arc::downgrade(storage)).unwrap();
         wtr.write_all(&buf).unwrap();
         wtr.finish().unwrap();
 
@@ -840,7 +844,7 @@ mod tests {
         // write #2
         *buf.first_mut().unwrap() = 43;
         *buf.last_mut().unwrap() = 43;
-        let mut wtr = Writer::new(&id, storage);
+        let mut wtr = Writer::new(&id, &Arc::downgrade(storage)).unwrap();
         wtr.write_all(&buf).unwrap();
         wtr.finish().unwrap();
 
@@ -856,7 +860,7 @@ mod tests {
         let buf = vec![0u8; 3];
 
         // write #1
-        let mut wtr = Writer::new(&id, storage);
+        let mut wtr = Writer::new(&id, &Arc::downgrade(storage)).unwrap();
         wtr.write_all(&buf).unwrap();
         wtr.finish().unwrap();
 
@@ -945,7 +949,7 @@ mod tests {
 
         // write
         let now = Instant::now();
-        let mut wtr = Writer::new(&id, storage);
+        let mut wtr = Writer::new(&id, &Arc::downgrade(storage)).unwrap();
         wtr.write_all(&buf).unwrap();
         wtr.finish().unwrap();
         let write_time = now.elapsed();

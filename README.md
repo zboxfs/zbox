@@ -147,7 +147,7 @@ corresponding Cargo feature when building ZboxFS.
 | Offline grow                              | No                           |
 | Online grow                               | Auto                         |
 | Offline shrink                            | No                           |
-| Online shrinnk                            | Auto                         |
+| Online shrink                             | Auto                         |
 
 ### Allocation and layout policies
 

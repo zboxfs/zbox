@@ -5,14 +5,16 @@ use std::ops::{Index, IndexMut, Range};
 use std::sync::{Arc, RwLock};
 
 use super::chunk::Chunk;
-use super::StoreRef;
+use super::StoreWeakRef;
 use base::lru::{Lru, Meter, PinChecker};
 use base::IntoRef;
-use error::Result;
+use error::{Error, Result};
 use trans::cow::{CowCache, CowRef, Cowable, IntoCow};
 use trans::trans::{Action, Transable};
-use trans::{Eid, EntityType, Finish, Id, TxMgrRef, Txid};
-use volume::{Arm, Reader as VolReader, VolumeRef, Writer as VolWriter};
+use trans::{Eid, EntityType, Finish, Id, TxMgrRef, TxMgrWeakRef, Txid};
+use volume::{
+    Arm, Reader as VolReader, VolumeRef, VolumeWeakRef, Writer as VolWriter,
+};
 
 /// Segment Data
 #[derive(Default)]
@@ -80,7 +82,7 @@ impl SegData {
         })
     }
 
-    fn save(&self, vol: &VolumeRef) -> Result<()> {
+    fn save(&self, vol: &VolumeWeakRef) -> Result<()> {
         let mut wtr = VolWriter::new(&self.id, vol)?;
         wtr.write_all(&self.data[..])?;
         wtr.finish()?;
@@ -306,7 +308,7 @@ impl Segment {
         seg_data_ref: &SegDataRef,
         txid: Txid,
         txmgr: &TxMgrRef,
-        vol: &VolumeRef,
+        vol: &VolumeWeakRef,
     ) -> Result<Vec<usize>> {
         let mut buf = Vec::new();
         let mut retired = Vec::new();
@@ -409,25 +411,25 @@ pub type SegRef = CowRef<Segment>;
 /// Segment Writer
 #[derive(Debug)]
 pub struct Writer {
+    txid: Txid,
     seg: SegRef,
     data_wtr: Option<VolWriter>, // segment data writer
-    txid: Txid,
-    txmgr: TxMgrRef,
-    store: StoreRef,
-    vol: VolumeRef,
+    txmgr: TxMgrWeakRef,
+    store: StoreWeakRef,
+    vol: VolumeWeakRef,
 }
 
 impl Writer {
     pub fn new(
         txid: Txid,
-        store: &StoreRef,
-        txmgr: &TxMgrRef,
-        vol: &VolumeRef,
+        store: &StoreWeakRef,
+        txmgr: &TxMgrWeakRef,
+        vol: &VolumeWeakRef,
     ) -> Self {
         Writer {
+            txid,
             seg: Arc::default(),
             data_wtr: None,
-            txid,
             txmgr: txmgr.clone(),
             store: store.clone(),
             vol: vol.clone(),
@@ -440,17 +442,14 @@ impl Writer {
     }
 
     pub fn renew(&mut self) -> Result<()> {
+        let txmgr = self.txmgr.upgrade().ok_or(Error::RepoClosed)?;
+
         // create a new segment
         let seg = Segment::new();
 
         // add a segment data stub to tx, the actual data will be directly
         // written using volume writer instead of writing to the segment data
-        SegData::add_to_trans(
-            &seg.data_id,
-            Action::New,
-            self.txid,
-            &self.txmgr,
-        )?;
+        SegData::add_to_trans(&seg.data_id, Action::New, self.txid, &txmgr)?;
 
         // if this is not the first-time renew, finish the last segment data
         // writer first
@@ -460,10 +459,11 @@ impl Writer {
 
         // and then create a new segment data writer and add segment to tx
         self.data_wtr = Some(VolWriter::new(&seg.data_id, &self.vol)?);
-        self.seg = seg.into_cow(&self.txmgr)?;
+        self.seg = seg.into_cow(&txmgr)?;
 
         // inject segment to segment cache in store
-        let store = self.store.read().unwrap();
+        let store = self.store.upgrade().ok_or(Error::RepoClosed)?;
+        let store = store.read().unwrap();
         store.inject_seg_to_cache(&self.seg);
 
         Ok(())
@@ -489,7 +489,8 @@ impl Write for Writer {
         }
 
         // and then append chunk to segment
-        map_io_err!(seg.make_mut())?.append_chunk(chunk.len());
+        let txmgr = map_io_err!(self.txmgr.upgrade().ok_or(Error::RepoClosed))?;
+        map_io_err!(seg.make_mut(&txmgr))?.append_chunk(chunk.len());
 
         Ok(chunk.len())
     }

@@ -125,7 +125,7 @@ impl Fs {
 
         // create tx manager and fnode cache
         let txmgr = TxMgr::new(&walq_id, &vol).into_ref();
-        let fcache = FnodeCache::new(Self::FNODE_CACHE_SIZE, &txmgr);
+        let fcache = FnodeCache::new(Self::FNODE_CACHE_SIZE);
 
         // the initial transaction to create root fnode and save store,
         // it must be successful
@@ -134,7 +134,7 @@ impl Fs {
         TxMgr::begin_trans(&txmgr)?.run_all(|| {
             let store_cow =
                 Store::new(&txmgr, &vol).into_cow_with_id(&store_id, &txmgr)?;
-            let root_cow = Fnode::new(FileType::Dir, cfg.opts, &store_cow)
+            let root_cow = Fnode::new(FileType::Dir, cfg.opts)
                 .into_cow_with_id(&root_id, &txmgr)?;
             root_ref = Some(root_cow);
             store_ref = Some(store_cow);
@@ -178,8 +178,8 @@ impl Fs {
 
         // create other file sytem components
         let store = Store::open(&payload.store_id, &txmgr, &vol)?;
-        let root = Fnode::load_root(&payload.root_id, &txmgr, &store, &vol)?;
-        let fcache = FnodeCache::new(Self::FNODE_CACHE_SIZE, &txmgr);
+        let root = Fnode::load_root(&payload.root_id, &vol)?;
+        let fcache = FnodeCache::new(Self::FNODE_CACHE_SIZE);
 
         info!("repo opened");
 
@@ -270,9 +270,8 @@ impl Fs {
         let fnode = self.resolve(path)?;
         Ok(Handle {
             fnode,
-            store: self.store.clone(),
-            txmgr: self.txmgr.clone(),
-            vol: self.vol.clone(),
+            store: Arc::downgrade(&self.store),
+            txmgr: Arc::downgrade(&self.txmgr),
             shutter: self.shutter.clone(),
         })
     }
@@ -303,7 +302,14 @@ impl Fs {
         let mut fnode = FnodeRef::default();
         let tx_handle = TxMgr::begin_trans(&self.txmgr)?;
         tx_handle.run_all(|| {
-            fnode = Fnode::new_under(&parent, &name, ftype, opts, &self.txmgr)?;
+            fnode = Fnode::new_under(
+                &parent,
+                &name,
+                ftype,
+                opts,
+                &self.txmgr,
+                &self.store,
+            )?;
             Ok(())
         })?;
 
@@ -395,13 +401,13 @@ impl Fs {
             // get current version of source
             let ctn = {
                 let fnode = src.read().unwrap();
-                fnode.clone_current_content()?
+                fnode.clone_current_content(&self.store)?
             };
 
             // then add it to target
             let mut fnode_cow = tgt.fnode.write().unwrap();
-            let fnode = fnode_cow.make_mut()?;
-            let result = fnode.add_version(ctn)?;
+            let fnode = fnode_cow.make_mut(&self.txmgr)?;
+            let result = fnode.add_version(ctn, &self.store, &self.txmgr)?;
             assert!(!result);
 
             Ok(())
@@ -481,10 +487,12 @@ impl Fs {
         // begin and run transaction
         let tx_handle = TxMgr::begin_trans(&self.txmgr)?;
         tx_handle.run_all(move || {
-            Fnode::remove_from_parent(&fnode_ref)?;
+            Fnode::remove_from_parent(&fnode_ref, &self.txmgr)?;
             let mut fnode = fnode_ref.write().unwrap();
-            fnode.make_mut()?.clear_versions()?;
-            fnode.make_del()?;
+            fnode
+                .make_mut(&self.txmgr)?
+                .clear_versions(&self.store, &self.txmgr)?;
+            fnode.make_del(&self.txmgr)?;
             self.fcache.remove(fnode.id());
             Ok(())
         })?;
@@ -515,9 +523,9 @@ impl Fs {
         // begin and run transaction
         let tx_handle = TxMgr::begin_trans(&self.txmgr)?;
         tx_handle.run_all(move || {
-            Fnode::remove_from_parent(&fnode_ref)?;
+            Fnode::remove_from_parent(&fnode_ref, &self.txmgr)?;
             let mut fnode = fnode_ref.write().unwrap();
-            fnode.make_del()?;
+            fnode.make_del(&self.txmgr)?;
             self.fcache.remove(fnode.id());
             Ok(())
         })?;
@@ -592,21 +600,23 @@ impl Fs {
         // begin and run transaction
         TxMgr::begin_trans(&self.txmgr)?.run_all(|| {
             // remove from source
-            Fnode::remove_from_parent(&src)?;
+            Fnode::remove_from_parent(&src, &self.txmgr)?;
 
             // remove target if it exists
             if let Some(tgt_fnode) = tgt {
-                Fnode::remove_from_parent(&tgt_fnode)?;
+                Fnode::remove_from_parent(&tgt_fnode, &self.txmgr)?;
                 let mut tgt_fnode = tgt_fnode.write().unwrap();
                 if tgt_fnode.is_file() {
-                    tgt_fnode.make_mut()?.clear_versions()?;
+                    tgt_fnode
+                        .make_mut(&self.txmgr)?
+                        .clear_versions(&self.store, &self.txmgr)?;
                 }
-                tgt_fnode.make_del()?;
+                tgt_fnode.make_del(&self.txmgr)?;
                 self.fcache.remove(tgt_fnode.id());
             }
 
             // and then add to target
-            Fnode::add_child(&tgt_parent, &src, &name)
+            Fnode::add_child(&tgt_parent, &src, &name, &self.txmgr)
         })
     }
 

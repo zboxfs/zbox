@@ -38,16 +38,13 @@ pub struct Cow<T: Cowable> {
 
     #[serde(skip_serializing, skip_deserializing, default)]
     self_ref: CowWeakRef<T>,
-
-    #[serde(skip_serializing, skip_deserializing, default)]
-    txmgr: TxMgrRef,
 }
 
 impl<'de, T> Cow<T>
 where
     T: Cowable + Deserialize<'de> + Serialize + 'static,
 {
-    fn new(id: &Eid, inner: T, txmgr: &TxMgrRef) -> Self {
+    fn new(id: &Eid, inner: T) -> Self {
         let arm = Arm::default().other();
         let mut left = None;
         let mut right = None;
@@ -65,12 +62,11 @@ where
             txid: None,
             action: None,
             self_ref: Weak::default(),
-            txmgr: txmgr.clone(),
         }
     }
 
     /// Add self to transaction
-    fn add_to_trans(&mut self, action: Action) -> Result<()> {
+    fn add_to_trans(&mut self, action: Action, txmgr: &TxMgrRef) -> Result<()> {
         let curr_txid = Txid::current()?;
 
         if let Some(txid) = self.txid {
@@ -102,7 +98,7 @@ where
 
         // add cow to transaction
         {
-            let mut txmgr = self.txmgr.write().unwrap();
+            let mut txmgr = txmgr.write().unwrap();
             let self_ref = self.self_ref.upgrade().unwrap();
             let arm = if action == Action::New {
                 self.arm
@@ -133,7 +129,7 @@ where
     }
 
     /// Get mutable reference for inner object by cloning it
-    pub fn make_mut(&mut self) -> Result<&mut T> {
+    pub fn make_mut(&mut self, txmgr: &TxMgrRef) -> Result<&mut T> {
         // if cow is a newly created, use it directly
         if self.action == Some(Action::New) {
             return Ok(self.inner_mut());
@@ -145,7 +141,7 @@ where
             *self.other_mut() = Some(new_inner);
         }
 
-        self.add_to_trans(Action::Update)?;
+        self.add_to_trans(Action::Update, txmgr)?;
 
         Ok(self.other_inner_mut())
     }
@@ -159,8 +155,8 @@ where
 
     /// Mark cow as deleted
     #[inline]
-    pub fn make_del(&mut self) -> Result<()> {
-        self.add_to_trans(Action::Delete)
+    pub fn make_del(&mut self, txmgr: &TxMgrRef) -> Result<()> {
+        self.add_to_trans(Action::Delete, txmgr)
     }
 
     #[inline]
@@ -242,18 +238,13 @@ where
     }
 
     // load cow from volume
-    pub fn load(
-        id: &Eid,
-        txmgr: &TxMgrRef,
-        vol: &VolumeRef,
-    ) -> Result<CowRef<T>> {
+    pub fn load(id: &Eid, vol: &VolumeRef) -> Result<CowRef<T>> {
         let vol_armor = VolumeArmor::<Cow<T>>::new(vol);
         let cow = vol_armor.load_item(id)?;
         let cow_ref = cow.into_ref();
         {
             let mut c = cow_ref.write().unwrap();
             c.self_ref = Arc::downgrade(&cow_ref);
-            c.txmgr = txmgr.clone();
         }
         Ok(cow_ref)
     }
@@ -454,11 +445,11 @@ where
         id: &Eid,
         txmgr: &TxMgrRef,
     ) -> Result<CowRef<Self>> {
-        let cow_ref = Cow::new(id, self, txmgr).into_ref();
+        let cow_ref = Cow::new(id, self).into_ref();
         {
             let mut cow = cow_ref.write().unwrap();
             cow.self_ref = Arc::downgrade(&cow_ref);
-            cow.add_to_trans(Action::New)?;
+            cow.add_to_trans(Action::New, txmgr)?;
         }
         Ok(cow_ref)
     }
@@ -494,17 +485,15 @@ type CowLru<T> = Lru<Eid, CowRef<T>, CountMeter<CowRef<T>>, CowPinChecker>;
 #[derive(Debug, Clone, Default)]
 pub struct CowCache<T: Cowable> {
     lru: Arc<RwLock<CowLru<T>>>,
-    txmgr: TxMgrRef,
 }
 
 impl<'de, T> CowCache<T>
 where
     T: Cowable + Deserialize<'de> + Serialize + 'static,
 {
-    pub fn new(capacity: usize, txmgr: &TxMgrRef) -> Self {
+    pub fn new(capacity: usize) -> Self {
         CowCache {
             lru: Arc::new(RwLock::new(Lru::new(capacity))),
-            txmgr: txmgr.clone(),
         }
     }
 
@@ -518,7 +507,7 @@ where
 
         // if not in cache, load it from volume
         // then insert into cache
-        let cow_ref = Cow::<T>::load(id, &self.txmgr, vol)?;
+        let cow_ref = Cow::<T>::load(id, vol)?;
         lru.insert(id.clone(), cow_ref.clone());
         Ok(cow_ref)
     }
@@ -596,12 +585,12 @@ mod tests {
         let obj = Obj::new(val);
         let obj2 = Obj::new(val);
         let threads_cnt = 4;
-        let cow_ref = Cow::new(&Eid::new(), obj, &txmgr).into_ref();
+        let cow_ref = Cow::new(&Eid::new(), obj).into_ref();
         {
             let mut c = cow_ref.write().unwrap();
             c.self_ref = Arc::downgrade(&cow_ref);
         }
-        let cow_ref2 = Cow::new(&Eid::new(), obj2, &txmgr).into_ref();
+        let cow_ref2 = Cow::new(&Eid::new(), obj2).into_ref();
 
         let mut threads = vec![];
         for i in 0..threads_cnt {
@@ -616,7 +605,7 @@ mod tests {
                     assert_eq!(cow.val, val);
                     assert!(!cow.has_other());
                     {
-                        let c = cow.make_mut().unwrap();
+                        let c = cow.make_mut(&txmgr).unwrap();
                         c.val += 1;
                     }
                     assert!(cow.has_other());

@@ -5,18 +5,19 @@ use std::io::{
     Error as IoError, ErrorKind, Read, Result as IoResult, Seek, SeekFrom,
     Write,
 };
+use std::sync::Arc;
 
 use super::chunk::ChunkMap;
 use super::entry::{CutableList, EntryList};
 use super::merkle_tree::{Leaves, MerkleTree, Writer as MerkleTreeWriter};
 use super::segment::Writer as SegWriter;
 use super::span::{Extent, Span};
-use super::StoreRef;
+use super::{StoreRef, StoreWeakRef};
 use base::crypto::{Crypto, Hash};
-use error::Result;
+use error::{Error, Result};
 use trans::cow::{CowCache, CowRef, Cowable, IntoCow};
-use trans::{Eid, Finish, Id, TxMgrRef, Txid};
-use volume::VolumeRef;
+use trans::{Eid, Finish, Id, TxMgrRef, TxMgrWeakRef, Txid};
+use volume::VolumeWeakRef;
 
 /// Content
 #[derive(Default, Clone, Deserialize, Serialize)]
@@ -72,7 +73,7 @@ impl Content {
         }
 
         // merge merkle tree
-        let mut rdr = Reader::new(self.clone(), store);
+        let mut rdr = Reader::new(self.clone(), &Arc::downgrade(store));
         self.mtree.merge(&other.leaves, &mut rdr)?;
 
         Ok(())
@@ -90,7 +91,7 @@ impl Content {
         }
 
         // truncate merkle tree
-        let mut rdr = Reader::new(self.clone(), store);
+        let mut rdr = Reader::new(self.clone(), &Arc::downgrade(store));
         self.mtree.truncate(at, &mut rdr)?;
 
         Ok(())
@@ -98,9 +99,9 @@ impl Content {
 
     // build reference between content and segment
     #[inline]
-    pub fn link(&self, store: &StoreRef) -> Result<()> {
+    pub fn link(&self, store: &StoreRef, txmgr: &TxMgrRef) -> Result<()> {
         let store = store.read().unwrap();
-        self.ents.link(&store)
+        self.ents.link(&store, txmgr)
     }
 
     // remove reference between content and segment
@@ -109,9 +110,10 @@ impl Content {
         &self,
         chk_map: &mut ChunkMap,
         store: &StoreRef,
+        txmgr: &TxMgrRef,
     ) -> Result<()> {
         let mut store = store.write().unwrap();
-        self.ents.unlink(chk_map, store.make_mut()?)
+        self.ents.unlink(chk_map, store.make_mut(txmgr)?, txmgr)
     }
 
     // remove weak reference between content and segment
@@ -120,9 +122,10 @@ impl Content {
         &self,
         chk_map: &mut ChunkMap,
         store: &StoreRef,
+        txmgr: &TxMgrRef,
     ) -> Result<()> {
         let mut store = store.write().unwrap();
-        self.ents.unlink_weak(chk_map, store.make_mut()?)
+        self.ents.unlink_weak(chk_map, store.make_mut(txmgr)?)
     }
 }
 
@@ -154,11 +157,11 @@ pub type ContentRef = CowRef<Content>;
 pub struct Reader {
     pos: u64,
     content: Content,
-    store: StoreRef,
+    store: StoreWeakRef,
 }
 
 impl Reader {
-    pub fn new(content: Content, store: &StoreRef) -> Self {
+    pub fn new(content: Content, store: &StoreWeakRef) -> Self {
         Reader {
             pos: 0,
             content,
@@ -173,7 +176,8 @@ impl Read for Reader {
             return Ok(0);
         }
 
-        let store = self.store.read().unwrap();
+        let store = map_io_err!(self.store.upgrade().ok_or(Error::RepoClosed))?;
+        let store = store.read().unwrap();
         let start = self.pos as usize;
         let mut buf_read = 0;
 
@@ -235,28 +239,28 @@ impl Seek for Reader {
 /// Content Writer
 #[derive(Debug)]
 pub struct Writer {
+    txid: Txid,
     ctn: Content,
     chk_map: ChunkMap,
     seg_wtr: SegWriter,
     mtree_wtr: MerkleTreeWriter,
-    txid: Txid,
-    store: StoreRef,
+    store: StoreWeakRef,
 }
 
 impl Writer {
     pub fn new(
-        chk_map: ChunkMap,
-        store: &StoreRef,
         txid: Txid,
-        txmgr: &TxMgrRef,
-        vol: &VolumeRef,
+        chk_map: ChunkMap,
+        store: &StoreWeakRef,
+        txmgr: &TxMgrWeakRef,
+        vol: &VolumeWeakRef,
     ) -> Self {
         Writer {
+            txid,
             ctn: Content::new(),
             chk_map,
             seg_wtr: SegWriter::new(txid, store, txmgr, vol),
             mtree_wtr: MerkleTreeWriter::new(),
-            txid,
             store: store.clone(),
         }
     }
@@ -314,7 +318,9 @@ impl Write for Writer {
         // if duplicate chunk is found,
         if let Some(ref loc) = self.chk_map.get_refresh(&hash) {
             // get referred segment, it could be the current segment
-            let store = self.store.read().unwrap();
+            let store =
+                map_io_err!(self.store.upgrade().ok_or(Error::RepoClosed))?;
+            let store = store.read().unwrap();
             let rseg = {
                 let curr_seg = self.seg_wtr.seg();
                 let seg = curr_seg.read().unwrap();

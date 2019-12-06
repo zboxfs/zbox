@@ -11,7 +11,7 @@ mod wal;
 
 pub use self::eid::{Eid, Id};
 pub use self::txid::Txid;
-pub use self::txmgr::{TxHandle, TxMgr, TxMgrRef};
+pub use self::txmgr::{TxHandle, TxMgr, TxMgrRef, TxMgrWeakRef};
 pub use self::wal::EntityType;
 
 use std::io::Write;

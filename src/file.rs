@@ -24,7 +24,7 @@ pub struct VersionReader {
 
 impl VersionReader {
     fn new(handle: &Handle, ver: usize) -> Result<Self> {
-        let rdr = FnodeReader::new(handle.fnode.clone(), ver)?;
+        let rdr = FnodeReader::new(handle.fnode.clone(), ver, &handle.store)?;
         Ok(VersionReader {
             handle: handle.clone(),
             rdr,
@@ -390,12 +390,12 @@ impl File {
     }
 
     fn begin_write(&mut self) -> Result<()> {
-        if self.wtr.is_some() {
-            return Err(Error::NotFinish);
-        }
-
         if !self.can_write {
             return Err(Error::CannotWrite);
+        }
+
+        if self.wtr.is_some() {
+            return Err(Error::NotFinish);
         }
 
         assert!(self.tx_handle.is_none());
@@ -417,9 +417,11 @@ impl File {
         }
 
         // begin write
-        let tx_handle = TxMgr::begin_trans(&self.handle.txmgr)?;
+        let txmgr = self.handle.txmgr.upgrade().ok_or(Error::RepoClosed)?;
+        let tx_handle = TxMgr::begin_trans(&txmgr)?;
         tx_handle.run(|| {
-            let mut wtr = FnodeWriter::new(self.handle.clone(), tx_handle.txid);
+            let mut wtr =
+                FnodeWriter::new(self.handle.clone(), tx_handle.txid)?;
             wtr.seek(self.seek_pos(self.pos))?;
             self.wtr = Some(wtr);
             Ok(())
@@ -431,7 +433,10 @@ impl File {
 
     // re-create reader on latest version
     fn renew_reader(&mut self) -> Result<()> {
-        let mut rdr = FnodeReader::new_current(self.handle.fnode.clone())?;
+        let mut rdr = FnodeReader::new_current(
+            self.handle.fnode.clone(),
+            &self.handle.store,
+        )?;
         rdr.seek(self.pos)?;
         self.rdr = Some(rdr);
         Ok(())
@@ -525,7 +530,8 @@ impl File {
             return Err(Error::CannotWrite);
         }
 
-        let tx_handle = TxMgr::begin_trans(&self.handle.txmgr)?;
+        let txmgr = self.handle.txmgr.upgrade().ok_or(Error::RepoClosed)?;
+        let tx_handle = TxMgr::begin_trans(&txmgr)?;
         tx_handle.run_all(|| {
             Fnode::set_len(self.handle.clone(), len, tx_handle.txid)
         })?;
