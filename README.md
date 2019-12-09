@@ -152,7 +152,7 @@ corresponding Cargo feature when building ZboxFS.
 
 | Feature                     | Value                             |
 | --------------------------- | --------------------------------- |
-| Address allocation scheme   | Linear address space, append-only |
+| Address allocation scheme   | Append-only, linear address space |
 | Sparse files                | No                                |
 | Transparent compression     | Yes                               |
 | Extents                     | No                                |
