@@ -97,7 +97,7 @@ corresponding Cargo feature when building ZboxFS.
 | Algorithm and data structure         | Value                             |
 | ------------------------------------ | --------------------------------- |
 | Authenticated encryption             | AES-256-GCM or XChaCha20-Poly1305 |
-| Password hash                        | Argon2                            |
+| Password hashing                     | Argon2                            |
 | Key derivation                       | BLAKE2B                           |
 | Content dedup                        | Rabin rolling hash                |
 | File dedup                           | Merkle tree                       |
@@ -111,7 +111,6 @@ corresponding Cargo feature when building ZboxFS.
 | Data block size                           | 8 KiB                        |
 | Maximum encryption frame size             | 128 KiB                      |
 | Super block size                          | 8 KiB                        |
-| Maximum data file size (file storage)     | 32 MiB                       |
 | Maximum filename length                   | No limit                     |
 | Allowable characters in directory entries | Any UTF-8 character except / |
 | Maximum pathname length                   | No limit                     |
@@ -151,13 +150,13 @@ corresponding Cargo feature when building ZboxFS.
 
 ### Allocation and layout policies
 
-| Feature                     | Value       |
-| --------------------------- | ----------- |
-| Address allocation scheme   | Append-only |
-| Sparse files                | No          |
-| Transparent compression     | Yes         |
-| Extents                     | No          |
-| Copy on write               | Yes         |
+| Feature                     | Value                             |
+| --------------------------- | --------------------------------- |
+| Address allocation scheme   | Linear address space, append-only |
+| Sparse files                | No                                |
+| Transparent compression     | Yes                               |
+| Extents                     | No                                |
+| Copy on write               | Yes                               |
 
 ### Storage fragmentation
 
