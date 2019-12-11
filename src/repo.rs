@@ -207,10 +207,9 @@ impl RepoOpener {
     /// - OS file system storage, URI identifier is `file://`
     ///
     ///   After the identifier is the path to a directory on OS file system. It can
-    ///   be a relative or absolute path. Note that path is not same as an
-    ///   standard encoded URL.
+    ///   be a relative or absolute path.
     ///
-    ///   For example, `file://./foo/bar` or `file://C:/Users/foo bar/dir`.
+    ///   For example, `file://./foo/bar`.
     ///
     ///   This storage must be enabled by Cargo feature `storage-file`.
     ///
