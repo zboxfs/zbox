@@ -67,15 +67,15 @@ fn do_request<'a>(
 
     // request function signature
     let sig = if body.is_some() {
-        "(Ljava/net/URL;Ljava/util/HashMap;[B)Lio/zbox/fs/transport/Response;"
+        "(Ljava/net/URL;Ljava/util/HashMap;[B)Lio/zbox/zboxfs/transport/Response;"
     } else {
-        "(Ljava/net/URL;Ljava/util/HashMap;)Lio/zbox/fs/transport/Response;"
+        "(Ljava/net/URL;Ljava/util/HashMap;)Lio/zbox/zboxfs/transport/Response;"
     };
 
     // call request function on Java side
     let ret = env
         .call_static_method(
-            "io/zbox/fs/transport/HttpTransport",
+            "io/zbox/zboxfs/transport/HttpTransport",
             method,
             sig,
             &params,
@@ -122,7 +122,7 @@ impl JniTransport {
         {
             let env = ret.get_jni_env()?;
             env.call_static_method(
-                "io/zbox/fs/transport/HttpTransport",
+                "io/zbox/zboxfs/transport/HttpTransport",
                 "init",
                 "(I)V",
                 &[JValue::Int(timeout as i32)],
