@@ -366,6 +366,12 @@ impl LocalCache {
         }
         Ok(())
     }
+
+    pub fn destroy_repo(&mut self) -> Result<()> {
+        self.client
+            .destroy_repo()
+            .and_then(|_| self.backend.clear())
+    }
 }
 
 impl Default for LocalCache {

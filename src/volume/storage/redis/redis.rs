@@ -232,11 +232,14 @@ impl Storable for RedisStorage {
     }
 
     fn destroy(&mut self) -> Result<()> {
+        self.connect(false)?;
+
         let key = repo_lock_key();
         if self.get_bytes(&key).is_ok() {
             // repo is locked
             warn!("Destroy an opened repo");
         }
+
         match self.conn {
             Some(ref conn) => {
                 let mut conn = conn.lock().unwrap();

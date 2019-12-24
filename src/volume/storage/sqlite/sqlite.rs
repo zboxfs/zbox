@@ -528,6 +528,7 @@ impl Storable for SqliteStorage {
 
     #[inline]
     fn destroy(&mut self) -> Result<()> {
+        self.connect(false)?;
         if self.prepare_stmts().is_ok() {
             let stmt = self.stmts[0];
             reset_stmt(stmt)?;

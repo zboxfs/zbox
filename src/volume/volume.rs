@@ -198,7 +198,6 @@ impl Volume {
     #[inline]
     pub fn destroy(&mut self) -> Result<()> {
         let mut storage = self.storage.write().unwrap();
-        storage.connect(false)?;
         storage.destroy()
     }
 }

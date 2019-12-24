@@ -141,6 +141,7 @@ impl AsRef<HeaderMap> for Headers {
 /// Zbox storage HTTP client
 pub struct HttpClient {
     base_url: String,
+    repo_id: String,
     access_key: String,
     session_token: String,
     is_updated: bool,
@@ -153,7 +154,7 @@ pub struct HttpClient {
 }
 
 impl HttpClient {
-    // remote root url
+    // remote data root url
     const ROOT_URL: &'static str = "https://data.zbox.io/";
 
     // bulk request uri
@@ -196,6 +197,7 @@ impl HttpClient {
 
         Ok(HttpClient {
             base_url: Self::ROOT_URL.to_owned() + repo_id + "/",
+            repo_id: repo_id.to_owned(),
             access_key: access_key.to_string(),
             session_token: String::new(),
             is_updated: false,
@@ -410,7 +412,7 @@ impl HttpClient {
         Ok(())
     }
 
-    // send bulk delelte
+    // send bulk delete
     fn send_bulk_del_req(&mut self, bulk: &[PathBuf]) -> Result<()> {
         if bulk.is_empty() {
             return Ok(());
@@ -448,7 +450,6 @@ impl HttpClient {
         Ok(())
     }
 
-    #[inline]
     pub fn flush(&mut self) -> Result<()> {
         let bulk = self.del_bulk.clone();
         self.send_bulk_del_req(&bulk).or_else(|err| {
@@ -463,12 +464,33 @@ impl HttpClient {
         self.del_bulk.clear();
         Ok(())
     }
+
+    pub fn destroy_repo(&mut self) -> Result<()> {
+        trace!("destroy repo {}", self.repo_id);
+
+        // make repo destroy uri
+        let uri = self.make_uri("destroy")?;
+
+        let headers = self.headers.clone().bearer_auth(&self.access_key);
+        self.transport
+            .get(&uri, headers.as_ref())?
+            .error_for_status()
+            .map(|_| ())
+            .map_err(|err| {
+                if err == Error::HttpStatus(StatusCode::NOT_FOUND) {
+                    Error::NotFound
+                } else {
+                    err
+                }
+            })
+    }
 }
 
 impl Debug for HttpClient {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("HttpClient")
             .field("base_url", &self.base_url)
+            .field("repo_id", &self.repo_id)
             .field("access_key", &self.access_key)
             .field("session_token", &self.session_token)
             .field("is_updated", &self.is_updated)
@@ -483,7 +505,8 @@ impl Debug for HttpClient {
 impl Default for HttpClient {
     fn default() -> Self {
         HttpClient {
-            base_url: Self::ROOT_URL.to_owned() + "/",
+            base_url: Self::ROOT_URL.to_owned(),
+            repo_id: String::new(),
             access_key: String::new(),
             session_token: String::new(),
             is_updated: false,

@@ -273,7 +273,8 @@ impl Storable for ZboxStorage {
 
     #[inline]
     fn destroy(&mut self) -> Result<()> {
-        unimplemented!()
+        let mut local_cache = self.local_cache.write().unwrap();
+        local_cache.destroy_repo()
     }
 }
 

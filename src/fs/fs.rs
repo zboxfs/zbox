@@ -624,7 +624,9 @@ impl Fs {
     #[inline]
     pub fn destroy(uri: &str) -> Result<()> {
         let mut vol = Volume::new(uri)?;
-        vol.destroy()
+        vol.destroy()?;
+        info!("repo destroyed");
+        Ok(())
     }
 }
 
