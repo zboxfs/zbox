@@ -467,7 +467,10 @@ impl RepoInfo {
         self.ver.to_string()
     }
 
-    /// Returns the location URI string of this repository.
+    /// Returns the repository URI string.
+    ///
+    /// This string may contain confidential data for a particular storage, such
+    /// as Zbox Cloud storage, you might need to mask it as your wish.
     #[inline]
     pub fn uri(&self) -> &str {
         &self.uri

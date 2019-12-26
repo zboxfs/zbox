@@ -16,6 +16,16 @@ use trans::cow::IntoCow;
 use trans::{Eid, Id, TxMgr, TxMgrRef};
 use volume::{Info as VolumeInfo, Volume, VolumeRef};
 
+// mask secrets in uri
+fn mask_uri(uri: &str) -> String {
+    let mut masked_uri = uri.to_owned();
+    if let Some(end) = masked_uri.find('@') {
+        let begin = masked_uri.find("://").unwrap() + 3;
+        masked_uri.replace_range(begin..end, "***");
+    }
+    masked_uri
+}
+
 /// File system information
 #[derive(Debug)]
 pub struct Info {
@@ -117,7 +127,7 @@ impl Fs {
 
         // create and initialise volume
         let mut vol = Volume::new(uri)?;
-        info!("create repo: {}", vol.info().uri);
+        info!("create repo: {}", mask_uri(&vol.info().uri));
 
         vol.init(pwd, cfg, &payload.seri()?)?;
 
@@ -164,7 +174,11 @@ impl Fs {
     ) -> Result<Fs> {
         let mut vol = Volume::new(uri)?;
 
-        info!("open repo: {}, read_only: {}", vol.info().uri, read_only);
+        info!(
+            "open repo: {}, read_only: {}",
+            mask_uri(&vol.info().uri),
+            read_only
+        );
 
         // open volume
         let payload = vol.open(pwd, force)?;

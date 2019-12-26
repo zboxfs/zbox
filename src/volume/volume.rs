@@ -155,16 +155,9 @@ impl Volume {
     }
 
     // get volume info
+    #[inline]
     pub fn info(&self) -> Info {
-        let mut ret = self.info.clone();
-
-        // mask secrets in uri
-        if let Some(end) = ret.uri.find('@') {
-            let begin = ret.uri.find("://").unwrap() + 3;
-            ret.uri.replace_range(begin..end, "***");
-        }
-
-        ret
+        self.info.clone()
     }
 
     // get allocator from storage
