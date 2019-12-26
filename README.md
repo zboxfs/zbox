@@ -192,7 +192,7 @@ Add the following dependency to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-zbox = "0.8.7"
+zbox = "0.8.8"
 ```
 
 If you don't want to install libsodium by yourself, simply specify
