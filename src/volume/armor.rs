@@ -101,12 +101,7 @@ pub trait Armor<'de> {
         Ok(item)
     }
 
-    // try to load both left and right arms
-    #[allow(clippy::type_complexity)]
-    fn load_arms(
-        &self,
-        id: &Eid,
-    ) -> Result<(Option<Self::Item>, Option<Self::Item>)> {
+    fn load_item(&self, id: &Eid) -> Result<Self::Item> {
         // load left and right arms
         let left_arm = self.load_one_arm(id, Arm::Left);
         let right_arm = self.load_one_arm(id, Arm::Right);
@@ -115,40 +110,19 @@ pub trait Armor<'de> {
             Ok(left) => match right_arm {
                 Ok(right) => {
                     assert!(left.seq() != right.seq());
-                    Ok((Some(left), Some(right)))
-                }
-                Err(ref err) if *err == Error::NotFound => {
-                    Ok((Some(left), None))
-                }
-                Err(err) => Err(err),
-            },
-            Err(ref err) if *err == Error::NotFound => match right_arm {
-                Ok(right) => Ok((None, Some(right))),
-                Err(ref err) if *err == Error::NotFound => Ok((None, None)),
-                Err(err) => Err(err),
-            },
-            Err(err) => Err(err),
-        }
-    }
-
-    fn load_item(&self, id: &Eid) -> Result<Self::Item> {
-        let (left_arm, right_arm) = self.load_arms(id)?;
-
-        let item = match left_arm {
-            Some(left) => match right_arm {
-                Some(right) => {
                     if left.seq() > right.seq() {
-                        left
+                        Ok(left)
                     } else {
-                        right
+                        Ok(right)
                     }
                 }
-                None => left,
+                Err(_) => Ok(left),
             },
-            None => right_arm.ok_or(Error::NotFound)?,
-        };
-
-        Ok(item)
+            Err(_) => match right_arm {
+                Ok(right) => Ok(right),
+                Err(err) => Err(err),
+            },
+        }
     }
 
     // save item
