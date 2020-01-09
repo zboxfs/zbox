@@ -140,7 +140,12 @@ impl Seek for VersionReader {
 ///
 ///   This is done by updating `File` using [`Write`] trait multiple times.
 ///   After all writing operations, [`finish`] must be called to create a new
-///   version.
+///   version. Unless [`finish`] was successfully returned, no data will be
+///   written to the file.
+///
+///   Internally, a transaction is created when writing to the file and calling
+///   [`finish`] will commit that transaction. Thus, you should not call
+///   [`finish`] in case of any writing failure.
 ///
 ///   ## Examples
 ///
@@ -173,7 +178,8 @@ impl Seek for VersionReader {
 /// - **Single-part Write**
 ///
 ///   This can be done by calling [`write_once`], which will call [`finish`]
-///   internally to create a new version.
+///   internally to create a new version. Unless this method was successfully
+///   returned, no data will be written to the file.
 ///
 ///   ## Examples
 ///
@@ -579,20 +585,24 @@ impl Write for File {
         if self.wtr.is_none() {
             map_io_err!(self.begin_write())?;
         }
-        match self.wtr {
+
+        let mut ret = 0;
+        map_io_err!(match self.wtr {
             Some(ref mut wtr) => match self.tx_handle {
-                Some(ref tx_handle) => {
-                    let mut ret = 0;
-                    map_io_err!(tx_handle.run(|| {
+                Some(ref tx_handle) => tx_handle
+                    .run(|| {
                         ret = wtr.write(buf)?;
                         Ok(())
-                    }))?;
-                    Ok(ret)
-                }
+                    })
+                    .map(|_| ret),
                 None => unreachable!(),
             },
             None => unreachable!(),
         }
+        .or_else(|err| {
+            self.wtr.take();
+            Err(err)
+        }))
     }
 
     fn flush(&mut self) -> io::Result<()> {
