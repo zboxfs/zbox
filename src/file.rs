@@ -600,7 +600,10 @@ impl Write for File {
             None => unreachable!(),
         }
         .or_else(|err| {
+            // when write failed the tx has been aborted, so we need to clean up
+            // writer and tx handle here
             self.wtr.take();
+            self.tx_handle.take();
             Err(err)
         }))
     }
