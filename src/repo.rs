@@ -801,12 +801,13 @@ impl Repo {
     /// Create a file in read-write mode.
     ///
     /// This method will create a file if it does not exist, and will
-    /// truncate it if it does.
-    ///
-    /// See the [`OpenOptions::open`](struct.OpenOptions.html#method.open)
-    /// method for more details.
+    /// truncate it if it does. See the
+    /// [`OpenOptions::open`](struct.OpenOptions.html#method.open) method for
+    /// more details.
     ///
     /// `path` must be an absolute path.
+    ///
+    /// This method is **not** atomic.
     #[inline]
     pub fn create_file<P: AsRef<Path>>(&mut self, path: P) -> Result<File> {
         OpenOptions::new()
@@ -849,6 +850,8 @@ impl Repo {
     /// Creates a new, empty directory at the specified path.
     ///
     /// `path` must be an absolute path.
+    ///
+    /// This method is atomic.
     #[inline]
     pub fn create_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         self.fs
@@ -860,6 +863,9 @@ impl Repo {
     /// are missing.
     ///
     /// `path` must be an absolute path.
+    ///
+    /// This method is **not** atomic in whole, but creating each entry is
+    /// atomic.
     #[inline]
     pub fn create_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         self.fs.create_dir_all(path.as_ref())
@@ -896,6 +902,8 @@ impl Repo {
     /// `from` and `to` must be absolute paths to regular files.
     ///
     /// If `from` and `to` both point to the same file, this method is no-op.
+    ///
+    /// This method is **not** atomic.
     #[inline]
     pub fn copy<P: AsRef<Path>, Q: AsRef<Path>>(
         &mut self,
@@ -919,6 +927,8 @@ impl Repo {
     ///
     /// If `from` and `to` both point to the same directory, this method is
     /// no-op.
+    ///
+    /// This method is **not** atomic.
     #[inline]
     pub fn copy_dir_all<P: AsRef<Path>, Q: AsRef<Path>>(
         &mut self,
@@ -931,6 +941,8 @@ impl Repo {
     /// Removes a regular file from the repository.
     ///
     /// `path` must be an absolute path.
+    ///
+    /// This method is atomic.
     #[inline]
     pub fn remove_file<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         self.fs.remove_file(path.as_ref())
@@ -939,6 +951,8 @@ impl Repo {
     /// Remove an existing empty directory.
     ///
     /// `path` must be an absolute path.
+    ///
+    /// This method is atomic.
     #[inline]
     pub fn remove_dir<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         self.fs.remove_dir(path.as_ref())
@@ -948,6 +962,9 @@ impl Repo {
     /// Use carefully!
     ///
     /// `path` must be an absolute path.
+    ///
+    /// This method is **not** atomic in whole, but removing each entry is
+    /// atomic.
     #[inline]
     pub fn remove_dir_all<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         self.fs.remove_dir_all(path.as_ref())
@@ -957,6 +974,8 @@ impl Repo {
     /// if `to` already exists.
     ///
     /// `from` and `to` must be absolute paths.
+    ///
+    /// This method is atomic.
     #[inline]
     pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(
         &mut self,

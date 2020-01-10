@@ -11,7 +11,7 @@ use trans::{TxHandle, TxMgr};
 
 /// A reader for a specific vesion of file content.
 ///
-/// This reader can be obtained by [`version_reader`] function, and it
+/// This reader can be obtained by [`version_reader`] method, and it
 /// implements [`Read`] trait.
 ///
 /// [`version_reader`]: struct.File.html#method.version_reader
@@ -130,7 +130,7 @@ impl Seek for VersionReader {
 /// File content is cached internally for deduplication and will be handled
 /// automatically, thus calling [`flush`] is **not** recommended.
 ///
-/// `File` can be sent to multiple threads, but only thread can modify it at
+/// `File` can be sent to multiple threads, but only one thread can modify it at
 /// a time, which is similar to a `RwLock`.
 ///
 /// `File` is multi-versioned, each time updating its content will create a new
@@ -143,9 +143,10 @@ impl Seek for VersionReader {
 ///   version. Unless [`finish`] was successfully returned, no data will be
 ///   written to the file.
 ///
-///   Internally, a transaction is created when writing to the file and calling
-///   [`finish`] will commit that transaction. Thus, you should not call
-///   [`finish`] in case of any writing failure.
+///   Internally, a transaction is created when writing to the file first time
+///   and calling [`finish`] will commit that transaction. If any errors
+///   happened during [`write`], that transaction will be aborted. Thus, you
+///   should not call [`finish`] after any failed [`write`].
 ///
 ///   ## Examples
 ///
@@ -206,6 +207,20 @@ impl Seek for VersionReader {
 ///   # }
 ///   # foo().unwrap();
 ///   ```
+///
+/// To gurantee atomicity, ZboxFS uses transaction when updating file so the
+/// data either be wholly persisted or nothing has been written.
+///
+/// - For multi-part write, the transaction begins in the first-time [`write`]
+///   and will be committed in [`finish`]. Any failure in [`write`] will abort
+///   the transaction, thus [`finish`] should not be called after that. If error
+///   happened during [`finish`], the transaction will also be aborted.
+/// - For single-part write, [`write_once`] itself is transactional. The
+///   transaction begins and will be committed inside this method.
+///
+/// Keep in mind of those characteristics, especially when writing a large
+/// amount of data to file, because any uncomitted transactions will abort
+/// and data in those transactions won't be persisted.
 ///
 /// # Reading
 ///
@@ -450,11 +465,16 @@ impl File {
 
     /// Complete multi-part write to file and create a new version.
     ///
+    /// This method will try to commit the transaction internally, no data will
+    /// be persisted if it failed. Do not call this method if any previous
+    /// [`write`] failed.
+    ///
     /// # Errors
     ///
-    /// Calling this function without writing data before will return
+    /// Calling this method without writing data before will return
     /// [`Error::NotWrite`] error.
     ///
+    /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     /// [`Error::NotWrite`]: enum.Error.html
     pub fn finish(&mut self) -> Result<()> {
         self.check_closed()?;
@@ -486,8 +506,10 @@ impl File {
 
     /// Single-part write to file and create a new version.
     ///
-    /// This function provides a convenient way of combining [`Write`] and
+    /// This method provides a convenient way of combining [`Write`] and
     /// [`finish`].
+    ///
+    /// This method is atomic.
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     /// [`finish`]: struct.File.html#method.finish
@@ -522,10 +544,12 @@ impl File {
     /// then the content will be extended to `size` and have all of the
     /// intermediate data filled in with 0s.
     ///
+    /// This method is atomic.
+    ///
     /// # Errors
     ///
-    /// This function will return an error if the file is not opened for
-    /// writing or not finished writing.
+    /// This method will return an error if the file is not opened for writing
+    /// or not finished writing.
     pub fn set_len(&mut self, len: usize) -> Result<()> {
         self.check_closed()?;
         if self.wtr.is_some() {
