@@ -156,7 +156,7 @@ fn file_read_write_st() {
         OpenOptions::new()
             .create(true)
             .open(&mut repo, "/file/new")
-            .is_err();
+            .unwrap_err();
 
         // write data to the file should okay
         let mut f = OpenOptions::new()
@@ -400,7 +400,8 @@ fn file_read_write_mt() {
                     .create(true)
                     .open(&mut env.repo, &path)
                     .unwrap();
-                f.write_once(&buf[..]).unwrap();
+                f.write_all(&buf[..]).unwrap();
+                f.finish().unwrap();
             }
         }));
     }

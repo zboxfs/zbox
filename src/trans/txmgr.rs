@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::{self, Debug};
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::{Arc, Mutex, RwLock, Weak};
 
 use linked_hash_map::LinkedHashMap;
 
@@ -189,6 +189,11 @@ impl IntoRef for TxMgr {}
 pub type TxMgrRef = Arc<RwLock<TxMgr>>;
 pub type TxMgrWeakRef = Weak<RwLock<TxMgr>>;
 
+// lock for running exclusive transactions
+lazy_static! {
+    static ref EXCL_TX_LOCK: Arc<Mutex<usize>> = { Arc::new(Mutex::new(0)) };
+}
+
 // Transaction handle
 #[derive(Debug, Default, Clone)]
 pub struct TxHandle {
@@ -219,6 +224,16 @@ impl TxHandle {
             Ok(_) => self.commit(),
             Err(err) => self.abort(err),
         }
+    }
+
+    /// Run operations in transaction exclusively and commit
+    #[inline]
+    pub fn run_all_exclusive<F>(&self, oper: F) -> Result<()>
+    where
+        F: FnOnce() -> Result<()>,
+    {
+        let _lock = EXCL_TX_LOCK.lock().unwrap();
+        self.run_all(oper)
     }
 
     /// Commit a transaction

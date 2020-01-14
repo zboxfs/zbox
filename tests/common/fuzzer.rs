@@ -704,7 +704,7 @@ impl Fuzzer {
     // run the fuzz test
     pub fn run(
         fuzzer: Arc<RwLock<Fuzzer>>,
-        tester: Arc<RwLock<Testable>>,
+        tester: Arc<RwLock<dyn Testable>>,
         rounds: usize,
         worker_cnt: usize,
     ) {
@@ -799,7 +799,7 @@ impl Fuzzer {
     }
 
     // load fuzz test and re-run it
-    pub fn rerun(batch: &str, tester: Box<Testable>) {
+    pub fn rerun(batch: &str, tester: Box<dyn Testable>) {
         // load fuzzer
         let mut fuzzer = Fuzzer::load(batch);
 

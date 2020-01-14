@@ -484,11 +484,10 @@ impl File {
                 let tx_handle = self.tx_handle.take().unwrap();
                 let mut end_pos = 0;
 
-                tx_handle.run(|| {
+                tx_handle.run_all_exclusive(|| {
                     end_pos = wtr.finish()?;
                     Ok(())
                 })?;
-                tx_handle.commit()?;
 
                 // set position
                 self.pos = SeekFrom::Start(end_pos as u64);
@@ -562,7 +561,7 @@ impl File {
 
         let txmgr = self.handle.txmgr.upgrade().ok_or(Error::RepoClosed)?;
         let tx_handle = TxMgr::begin_trans(&txmgr)?;
-        tx_handle.run_all(|| {
+        tx_handle.run_all_exclusive(|| {
             Fnode::set_len(self.handle.clone(), len, tx_handle.txid)
         })?;
 

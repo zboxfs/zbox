@@ -315,7 +315,7 @@ impl Fs {
 
         let mut fnode = FnodeRef::default();
         let tx_handle = TxMgr::begin_trans(&self.txmgr)?;
-        tx_handle.run_all(|| {
+        tx_handle.run_all_exclusive(|| {
             fnode = Fnode::new_under(
                 &parent,
                 &name,
@@ -500,7 +500,7 @@ impl Fs {
 
         // begin and run transaction
         let tx_handle = TxMgr::begin_trans(&self.txmgr)?;
-        tx_handle.run_all(move || {
+        tx_handle.run_all_exclusive(move || {
             Fnode::remove_from_parent(&fnode_ref, &self.txmgr)?;
             let mut fnode = fnode_ref.write().unwrap();
             fnode
@@ -612,7 +612,7 @@ impl Fs {
         let (tgt_parent, name) = self.resolve_parent(to)?;
 
         // begin and run transaction
-        TxMgr::begin_trans(&self.txmgr)?.run_all(|| {
+        TxMgr::begin_trans(&self.txmgr)?.run_all_exclusive(|| {
             // remove from source
             Fnode::remove_from_parent(&src, &self.txmgr)?;
 

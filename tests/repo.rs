@@ -110,7 +110,7 @@ fn repo_oper() {
         assert_eq!(info.ops_limit(), OpsLimit::Moderate);
         assert_eq!(info.mem_limit(), MemLimit::Interactive);
     }
-    RepoOpener::new().open(&path, &pwd).is_err();
+    RepoOpener::new().open(&path, &pwd).unwrap_err();
     let repo = RepoOpener::new().open(&path, &new_pwd).unwrap();
     let info = repo.info().unwrap();
     assert_eq!(info.ops_limit(), OpsLimit::Moderate);
