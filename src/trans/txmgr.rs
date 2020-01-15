@@ -191,7 +191,7 @@ pub type TxMgrWeakRef = Weak<RwLock<TxMgr>>;
 
 // lock for running exclusive transactions
 lazy_static! {
-    static ref EXCL_TX_LOCK: Arc<Mutex<usize>> = { Arc::new(Mutex::new(0)) };
+    static ref EXCL_TX_LOCK: Arc<Mutex<()>> = { Arc::new(Mutex::new(())) };
 }
 
 // Transaction handle
@@ -232,7 +232,7 @@ impl TxHandle {
     where
         F: FnOnce() -> Result<()>,
     {
-        let _lock = EXCL_TX_LOCK.lock().unwrap();
+        let _ = EXCL_TX_LOCK.lock().unwrap();
         self.run_all(oper)
     }
 

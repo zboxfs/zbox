@@ -94,6 +94,7 @@ cfg_if! {
                 let uri = format!("mem://{}", crypto::random_u32(u32::max_value()));
                 let repo = RepoOpener::new()
                     .create_new(true)
+                    .dedup_file(true)
                     .open(&uri, "pwd")
                     .unwrap();
                 TestEnv { repo, tmpdir: None }

@@ -312,7 +312,7 @@ impl EntryList {
     pub fn unlink(
         &self,
         chk_map: &mut ChunkMap,
-        store: &mut Store,
+        store: &Store,
         txmgr: &TxMgrRef,
     ) -> Result<()> {
         for ent in self.ents.iter() {
@@ -328,12 +328,12 @@ impl EntryList {
 
             if seg_cow.is_orphan() {
                 // if segment is not used anymore, remove it
-                store.remove_segment(&mut seg_cow)?;
+                Segment::remove(&mut seg_cow, txmgr)?;
                 chk_map.remove_segment(seg_cow.id());
             } else if seg_cow.is_shrinkable() {
                 // shrink segment if it is small enough and remove retired
                 // chunks from chunk map
-                let retired = store.shrink_segment(&mut seg_cow)?;
+                let retired = Segment::shrink(&mut seg_cow, store, txmgr)?;
                 chk_map.remove_chunks(seg_cow.id(), &retired);
             }
         }
@@ -348,6 +348,7 @@ impl EntryList {
         &self,
         chk_map: &mut ChunkMap,
         store: &mut Store,
+        txmgr: &TxMgrRef,
     ) -> Result<()> {
         for ent in self.ents.iter() {
             let seg_ref = store.get_seg(&ent.seg_id)?;
@@ -355,7 +356,7 @@ impl EntryList {
 
             if seg_cow.is_orphan() {
                 // if segment is not used anymore, remove it
-                store.remove_segment(&mut seg_cow)?;
+                Segment::remove(&mut seg_cow, txmgr)?;
                 chk_map.remove_segment(seg_cow.id());
             }
         }

@@ -12,7 +12,7 @@ use super::{Handle, Options};
 use base::lru::{CountMeter, Lru, PinChecker};
 use base::Time;
 use content::{
-    ChunkMap, Content, ContentReader, StoreRef, StoreWeakRef,
+    ChunkMap, Content, ContentReader, Store, StoreRef, StoreWeakRef,
     Writer as StoreWriter,
 };
 use error::{Error, Result};
@@ -539,10 +539,7 @@ impl Fnode {
             .ok_or(Error::NoVersion)?;
         let ver = self.vers.remove(idx).unwrap();
 
-        if let Some(ctn) = {
-            let mut store = store.write().unwrap();
-            store.make_mut(txmgr)?.deref_content(&ver.content_id)?
-        } {
+        if let Some(ctn) = Store::deref_content(store, &ver.content_id)? {
             // content is not used anymore, remove it
             let mut content = ctn.write().unwrap();
             content.unlink(&mut self.chk_map, store, txmgr)?;
@@ -575,11 +572,7 @@ impl Fnode {
         assert!(self.is_file());
 
         // try to dedup content in store
-        let (no_dup, deduped_id) = {
-            let mut store = store.write().unwrap();
-            let store = store.make_mut(txmgr)?;
-            store.dedup_content(&content)?
-        };
+        let (no_dup, deduped_id) = Store::dedup_content(store, &content)?;
 
         // create a new version and append to version list
         let ver =

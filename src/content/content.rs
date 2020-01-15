@@ -113,7 +113,7 @@ impl Content {
         txmgr: &TxMgrRef,
     ) -> Result<()> {
         let mut store = store.write().unwrap();
-        self.ents.unlink(chk_map, store.make_mut(txmgr)?, txmgr)
+        self.ents.unlink(chk_map, store.make_mut_naive(), txmgr)
     }
 
     // remove weak reference between content and segment
@@ -125,7 +125,8 @@ impl Content {
         txmgr: &TxMgrRef,
     ) -> Result<()> {
         let mut store = store.write().unwrap();
-        self.ents.unlink_weak(chk_map, store.make_mut(txmgr)?)
+        self.ents
+            .unlink_weak(chk_map, store.make_mut_naive(), txmgr)
     }
 }
 

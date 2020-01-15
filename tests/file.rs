@@ -503,7 +503,8 @@ fn file_content_dedup() {
             .unwrap();
 
         // Those should all point to the same content, but how do we verify it?
-        // Probably need to inject some debug println() in fnode.rs.
+        // Probably need to inject some debug println() in fnode.rs and don't
+        // forget turn on `dedup_file` option when creating repo.
         f.write_once(&buf).unwrap();
         f2.write_once(&buf).unwrap();
         f3.write_once(&buf).unwrap();

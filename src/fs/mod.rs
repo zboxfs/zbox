@@ -20,6 +20,7 @@ const DEFAULT_VERSION_LIMIT: u8 = 1;
 pub struct Options {
     pub version_limit: u8,
     pub dedup_chunk: bool,
+    pub dedup_file: bool,
 }
 
 impl Default for Options {
@@ -27,6 +28,7 @@ impl Default for Options {
         Options {
             version_limit: DEFAULT_VERSION_LIMIT,
             dedup_chunk: false,
+            dedup_file: false,
         }
     }
 }

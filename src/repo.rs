@@ -130,6 +130,8 @@ impl RepoOpener {
     ///
     /// This options indicates whether the LZ4 compression should be used in
     /// the repository. Default is false.
+    ///
+    /// This option is only used when creating a repository.
     pub fn compress(&mut self, compress: bool) -> &mut Self {
         self.cfg.compress = compress;
         self
@@ -159,6 +161,17 @@ impl RepoOpener {
     /// [`OpenOptions`]: struct.OpenOptions.html
     pub fn dedup_chunk(&mut self, dedup_chunk: bool) -> &mut Self {
         self.cfg.opts.dedup_chunk = dedup_chunk;
+        self
+    }
+
+    /// Sets the default option for file deduplication.
+    ///
+    /// This option indicates whether whole file content should be deduped when
+    /// writing data to repo. Default is false.
+    ///
+    /// This option is only used when creating a repository.
+    pub fn dedup_file(&mut self, dedup_file: bool) -> &mut Self {
+        self.cfg.opts.dedup_file = dedup_file;
         self
     }
 

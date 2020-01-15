@@ -9,17 +9,15 @@ use super::content::{
     Cache as ContentCache, ContentRef, Writer as ContentWriter,
 };
 use super::segment::{
-    Cache as SegCache, DataCache as SegDataCache, SegData, SegDataRef, SegRef,
-    Segment,
+    Cache as SegCache, DataCache as SegDataCache, SegDataRef, SegRef,
 };
 use super::Content;
 use base::crypto::Hash;
 use base::RefCnt;
 use error::{Error, Result};
 use trans::cow::{Cow, CowRef, CowWeakRef, Cowable, IntoCow};
-use trans::trans::Action;
 use trans::{Eid, Id, TxMgrRef, TxMgrWeakRef, Txid};
-use volume::VolumeRef;
+use volume::{VolumeRef, VolumeWeakRef};
 
 /// Content map entry
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -51,6 +49,7 @@ impl ContentMapEntry {
 #[derive(Default, Clone, Deserialize, Serialize)]
 pub struct Store {
     chunker_params: ChunkerParams,
+    dedup_file: bool,
     content_map: HashMap<Hash, ContentMapEntry>,
 
     #[serde(skip_serializing, skip_deserializing, default)]
@@ -79,9 +78,10 @@ impl Store {
     // default content cache size
     const CONTENT_CACHE_SIZE: usize = 16;
 
-    pub fn new(txmgr: &TxMgrRef, vol: &VolumeRef) -> Self {
+    pub fn new(dedup_file: bool, txmgr: &TxMgrRef, vol: &VolumeRef) -> Self {
         Store {
             chunker_params: ChunkerParams::new(),
+            dedup_file,
             content_map: HashMap::new(),
             content_cache: ContentCache::new(Self::CONTENT_CACHE_SIZE),
             seg_cache: SegCache::new(Self::SEG_CACHE_SIZE),
@@ -110,6 +110,11 @@ impl Store {
     }
 
     #[inline]
+    pub fn get_vol_weak(&self) -> VolumeWeakRef {
+        Arc::downgrade(&self.vol)
+    }
+
+    #[inline]
     pub fn get_seg(&self, seg_id: &Eid) -> Result<SegRef> {
         self.seg_cache.get(seg_id, &self.vol)
     }
@@ -126,21 +131,43 @@ impl Store {
     }
 
     #[inline]
+    pub fn remove_segdata_from_cache(
+        &self,
+        segdata_id: &Eid,
+    ) -> Option<SegDataRef> {
+        self.segdata_cache.remove(segdata_id)
+    }
+
+    #[inline]
     pub fn get_content(&self, content_id: &Eid) -> Result<ContentRef> {
         self.content_cache.get(content_id, &self.vol)
     }
 
     /// Dedup content based on its hash
-    pub fn dedup_content(&mut self, content: &Content) -> Result<(bool, Eid)> {
+    pub fn dedup_content(
+        store: &StoreRef,
+        content: &Content,
+    ) -> Result<(bool, Eid)> {
+        let mut store = store.write().unwrap();
+
+        if !store.dedup_file {
+            let ctn = content.clone().into_cow(&store.txmgr)?;
+            let ctn = ctn.read().unwrap();
+            return Ok((true, ctn.id().clone()));
+        }
+
+        let txmgr = store.txmgr.clone();
+        let store = store.make_mut(&txmgr)?;
+
         let mut no_dup = false;
-        let ent = self
+        let ent = store
             .content_map
             .entry(content.hash().clone())
             .or_insert_with(ContentMapEntry::new);
         ent.inc_ref()?;
         if ent.content_id.is_empty() {
             // no duplication found
-            let ctn = content.clone().into_cow(&self.txmgr)?;
+            let ctn = content.clone().into_cow(&txmgr)?;
             let ctn = ctn.read().unwrap();
             ent.content_id = ctn.id().clone();
             no_dup = true;
@@ -152,13 +179,22 @@ impl Store {
     ///
     /// If the content is not used anymore, remove and return it.
     pub fn deref_content(
-        &mut self,
+        store: &StoreRef,
         content_id: &Eid,
     ) -> Result<Option<ContentRef>> {
-        let ctn_ref = self.get_content(content_id)?;
+        let mut store = store.write().unwrap();
+
+        if !store.dedup_file {
+            return Ok(None);
+        }
+
+        let txmgr = store.txmgr.clone();
+        let store = store.make_mut(&txmgr)?;
+
+        let ctn_ref = store.get_content(content_id)?;
         {
             let ctn = ctn_ref.read().unwrap();
-            let refcnt = self
+            let refcnt = store
                 .content_map
                 .get_mut(ctn.hash())
                 .ok_or(Error::NoContent)
@@ -166,59 +202,16 @@ impl Store {
             if refcnt > 0 {
                 return Ok(None);
             }
-            self.content_map.remove(ctn.hash()).unwrap();
+            store.content_map.remove(ctn.hash()).unwrap();
         }
         Ok(Some(ctn_ref))
-    }
-
-    /// Remove segment and its associated segment data
-    pub fn remove_segment(&mut self, seg_cow: &mut Cow<Segment>) -> Result<()> {
-        // add segment data to transaction for deletion
-        SegData::add_to_trans(
-            seg_cow.data_id(),
-            Action::Delete,
-            Txid::current()?,
-            &self.txmgr,
-        )?;
-
-        // add segment to tx for deletion
-        seg_cow.make_del(&self.txmgr)
-    }
-
-    /// Shrink segment
-    pub fn shrink_segment(
-        &mut self,
-        seg_cow: &mut Cow<Segment>,
-    ) -> Result<Vec<usize>> {
-        let txid = Txid::current()?;
-
-        // add segment to tx for update
-        let seg = seg_cow.make_mut(&self.txmgr)?;
-
-        // load the segment data for shrinking, because it is going to be
-        // shrank we remove it from cache immediately
-        let seg_data = {
-            self.segdata_cache.get(seg.data_id(), &self.vol)?;
-            self.segdata_cache.remove(seg.data_id()).unwrap()
-        };
-
-        // add the old segment data to transaction for deletion as it will
-        // be replaced by a new one after shrinking
-        SegData::add_to_trans(
-            seg.data_id(),
-            Action::Delete,
-            txid,
-            &self.txmgr,
-        )?;
-
-        // shrink the segment
-        seg.shrink(&seg_data, txid, &self.txmgr, &Arc::downgrade(&self.vol))
     }
 }
 
 impl Debug for Store {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Store")
+            .field("dedup_file", &self.dedup_file)
             .field("content_map", &self.content_map)
             .finish()
     }

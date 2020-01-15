@@ -142,8 +142,8 @@ impl Fs {
         let mut store_ref: Option<StoreRef> = None;
         let mut root_ref: Option<FnodeRef> = None;
         TxMgr::begin_trans(&txmgr)?.run_all(|| {
-            let store_cow =
-                Store::new(&txmgr, &vol).into_cow_with_id(&store_id, &txmgr)?;
+            let store_cow = Store::new(cfg.opts.dedup_file, &txmgr, &vol)
+                .into_cow_with_id(&store_id, &txmgr)?;
             let root_cow = Fnode::new(FileType::Dir, cfg.opts)
                 .into_cow_with_id(&root_id, &txmgr)?;
             root_ref = Some(root_cow);
@@ -411,7 +411,7 @@ impl Fs {
 
         // begin and run transaction
         let tx_handle = TxMgr::begin_trans(&self.txmgr)?;
-        tx_handle.run_all(|| {
+        tx_handle.run_all_exclusive(|| {
             // get current version of source
             let ctn = {
                 let fnode = src.read().unwrap();
@@ -422,7 +422,7 @@ impl Fs {
             let mut fnode_cow = tgt.fnode.write().unwrap();
             let fnode = fnode_cow.make_mut(&self.txmgr)?;
             let result = fnode.add_version(ctn, &self.store, &self.txmgr)?;
-            assert!(!result);
+            assert!(!(self.opts.dedup_file && result));
 
             Ok(())
         })?;

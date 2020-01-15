@@ -5,11 +5,11 @@ use std::ops::{Index, IndexMut, Range};
 use std::sync::{Arc, RwLock};
 
 use super::chunk::Chunk;
-use super::StoreWeakRef;
+use super::{Store, StoreWeakRef};
 use base::lru::{Lru, Meter, PinChecker};
 use base::IntoRef;
 use error::{Error, Result};
-use trans::cow::{CowCache, CowRef, Cowable, IntoCow};
+use trans::cow::{Cow, CowCache, CowRef, Cowable, IntoCow};
 use trans::trans::{Action, Transable};
 use trans::{Eid, EntityType, Finish, Id, TxMgrRef, TxMgrWeakRef, Txid};
 use volume::{
@@ -301,26 +301,54 @@ impl Segment {
         Ok(())
     }
 
+    // remove segment and its associated segment data
+    pub fn remove(seg_cow: &mut Cow<Segment>, txmgr: &TxMgrRef) -> Result<()> {
+        // add segment data to transaction for deletion
+        SegData::add_to_trans(
+            seg_cow.data_id(),
+            Action::Delete,
+            Txid::current()?,
+            txmgr,
+        )?;
+
+        // add segment to tx for deletion
+        seg_cow.make_del(txmgr)
+    }
+
     // shrink segment by creating a new segment data, return retired chunks
     // indices
     pub fn shrink(
-        &mut self,
-        seg_data_ref: &SegDataRef,
-        txid: Txid,
+        seg_cow: &mut Cow<Segment>,
+        store: &Store,
         txmgr: &TxMgrRef,
-        vol: &VolumeWeakRef,
     ) -> Result<Vec<usize>> {
+        let txid = Txid::current()?;
+
+        // add segment to tx for update
+        let seg = seg_cow.make_mut(txmgr)?;
+
+        debug!(
+            "shrink segment {:?} from {} to {}",
+            seg.data_id, seg.len, seg.used
+        );
+
+        // load the segment data for shrinking, because it is going to be
+        // shrank we remove it from cache immediately
+        let seg_data_ref = {
+            store.get_segdata(seg.data_id())?;
+            store.remove_segdata_from_cache(seg.data_id()).unwrap()
+        };
+
+        // add the old segment data to transaction for deletion as it will
+        // be replaced by a new one after shrinking
+        SegData::add_to_trans(&seg.data_id, Action::Delete, txid, txmgr)?;
+
         let mut buf = Vec::new();
         let mut retired = Vec::new();
 
-        debug!(
-            "shrink segment data {:?} from {} to {}",
-            self.data_id, self.len, self.used
-        );
-
-        // re-position chunks
+        // start the actual shrink, firstly re-position chunks
         let seg_data = seg_data_ref.read().unwrap();
-        for (idx, chunk) in self.chunks.iter_mut().enumerate() {
+        for (idx, chunk) in seg.chunks.iter_mut().enumerate() {
             if chunk.is_orphan() {
                 retired.push(idx);
             } else {
@@ -330,19 +358,20 @@ impl Segment {
                 chunk.pos = buf.len() - chunk.len;
             }
         }
-        assert_eq!(buf.len(), self.used);
+        assert_eq!(buf.len(), seg.used);
 
         // write the new shrank segment data to volume and add a segment data
         // stub to transaction
         let new_data_id = Eid::new();
         let mut new_seg_data = SegData::new(&new_data_id);
+        let vol = store.get_vol_weak();
         new_seg_data.data = buf;
-        new_seg_data.save(vol)?;
+        new_seg_data.save(&vol)?;
         SegData::add_to_trans(&new_data_id, Action::New, txid, txmgr)?;
 
         // update segment's length and its associated segment data id
-        self.len = self.used;
-        self.data_id = new_data_id;
+        seg.len = seg.used;
+        seg.data_id = new_data_id;
 
         Ok(retired)
     }
