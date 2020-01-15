@@ -201,7 +201,7 @@ verify and build libsodium.
 
 ```toml
 [dependencies]
-zbox = { version = "0.8.7", features = ["libsodium-bundled"] }
+zbox = { version = "0.8.8", features = ["libsodium-bundled"] }
 ```
 
 ## Example
