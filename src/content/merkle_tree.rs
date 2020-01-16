@@ -599,5 +599,4 @@ mod tests {
             test_truncate(len, len);
         }
     }
-
 }

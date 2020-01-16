@@ -14,7 +14,7 @@ pub use self::refcnt::RefCnt;
 pub use self::time::Time;
 pub use self::version::Version;
 
-use std::sync::{Arc, Once, RwLock, ONCE_INIT};
+use std::sync::{Arc, Once, RwLock};
 
 #[cfg(target_os = "android")]
 use std::ptr::NonNull;
@@ -36,7 +36,7 @@ pub fn zbox_version() -> String {
     format!("ZboxFS v{}", Version::lib_version())
 }
 
-static INIT: Once = ONCE_INIT;
+static INIT: Once = Once::new();
 
 #[cfg(target_os = "android")]
 lazy_static! {
