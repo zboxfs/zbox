@@ -148,6 +148,9 @@ impl Seek for VersionReader {
 ///   happened during [`write`], that transaction will be aborted. Thus, you
 ///   should not call [`finish`] after any failed [`write`].
 ///
+///   Because transactions is thread local, multi-part write should be done in
+///   one transaction.
+///
 ///   ## Examples
 ///
 ///   ```

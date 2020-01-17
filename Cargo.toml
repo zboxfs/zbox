@@ -71,8 +71,8 @@ cfg-if = "0.1.10"
 env_logger = "0.7.1"
 log = "0.4.8"
 rmp-serde = "0.14.0"
-serde = "1.0.102"
-serde_derive = "1.0.102"
+serde = "1.0.104"
+serde_derive = "1.0.104"
 lazy_static = "1.4.0"
 libsqlite3-sys = { version = "0.16.0", optional = true }
 redis = { version = "0.11.0", optional = true }
