@@ -14,7 +14,7 @@ use error::{Error, Result};
 use trans::Eid;
 use trans::Finish;
 use volume::storage::index_mgr::Accessor;
-use volume::{ArmAccess, Armor};
+use volume::{Arm, ArmAccess, Armor};
 
 // read/write frame size
 const FRAME_SIZE: usize = 16 * 1024;
@@ -217,6 +217,30 @@ impl<'de, T: ArmAccess<'de> + Debug> Armor<'de> for FileArmor<T> {
             Err(err) => return Err(Error::from(err)),
         }
         remove_empty_parent_dir(&path)
+    }
+
+    fn load_item(&self, id: &Eid) -> Result<Self::Item> {
+        // load left and right arms
+        let left_arm = self.load_one_arm(id, Arm::Left);
+        let right_arm = self.load_one_arm(id, Arm::Right);
+
+        match left_arm {
+            Ok(left) => match right_arm {
+                Ok(right) => {
+                    assert!(left.seq() != right.seq());
+                    if left.seq() > right.seq() {
+                        Ok(left)
+                    } else {
+                        Ok(right)
+                    }
+                }
+                Err(_) => Ok(left),
+            },
+            Err(_) => match right_arm {
+                Ok(right) => Ok(right),
+                Err(err) => Err(err),
+            },
+        }
     }
 }
 

@@ -35,24 +35,6 @@ macro_rules! is_faulty_err {
     };
 }
 
-// return if the error is caused by the faulty storage, otherwise return the
-// expression result
-macro_rules! skip_faulty {
-    ($x:expr) => {{
-        let result = $x;
-        if cfg!(feature = "storage-faulty")
-            || cfg!(feature = "storage-zbox-faulty")
-        {
-            if let Err(ref err) = result {
-                if err.description() == "Faulty error" {
-                    return;
-                }
-            }
-        }
-        result
-    }};
-}
-
 fn handle_rename(
     new_path: &Path,
     node: &Node,
@@ -134,6 +116,16 @@ impl Testable for Tester {
         step: &Step,
         ctlgrp: &mut ControlGroup,
     ) {
+        // skip faulty error by turn off fuzzy error generator
+        macro_rules! skip_faulty {
+            ($x:expr) => {{
+                fuzzer.ctlr.turn_off();
+                let result = $x;
+                fuzzer.ctlr.turn_on();
+                result
+            }};
+        }
+
         let node = ctlgrp[step.node_idx].clone();
         //println!("===> node: {:?}, step: {:?}", node, step);
 

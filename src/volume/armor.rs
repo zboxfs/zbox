@@ -116,12 +116,14 @@ pub trait Armor<'de> {
                         Ok(right)
                     }
                 }
-                Err(_) => Ok(left),
+                Err(ref err) if *err == Error::NotFound => Ok(left),
+                Err(err) => Err(err),
             },
-            Err(_) => match right_arm {
+            Err(ref err) if *err == Error::NotFound => match right_arm {
                 Ok(right) => Ok(right),
                 Err(err) => Err(err),
             },
+            Err(err) => Err(err),
         }
     }
 

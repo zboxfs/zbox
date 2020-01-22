@@ -1,8 +1,6 @@
 use std::fmt::{self, Debug};
-use std::sync::{Arc, RwLock};
 
 use base::crypto::{Crypto, Key};
-use base::lru::{CountMeter, Lru, PinChecker};
 use base::IntoRef;
 use error::Result;
 use trans::Eid;
@@ -11,159 +9,116 @@ use volume::storage::faulty_ctl::Controller;
 use volume::storage::mem::MemStorage;
 use volume::storage::Storable;
 
-// how many memory storage kept in memory
-const MEM_LRU_SIZE: usize = 4;
-
-type MemStorageLru =
-    Lru<String, MemStorage, CountMeter<MemStorage>, PinChecker<MemStorage>>;
-
-lazy_static! {
-    // static hashmap to store repos
-    static ref MEM_STORAGES: Arc<RwLock<MemStorageLru>> =
-        { Arc::new(RwLock::new(Lru::new(MEM_LRU_SIZE))) };
-}
-
 /// Faulty Storage
 ///
 /// This storage is to simulate ramdon IO error, used for test only.
 pub struct FaultyStorage {
-    loc: String,
-    inner: &'static MEM_STORAGES,
+    inner: MemStorage,
     ctlr: Controller,
 }
 
 impl FaultyStorage {
     pub fn new(loc: &str) -> Self {
         FaultyStorage {
-            loc: loc.to_string(),
-            inner: &MEM_STORAGES,
+            inner: MemStorage::new(loc),
             ctlr: Controller::new(),
         }
     }
 }
 
 impl Storable for FaultyStorage {
+    #[inline]
     fn exists(&self) -> Result<bool> {
         self.ctlr.make_random_error()?;
-
-        let inner = self.inner.read().unwrap();
-        Ok(inner.contains_key(&self.loc))
+        self.inner.exists()
     }
 
     #[inline]
-    fn connect(&mut self, _force: bool) -> Result<()> {
-        Ok(())
+    fn connect(&mut self, force: bool) -> Result<()> {
+        self.inner.connect(force)
     }
 
-    fn init(&mut self, _crypto: Crypto, _key: Key) -> Result<()> {
-        let mut inner = self.inner.write().unwrap();
-        assert!(!inner.contains_key(&self.loc));
-        inner.insert(self.loc.to_string(), MemStorage::new("faulty"));
-        Ok(())
+    #[inline]
+    fn init(&mut self, crypto: Crypto, key: Key) -> Result<()> {
+        self.inner.init(crypto, key)
     }
 
-    fn open(&mut self, _crypto: Crypto, _key: Key, _force: bool) -> Result<()> {
+    #[inline]
+    fn open(&mut self, crypto: Crypto, key: Key, force: bool) -> Result<()> {
         self.ctlr.make_random_error()?;
-
-        let inner = self.inner.read().unwrap();
-        assert!(inner.contains_key(&self.loc));
-        Ok(())
+        self.inner.open(crypto, key, force)
     }
 
+    #[inline]
     fn get_super_block(&mut self, suffix: u64) -> Result<Vec<u8>> {
         self.ctlr.make_random_error()?;
-
-        let mut inner = self.inner.write().unwrap();
-        let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.get_super_block(suffix)
+        self.inner.get_super_block(suffix)
     }
 
+    #[inline]
     fn put_super_block(&mut self, super_blk: &[u8], suffix: u64) -> Result<()> {
         self.ctlr.make_random_error()?;
-
-        let mut inner = self.inner.write().unwrap();
-        let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.put_super_block(super_blk, suffix)
+        self.inner.put_super_block(super_blk, suffix)
     }
 
+    #[inline]
     fn get_wal(&mut self, id: &Eid) -> Result<Vec<u8>> {
         self.ctlr.make_random_error()?;
-
-        let mut inner = self.inner.write().unwrap();
-        let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.get_wal(id)
+        self.inner.get_wal(id)
     }
 
+    #[inline]
     fn put_wal(&mut self, id: &Eid, wal: &[u8]) -> Result<()> {
         self.ctlr.make_random_error()?;
-
-        let mut inner = self.inner.write().unwrap();
-        let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.put_wal(id, wal)
+        self.inner.put_wal(id, wal)
     }
 
+    #[inline]
     fn del_wal(&mut self, id: &Eid) -> Result<()> {
         self.ctlr.make_random_error()?;
-
-        let mut inner = self.inner.write().unwrap();
-        let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.del_wal(id)
+        self.inner.del_wal(id)
     }
 
+    #[inline]
     fn get_address(&mut self, id: &Eid) -> Result<Vec<u8>> {
         self.ctlr.make_random_error()?;
-
-        let mut inner = self.inner.write().unwrap();
-        let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.get_address(id)
+        self.inner.get_address(id)
     }
 
+    #[inline]
     fn put_address(&mut self, id: &Eid, addr: &[u8]) -> Result<()> {
         self.ctlr.make_random_error()?;
-
-        let mut inner = self.inner.write().unwrap();
-        let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.put_address(id, addr)
+        self.inner.put_address(id, addr)
     }
 
+    #[inline]
     fn del_address(&mut self, id: &Eid) -> Result<()> {
         self.ctlr.make_random_error()?;
-
-        let mut inner = self.inner.write().unwrap();
-        let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.del_address(id)
+        self.inner.del_address(id)
     }
 
+    #[inline]
     fn get_blocks(&mut self, dst: &mut [u8], span: Span) -> Result<()> {
         self.ctlr.make_random_error()?;
-
-        let mut inner = self.inner.write().unwrap();
-        let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.get_blocks(dst, span)
+        self.inner.get_blocks(dst, span)
     }
 
+    #[inline]
     fn put_blocks(&mut self, span: Span, blks: &[u8]) -> Result<()> {
         self.ctlr.make_random_error()?;
-
-        let mut inner = self.inner.write().unwrap();
-        let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.put_blocks(span, blks)
+        self.inner.put_blocks(span, blks)
     }
 
+    #[inline]
     fn del_blocks(&mut self, span: Span) -> Result<()> {
         self.ctlr.make_random_error()?;
-
-        let mut inner = self.inner.write().unwrap();
-        let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.del_blocks(span)
+        self.inner.del_blocks(span)
     }
 
+    #[inline]
     fn flush(&mut self) -> Result<()> {
         self.ctlr.make_random_error()?;
-
-        let mut inner = self.inner.write().unwrap();
-        let ms = inner.get_refresh(&self.loc).unwrap();
-        ms.flush()
+        self.inner.flush()
     }
 
     #[inline]
@@ -175,7 +130,7 @@ impl Storable for FaultyStorage {
 impl Debug for FaultyStorage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("FaultyStorage")
-            .field("loc", &self.loc)
+            .field("inner", &self.inner)
             .finish()
     }
 }
@@ -215,8 +170,8 @@ mod tests {
             let mut fs2 = FaultyStorage::new(&loc2);
             assert!(fs.exists().unwrap());
             assert!(fs2.exists().unwrap());
-            fs.open(crypto.clone(), key.clone()).unwrap();
-            fs2.open(crypto.clone(), key.clone()).unwrap();
+            fs.open(crypto.clone(), key.clone(), false).unwrap();
+            fs2.open(crypto.clone(), key.clone(), false).unwrap();
             assert_eq!(fs.get_address(&id).unwrap(), buf);
             assert_eq!(fs.get_address(&id2).unwrap_err(), Error::NotFound);
             assert_eq!(fs2.get_address(&id2).unwrap(), buf2);
