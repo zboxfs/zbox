@@ -30,7 +30,7 @@ use env_logger;
 
 /// Get ZboxFS library version string.
 ///
-/// This method return ZboxFS library version as a string, e.g. "ZboxFS v0.8.0".
+/// This method return ZboxFS library version as a string, e.g. "ZboxFS v0.9.0".
 #[inline]
 pub fn zbox_version() -> String {
     format!("ZboxFS v{}", Version::lib_version())
