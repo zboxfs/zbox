@@ -460,6 +460,7 @@ pub struct RepoInfo {
     compress: bool,
     version_limit: u8,
     dedup_chunk: bool,
+    dedup_file: bool,
     read_only: bool,
     ctime: Time,
 }
@@ -523,6 +524,12 @@ impl RepoInfo {
     #[inline]
     pub fn dedup_chunk(&self) -> bool {
         self.dedup_chunk
+    }
+
+    /// Returns whether the file deduplication is enabled.
+    #[inline]
+    pub fn dedup_file(&self) -> bool {
+        self.dedup_file
     }
 
     /// Returns whether this repository is read-only.
@@ -734,6 +741,7 @@ impl Repo {
             compress: meta.vol_info.compress,
             version_limit: meta.opts.version_limit,
             dedup_chunk: meta.opts.dedup_chunk,
+            dedup_file: meta.opts.dedup_file,
             read_only: meta.read_only,
             ctime: meta.vol_info.ctime,
         })
