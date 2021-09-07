@@ -8,6 +8,8 @@ env:
 jobs:
   build-linux:
     runs-on: ubuntu-latest
+    env:
+      LZ4_LIB_DIR: /usr/local/lib
 
     steps:
     - uses: actions/checkout@v2
@@ -90,7 +92,7 @@ jobs:
         Expand-Archive ${env:LIBSODIUM}-msvc.zip -DestinationPath ${env:LIBSODIUM}
 
     - name: Build ZboxFS
-      run: echo %GITHUB_WORKSPACE% && dir && cargo build -q
+      run: echo %GITHUB_WORKSPACE% && tree /F %SODIUM_LIB_DIR% && dir && cargo build -q
 
     - name: Run ZboxFS tests
       run: cargo test
