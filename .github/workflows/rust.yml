@@ -19,6 +19,13 @@ jobs:
         path: libsodium-1.0.18
         key: ${{ runner.os }}-libsodium-1.0.18
 
+    - name: Cache lz4
+      id: cache-lz4
+      uses: actions/cache@v2
+      with:
+        path: lz4-1.9.3
+        key: ${{ runner.os }}-lz4-1.9.3
+
     - name: Cache Cargo
       id: cache-cargo
       uses: actions/cache@v2
@@ -41,6 +48,16 @@ jobs:
     - name: Install libsodium
       run: cd $LIBSODIUM && sudo make install
 
+    - name: Build lz4
+      if: steps.cache-lz4.outputs.cache-hit != 'true'
+      run: |
+        wget -nv https://github.com/lz4/lz4/archive/refs/tags/v1.9.3.tar.gz
+        tar -xzf v1.9.3.tar.gz
+        cd lz4-1.9.3 && make lib-release
+
+    - name: Install lz4
+      run: cd lz4-1.9.3 && sudo make install
+
     - name: Build ZboxFS
       run: cargo build
 
@@ -53,7 +70,7 @@ jobs:
   build-win:
     runs-on: windows-latest
     env:
-      SODIUM_LIB_DIR: libsodium-1.0.18\x64\Release\v142\static
+      SODIUM_LIB_DIR: D:\a\zbox\zbox\libsodium-1.0.18\x64\Release\v142\static
       SODIUM_STATIC: 1
 
     steps:
@@ -73,7 +90,7 @@ jobs:
         Expand-Archive ${env:LIBSODIUM}-msvc.zip -DestinationPath ${env:LIBSODIUM}
 
     - name: Build ZboxFS
-      run: echo %GITHUB_WORKSPACE% && dir && cargo build
+      run: echo %GITHUB_WORKSPACE% && dir && cargo build -q
 
     - name: Run ZboxFS tests
       run: cargo test
