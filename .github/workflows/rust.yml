@@ -53,7 +53,7 @@ jobs:
   build-win:
     runs-on: windows-latest
     env:
-      SODIUM_LIB_DIR: $GITHUB_WORKSPACE\libsodium-1.0.18\x64\Release\v142\static
+      SODIUM_LIB_DIR: %GITHUB_WORKSPACE%\libsodium-1.0.18\x64\Release\v142\static
       SODIUM_STATIC: 1
 
     steps:
@@ -73,7 +73,7 @@ jobs:
         Expand-Archive ${env:LIBSODIUM}-msvc.zip -DestinationPath ${env:LIBSODIUM}
 
     - name: Build ZboxFS
-      run: ls -al && pwd && cargo build
+      run: echo %GITHUB_WORKSPACE% && dir && cargo build
 
     - name: Run ZboxFS tests
       run: cargo test
