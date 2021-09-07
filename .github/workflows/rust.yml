@@ -95,8 +95,9 @@ jobs:
         echo "SODIUM_STATIC=1" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
     - name: Build ZboxFS
-      run: echo $env:SODIUM_LIB_DIR
-      run: dir && cargo build -q
+      run: |
+        echo $env:SODIUM_LIB_DIR
+        dir && cargo build -q
 
     - name: Run ZboxFS tests
       run: cargo test
