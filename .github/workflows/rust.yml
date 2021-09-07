@@ -91,7 +91,7 @@ jobs:
 
     - name: Set env variables
       run: |
-        echo "SODIUM_LIB_DIR=.\${env:LIBSODIUM}\x64\Release\v142\static" >> $env:GITHUB_ENV
+        echo "SODIUM_LIB_DIR=.\${env:LIBSODIUM}\libsodium\x64\Release\v142\static" >> $env:GITHUB_ENV
         echo "SODIUM_STATIC=1" >> $env:GITHUB_ENV
 
     - name: Build ZboxFS
