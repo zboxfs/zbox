@@ -83,11 +83,26 @@ jobs:
         path: libsodium-1.0.18
         key: ${{ runner.os }}-libsodium-1.0.18
 
+    - name: Cache Cargo
+      id: cache-cargo
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
     - name: Download libsodium
       if: steps.cache-libsodium.outputs.cache-hit != 'true'
       run: |
         Invoke-WebRequest https://download.libsodium.org/libsodium/releases/${env:LIBSODIUM}-msvc.zip -OutFile ${env:LIBSODIUM}-msvc.zip
         Expand-Archive ${env:LIBSODIUM}-msvc.zip -DestinationPath ${env:LIBSODIUM}
+
+    - name: Install lz4
+      run: vcpkg install lz4
 
     - name: Set env variables
       run: |
@@ -95,7 +110,7 @@ jobs:
         echo "SODIUM_STATIC=1" >> $env:GITHUB_ENV
 
     - name: Build ZboxFS
-      run: cargo build -q
+      run: dir env: && cargo build -q
 
     - name: Run ZboxFS tests
       run: cargo test
