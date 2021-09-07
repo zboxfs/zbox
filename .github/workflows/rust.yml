@@ -72,9 +72,6 @@ jobs:
 
   build-win:
     runs-on: windows-latest
-    env:
-      SODIUM_LIB_DIR: D:\a\zbox\zbox\libsodium-1.0.18\x64\Release\v142\static
-      SODIUM_STATIC: 1
 
     steps:
     - uses: actions/checkout@v2
@@ -92,8 +89,13 @@ jobs:
         Invoke-WebRequest https://download.libsodium.org/libsodium/releases/${env:LIBSODIUM}-msvc.zip -OutFile ${env:LIBSODIUM}-msvc.zip
         Expand-Archive ${env:LIBSODIUM}-msvc.zip -DestinationPath ${env:LIBSODIUM}
 
+    - name: Set libsodium env variables
+      run: |
+        echo ("SODIUM_LIB_DIR=" + $env:LIBSODIUM + "\x64\Release\v142\static") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        echo "SODIUM_STATIC=1" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
     - name: Build ZboxFS
-      run: echo %SODIUM_LIB_DIR% && dir %SODIUM_LIB_DIR% && tree /F libsodium-1.0.18 && dir && cargo build -q
+      run: echo %SODIUM_LIB_DIR% && dir %SODIUM_LIB_DIR% && dir && cargo build -q
 
     - name: Run ZboxFS tests
       run: cargo test
