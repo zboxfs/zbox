@@ -90,7 +90,9 @@ jobs:
         Expand-Archive ${env:LIBSODIUM}-msvc.zip -DestinationPath ${env:LIBSODIUM}
 
     - name: Set env variables
-      run: echo "SODIUM_LIB_DIR=${env:LIBSODIUM}\x64\Release\v142\static" >> $env:GITHUB_ENV
+      run: |
+        echo "SODIUM_LIB_DIR=${env:LIBSODIUM}\x64\Release\v142\static" >> $env:GITHUB_ENV
+        echo "SODIUM_STATIC=1" >> $env:GITHUB_ENV
 
     - name: Build ZboxFS
       run: |
