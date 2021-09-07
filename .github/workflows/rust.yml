@@ -97,7 +97,12 @@ jobs:
     - name: Build ZboxFS
       run: |
         dir env:
-        tree /F ".\${env:LIBSODIUM}\x64\Release\v142\"
+        dir
+        dir ".\${env:LIBSODIUM}"
+        dir ".\${env:LIBSODIUM}\x64"
+        dir ".\${env:LIBSODIUM}\x64\Release"
+        dir ".\${env:LIBSODIUM}\x64\Release\v142"
+        dir ".\${env:LIBSODIUM}\x64\Release\v142\static"
         cargo build -q
 
     - name: Run ZboxFS tests
