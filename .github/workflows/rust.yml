@@ -91,17 +91,13 @@ jobs:
 
     - name: Set env variables
       run: |
-        echo "SODIUM_LIB_DIR=${env:LIBSODIUM}\x64\Release\v142\static" >> $env:GITHUB_ENV
+        echo "SODIUM_LIB_DIR=.\${env:LIBSODIUM}\x64\Release\v142\static" >> $env:GITHUB_ENV
         echo "SODIUM_STATIC=1" >> $env:GITHUB_ENV
 
     - name: Build ZboxFS
       run: |
-        $Env:SODIUM_LIB_DIR = "${env:LIBSODIUM}\x64\Release\v142\static"
-        $Env:SODIUM_STATIC = "1"
-        $Env:SODIUM_LIB_DIR
-        $Env:SODIUM_STATIC
         dir env:
-        tree /F "${env:LIBSODIUM}\x64\Release\v142"
+        tree /F ".\${env:LIBSODIUM}\x64\Release\v142\"
         cargo build -q
 
     - name: Run ZboxFS tests
