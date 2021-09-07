@@ -89,17 +89,11 @@ jobs:
         Invoke-WebRequest https://download.libsodium.org/libsodium/releases/${env:LIBSODIUM}-msvc.zip -OutFile ${env:LIBSODIUM}-msvc.zip
         Expand-Archive ${env:LIBSODIUM}-msvc.zip -DestinationPath ${env:LIBSODIUM}
 
-    - name: Set libsodium env variables
-      run: |
-        echo ("SODIUM_LIB_DIR=" + ${env:LIBSODIUM} + "\x64\Release\v142\static") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-        echo "SODIUM_STATIC=1" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
     - name: Build ZboxFS
       run: |
-        echo "${{ env.SODIUM_STATIC }}"
-        set SODIUM_LIB_DIR=libsodium-1.0.18\x64\Release\v142\static
+        set SODIUM_LIB_DIR=${env:LIBSODIUM}\x64\Release\v142\static
         set SODIUM_STATIC=1
-        dir && cargo build -q
+        set && cargo build -q
 
     - name: Run ZboxFS tests
       run: cargo test
