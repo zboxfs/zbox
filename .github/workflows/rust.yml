@@ -95,15 +95,7 @@ jobs:
         echo "SODIUM_STATIC=1" >> $env:GITHUB_ENV
 
     - name: Build ZboxFS
-      run: |
-        dir env:
-        dir
-        dir ".\${env:LIBSODIUM}"
-        dir ".\${env:LIBSODIUM}\x64"
-        dir ".\${env:LIBSODIUM}\x64\Release"
-        dir ".\${env:LIBSODIUM}\x64\Release\v142"
-        dir ".\${env:LIBSODIUM}\x64\Release\v142\static"
-        cargo build -q
+      run: cargo build -q
 
     - name: Run ZboxFS tests
       run: cargo test
