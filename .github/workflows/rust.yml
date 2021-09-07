@@ -10,14 +10,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
 
     - name: Cache libsodium
       id: cache-libsodium
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: libsodium-1.0.18
         key: ${{ runner.os }}-libsodium-1.0.18
+
+    - name: Cache Cargo
+      id: cache-cargo
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build libsodium
       if: steps.cache-libsodium.outputs.cache-hit != 'true'
@@ -41,15 +53,15 @@ jobs:
   build-win:
     runs-on: windows-latest
     env:
-      SODIUM_LIB_DIR: libsodium-1.0.18\x64\Release\v142\static
+      SODIUM_LIB_DIR: $GITHUB_WORKSPACE\libsodium-1.0.18\x64\Release\v142\static
       SODIUM_STATIC: 1
 
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
 
     - name: Cache libsodium
       id: cache-libsodium
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: libsodium-1.0.18
         key: ${{ runner.os }}-libsodium-1.0.18
@@ -61,7 +73,7 @@ jobs:
         Expand-Archive ${env:LIBSODIUM}-msvc.zip -DestinationPath ${env:LIBSODIUM}
 
     - name: Build ZboxFS
-      run: cargo build
+      run: ls -al && pwd && cargo build
 
     - name: Run ZboxFS tests
       run: cargo test
