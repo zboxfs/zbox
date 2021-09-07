@@ -9,6 +9,7 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     env:
+      SODIUM_LIB_DIR: /usr/local/lib
       LZ4_LIB_DIR: /usr/local/lib
 
     steps:
@@ -61,7 +62,7 @@ jobs:
       run: cd lz4-1.9.3 && sudo make install
 
     - name: Build ZboxFS
-      run: cargo build
+      run: cargo build -q
 
     - name: Run ZboxFS tests
       run: cargo test
@@ -92,7 +93,7 @@ jobs:
         Expand-Archive ${env:LIBSODIUM}-msvc.zip -DestinationPath ${env:LIBSODIUM}
 
     - name: Build ZboxFS
-      run: echo %GITHUB_WORKSPACE% && tree /F %SODIUM_LIB_DIR% && dir && cargo build -q
+      run: echo %SODIUM_LIB_DIR% && dir %SODIUM_LIB_DIR% && tree /F libsodium-1.0.18 && dir && cargo build -q
 
     - name: Run ZboxFS tests
       run: cargo test
