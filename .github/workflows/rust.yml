@@ -83,6 +83,13 @@ jobs:
         path: libsodium-1.0.18
         key: ${{ runner.os }}-libsodium-1.0.18
 
+    - name: Cache lz4
+      id: cache-lz4
+      uses: actions/cache@v2
+      with:
+        path: $VCPKG_INSTALLATION_ROOT\installed\x86-windows\lib
+        key: ${{ runner.os }}-lz4-1.9.3
+
     - name: Cache Cargo
       id: cache-cargo
       uses: actions/cache@v2
@@ -102,17 +109,17 @@ jobs:
         Expand-Archive ${env:LIBSODIUM}-msvc.zip -DestinationPath ${env:LIBSODIUM}
 
     - name: Install lz4
+      if: steps.cache-lz4.outputs.cache-hit != 'true'
       run: vcpkg install lz4
 
     - name: Set env variables
       run: |
         echo "SODIUM_LIB_DIR=.\${env:LIBSODIUM}\libsodium\x64\Release\v142\static" >> $env:GITHUB_ENV
         echo "SODIUM_STATIC=1" >> $env:GITHUB_ENV
+        echo "LZ4_LIB_DIR=$VCPKG_INSTALLATION_ROOT\installed\x86-windows\lib" >> $env:GITHUB_ENV
 
     - name: Build ZboxFS
-      run: |
-        dir env:
-        cargo build -q
+      run: cargo build -q
 
     - name: Run ZboxFS tests
       run: cargo test
