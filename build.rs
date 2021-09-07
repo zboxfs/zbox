@@ -231,11 +231,11 @@ fn download_and_install_libsodium() {
         let mut zip = zip::ZipArchive::new(tmpfile).unwrap();
         #[cfg(target_arch = "x86_64")]
         let mut lib = zip
-            .by_name("x64/Release/v141/static/libsodium.lib")
+            .by_name("x64/Release/v142/static/libsodium.lib")
             .unwrap();
         #[cfg(target_arch = "x86")]
         let mut lib = zip
-            .by_name("Win32/Release/v141/static/libsodium.lib")
+            .by_name("Win32/Release/v142/static/libsodium.lib")
             .unwrap();
         #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
         compile_error!("Bundled libsodium is only supported on x86 or x86_64 target architecture.");
