@@ -1,4 +1,3 @@
-use std::error::Error as StdError;
 use std::fmt::{self, Debug};
 use std::io::{self, Error as IoError, ErrorKind, Read, Seek, SeekFrom, Write};
 
@@ -583,7 +582,7 @@ impl Read for File {
         if !self.can_read {
             return Err(IoError::new(
                 ErrorKind::Other,
-                Error::CannotRead.description(),
+                Error::CannotRead.to_string(),
             ));
         }
 
@@ -649,7 +648,7 @@ impl Write for File {
             },
             None => Err(IoError::new(
                 ErrorKind::PermissionDenied,
-                Error::CannotWrite.description(),
+                Error::CannotWrite.to_string(),
             )),
         }
     }
@@ -661,7 +660,7 @@ impl Seek for File {
         if self.wtr.is_some() {
             return Err(IoError::new(
                 ErrorKind::Other,
-                Error::NotFinish.description(),
+                Error::NotFinish.to_string(),
             ));
         }
 

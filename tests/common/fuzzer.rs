@@ -347,7 +347,7 @@ impl Step {
         buf.put_u64_le(self.data_len as u64);
         let mut s = self.name.clone().into_bytes();
         s.resize(32, 0);
-        buf.put(s);
+        buf.put_slice(&s);
         file.write_all(&buf).unwrap();
     }
 

@@ -10,7 +10,6 @@ extern crate zbox;
 
 mod common;
 
-use std::error::Error as StdError;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
@@ -26,7 +25,7 @@ macro_rules! is_faulty_err {
             || cfg!(feature = "storage-zbox-faulty")
         {
             match $x {
-                Err(ref err) if err.description() == "Faulty error" => true,
+                Err(ref err) if err.to_string() == "Faulty error" => true,
                 _ => false,
             }
         } else {

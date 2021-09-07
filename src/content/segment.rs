@@ -1,4 +1,3 @@
-use std::error::Error as StdError;
 use std::fmt::{self, Debug};
 use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write};
 use std::ops::{Index, IndexMut, Range};

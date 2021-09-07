@@ -3,7 +3,7 @@ name: build
 on: [push]
 
 env:
-  LIBSODIUM: libsodium-1.0.17
+  LIBSODIUM: libsodium-1.0.18
 
 jobs:
   build-linux:
@@ -16,8 +16,8 @@ jobs:
       id: cache-libsodium
       uses: actions/cache@v1
       with:
-        path: libsodium-1.0.17
-        key: ${{ runner.os }}-libsodium-1.0.17
+        path: libsodium-1.0.18
+        key: ${{ runner.os }}-libsodium-1.0.18
 
     - name: Build libsodium
       if: steps.cache-libsodium.outputs.cache-hit != 'true'
@@ -37,29 +37,29 @@ jobs:
 
     - name: Run ZboxFS file storage tests
       run: cargo test --features storage-file
-     
+
   build-win:
     runs-on: windows-latest
     env:
-      SODIUM_LIB_DIR: libsodium-1.0.17\x64\Release\v141\static
+      SODIUM_LIB_DIR: libsodium-1.0.18\x64\Release\v141\static
       SODIUM_STATIC: 1
-    
+
     steps:
     - uses: actions/checkout@v1
-    
+
     - name: Cache libsodium
       id: cache-libsodium
       uses: actions/cache@v1
       with:
-        path: libsodium-1.0.17
-        key: ${{ runner.os }}-libsodium-1.0.17
-      
+        path: libsodium-1.0.18
+        key: ${{ runner.os }}-libsodium-1.0.18
+
     - name: Download libsodium
       if: steps.cache-libsodium.outputs.cache-hit != 'true'
       run: |
         Invoke-WebRequest https://download.libsodium.org/libsodium/releases/${env:LIBSODIUM}-msvc.zip -OutFile ${env:LIBSODIUM}-msvc.zip
         Expand-Archive ${env:LIBSODIUM}-msvc.zip -DestinationPath ${env:LIBSODIUM}
-      
+
     - name: Build ZboxFS
       run: cargo build
 

@@ -14,10 +14,10 @@ use std::path::PathBuf;
 use std::process::Command;
 
 #[cfg(all(feature = "libsodium-bundled", not(target_os = "windows")))]
-const LIBSODIUM_NAME: &'static str = "libsodium-1.0.17";
+const LIBSODIUM_NAME: &'static str = "libsodium-1.0.18";
 #[cfg(all(feature = "libsodium-bundled", not(target_os = "windows")))]
 const LIBSODIUM_URL: &'static str =
-    "https://download.libsodium.org/libsodium/releases/libsodium-1.0.17.tar.gz";
+    "https://download.libsodium.org/libsodium/releases/libsodium-1.0.18.tar.gz";
 
 // skip the build script when building doc on docs.rs
 #[cfg(feature = "docs-rs")]
@@ -51,7 +51,7 @@ fn main() {
         // under '/usr' dir, in that case use the environment variables
         // mentioned above
         pkg_config::Config::new()
-            .atleast_version("1.0.17")
+            .atleast_version("1.0.18")
             .statik(true)
             .probe("libsodium")
             .unwrap();
@@ -213,9 +213,9 @@ fn download_and_install_libsodium() {
     use std::io;
     use std::path::PathBuf;
     #[cfg(target_env = "msvc")]
-    static LIBSODIUM_ZIP: &'static str = "https://download.libsodium.org/libsodium/releases/libsodium-1.0.17-msvc.zip";
+    static LIBSODIUM_ZIP: &'static str = "https://download.libsodium.org/libsodium/releases/libsodium-1.0.18-msvc.zip";
     #[cfg(target_env = "mingw")]
-    static LIBSODIUM_ZIP: &'static str = "https://download.libsodium.org/libsodium/releases/libsodium-1.0.17-mingw.tar.gz";
+    static LIBSODIUM_ZIP: &'static str = "https://download.libsodium.org/libsodium/releases/libsodium-1.0.18-mingw.tar.gz";
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let sodium_lib_dir = out_dir.join("libsodium");
     if !sodium_lib_dir.exists() {
@@ -269,7 +269,7 @@ fn download_and_install_libsodium() {
     use std::io;
     use std::path::PathBuf;
     use tar::Archive;
-    static LIBSODIUM_ZIP: &'static str = "https://download.libsodium.org/libsodium/releases/libsodium-1.0.17-mingw.tar.gz";
+    static LIBSODIUM_ZIP: &'static str = "https://download.libsodium.org/libsodium/releases/libsodium-1.0.18-mingw.tar.gz";
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let sodium_lib_dir = out_dir.join("libsodium");
     if !sodium_lib_dir.exists() {

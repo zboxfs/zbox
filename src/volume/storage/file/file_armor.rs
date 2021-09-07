@@ -1,5 +1,4 @@
 use std::cmp::min;
-use std::error::Error as StdError;
 use std::fmt::Debug;
 use std::io::{
     Error as IoError, ErrorKind, Read, Result as IoResult, Take, Write,

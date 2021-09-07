@@ -6,4 +6,4 @@ pub const REPO_PATCH_VERSION: u8 = 0;
 /// Define ZboxFS library version
 pub const LIB_MAJOR_VERSION: u8 = 0;
 pub const LIB_MINOR_VERSION: u8 = 9;
-pub const LIB_PATCH_VERSION: u8 = 1;
+pub const LIB_PATCH_VERSION: u8 = 2;

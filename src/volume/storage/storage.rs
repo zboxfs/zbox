@@ -1,5 +1,4 @@
 use std::cmp::min;
-use std::error::Error as StdError;
 use std::fmt::{self, Debug, Display};
 use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write};
 use std::sync::{Arc, RwLock, Weak};
@@ -376,7 +375,7 @@ impl Read for WalReader {
                 if err == Error::NotFound {
                     IoError::new(ErrorKind::NotFound, "Wal not found")
                 } else {
-                    IoError::new(ErrorKind::Other, err.description())
+                    IoError::new(ErrorKind::Other, err.to_string())
                 }
             })?;
 
@@ -497,7 +496,7 @@ impl Read for Reader {
                                 "Blocks not found",
                             )
                         } else {
-                            IoError::new(ErrorKind::Other, err.description())
+                            IoError::new(ErrorKind::Other, err.to_string())
                         }
                     })?;
                 read += read_len;

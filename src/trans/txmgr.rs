@@ -191,7 +191,7 @@ pub type TxMgrWeakRef = Weak<RwLock<TxMgr>>;
 
 // lock for running exclusive transactions
 lazy_static! {
-    static ref EXCL_TX_LOCK: Arc<Mutex<()>> = { Arc::new(Mutex::new(())) };
+    static ref EXCL_TX_LOCK: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
 }
 
 // Transaction handle
