@@ -91,11 +91,11 @@ jobs:
 
     - name: Set libsodium env variables
       run: |
-        echo ("SODIUM_LIB_DIR=" + $env:LIBSODIUM + "\x64\Release\v142\static") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        echo ("SODIUM_LIB_DIR=" + ${env:LIBSODIUM} + "\x64\Release\v142\static") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
         echo "SODIUM_STATIC=1" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
     - name: Build ZboxFS
-      run: echo %SODIUM_LIB_DIR% && dir %SODIUM_LIB_DIR% && dir && cargo build -q
+      run: echo $env:SODIUM_LIB_DIR && dir %SODIUM_LIB_DIR% && dir && cargo build -q
 
     - name: Run ZboxFS tests
       run: cargo test
