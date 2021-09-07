@@ -93,7 +93,8 @@ jobs:
       run: |
         set SODIUM_LIB_DIR=${env:LIBSODIUM}\x64\Release\v142\static
         set SODIUM_STATIC=1
-        set && cargo build -q
+        set
+        cargo build -q
 
     - name: Run ZboxFS tests
       run: cargo test
