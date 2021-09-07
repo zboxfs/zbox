@@ -96,7 +96,9 @@ jobs:
 
     - name: Build ZboxFS
       run: |
-        echo $env:SODIUM_LIB_DIR
+        echo "${{ env.SODIUM_STATIC }}"
+        set SODIUM_LIB_DIR=libsodium-1.0.18\x64\Release\v142\static
+        set SODIUM_STATIC=1
         dir && cargo build -q
 
     - name: Run ZboxFS tests
