@@ -110,7 +110,9 @@ jobs:
         echo "SODIUM_STATIC=1" >> $env:GITHUB_ENV
 
     - name: Build ZboxFS
-      run: dir env: && cargo build -q
+      run: |
+        dir env:
+        cargo build -q
 
     - name: Run ZboxFS tests
       run: cargo test
