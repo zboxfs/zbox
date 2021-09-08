@@ -110,11 +110,12 @@ jobs:
         Invoke-WebRequest https://download.libsodium.org/libsodium/releases/${env:LIBSODIUM}-msvc.zip -OutFile "${env:LIBSODIUM}-msvc.zip"
         Expand-Archive "${env:LIBSODIUM}-msvc.zip" -DestinationPath ${env:LIBSODIUM}
 
-    - name: Download lz4
+    - name: Download and build lz4
       if: steps.cache-lz4.outputs.cache-hit != 'true'
       run: |
-        Invoke-WebRequest https://github.com/lz4/lz4/releases/download/v1.9.3/lz4_win64_v1_9_3.zip -OutFile "${env:LIBLZ4}.zip"
+        Invoke-WebRequest https://github.com/lz4/lz4/archive/refs/tags/v1.9.3.zip -OutFile "${env:LIBLZ4}.zip"
         Expand-Archive "${env:LIBLZ4}.zip" -DestinationPath ${env:LIBLZ4}
+        msbuild lz4-1.9.3\lz4-1.9.3\build\VS2017\liblz4\liblz4.vcxproj /property:Configuration=Release
 
     - name: Set env variables
       run: |
