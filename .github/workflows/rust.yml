@@ -113,8 +113,8 @@ jobs:
     - name: Download lz4
       if: steps.cache-lz4.outputs.cache-hit != 'true'
       run: |
-        Invoke-WebRequest https://github.com/lz4/lz4/releases/download/v1.9.3/lz4_win64_v1_9_3.zip
-        Expand-Archive lz4_win64_v1_9_3.zip -DestinationPath ${env:LIBLZ4}
+        Invoke-WebRequest https://github.com/lz4/lz4/releases/download/v1.9.3/lz4_win64_v1_9_3.zip -OutFile ${env:LIBLZ4}.zip
+        Expand-Archive ${env:LIBLZ4}.zip -DestinationPath ${env:LIBLZ4}
 
     - name: Set env variables
       run: |
