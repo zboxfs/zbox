@@ -110,6 +110,9 @@ jobs:
         Invoke-WebRequest https://download.libsodium.org/libsodium/releases/${env:LIBSODIUM}-msvc.zip -OutFile "${env:LIBSODIUM}-msvc.zip"
         Expand-Archive "${env:LIBSODIUM}-msvc.zip" -DestinationPath ${env:LIBSODIUM}
 
+    - name: Add msbuild to PATH
+      uses: microsoft/setup-msbuild@v1.0.3
+
     - name: Download and build lz4
       if: steps.cache-lz4.outputs.cache-hit != 'true'
       run: |
