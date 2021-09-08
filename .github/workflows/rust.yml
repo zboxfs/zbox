@@ -107,21 +107,20 @@ jobs:
     - name: Download libsodium
       if: steps.cache-libsodium.outputs.cache-hit != 'true'
       run: |
-        Invoke-WebRequest https://download.libsodium.org/libsodium/releases/${env:LIBSODIUM}-msvc.zip -OutFile ${env:LIBSODIUM}-msvc.zip
-        Expand-Archive ${env:LIBSODIUM}-msvc.zip -DestinationPath ${env:LIBSODIUM}
+        Invoke-WebRequest https://download.libsodium.org/libsodium/releases/${env:LIBSODIUM}-msvc.zip -OutFile "${env:LIBSODIUM}-msvc.zip"
+        Expand-Archive "${env:LIBSODIUM}-msvc.zip" -DestinationPath ${env:LIBSODIUM}
 
     - name: Download lz4
       if: steps.cache-lz4.outputs.cache-hit != 'true'
       run: |
-        Invoke-WebRequest https://github.com/lz4/lz4/releases/download/v1.9.3/lz4_win64_v1_9_3.zip -OutFile ${env:LIBLZ4}.zip
-        Expand-Archive ${env:LIBLZ4}.zip -DestinationPath ${env:LIBLZ4}
+        Invoke-WebRequest https://github.com/lz4/lz4/releases/download/v1.9.3/lz4_win64_v1_9_3.zip -OutFile "${env:LIBLZ4}.zip"
+        Expand-Archive "${env:LIBLZ4}.zip" -DestinationPath ${env:LIBLZ4}
 
     - name: Set env variables
       run: |
-        ls ${env:LIBLZ4}
         echo "SODIUM_LIB_DIR=.\${env:LIBSODIUM}\libsodium\x64\Release\v142\static" >> $env:GITHUB_ENV
         echo "SODIUM_STATIC=1" >> $env:GITHUB_ENV
-        echo "LZ4_LIB_DIR=${env:LIBLZ4}\**\static" >> $env:GITHUB_ENV
+        echo "LZ4_LIB_DIR=.\${env:LIBLZ4}\static" >> $env:GITHUB_ENV
 
     - name: Build ZboxFS
       run: cargo build -q
