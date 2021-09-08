@@ -61,7 +61,7 @@ fn main() {
     if let Ok(lib_dir) = env::var("LZ4_LIB_DIR") {
         println!("cargo:rustc-link-search=native={}", lib_dir);
         if cfg!(target_os = "windows") {
-            println!("cargo:rustc-link-lib=static=liblz4_static");
+            println!("cargo:rustc-link-lib=static=liblz4");
         } else {
             println!("cargo:rustc-link-lib=static=lz4");
         }

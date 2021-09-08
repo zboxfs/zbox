@@ -110,26 +110,20 @@ jobs:
         Invoke-WebRequest https://download.libsodium.org/libsodium/releases/${env:LIBSODIUM}-msvc.zip -OutFile "${env:LIBSODIUM}-msvc.zip"
         Expand-Archive "${env:LIBSODIUM}-msvc.zip" -DestinationPath ${env:LIBSODIUM}
 
-    - name: Add msbuild to PATH
-      uses: microsoft/setup-msbuild@v1.0.3
-
-    - name: Install Windows 8.1 SDK
-      run: |
-        Invoke-WebRequest -Method Get -Uri https://go.microsoft.com/fwlink/p/?LinkId=323507 -OutFile sdksetup.exe -UseBasicParsing
-        Start-Process -Wait sdksetup.exe -ArgumentList "/q", "/norestart", "/features", "OptionId.WindowsDesktopSoftwareDevelopmentKit", "OptionId.NetFxSoftwareDevelopmentKit"
-
     - name: Download and build lz4
       if: steps.cache-lz4.outputs.cache-hit != 'true'
       run: |
         Invoke-WebRequest https://github.com/lz4/lz4/archive/refs/tags/v1.9.3.zip -OutFile "${env:LIBLZ4}.zip"
         Expand-Archive "${env:LIBLZ4}.zip" -DestinationPath ${env:LIBLZ4}
-        msbuild lz4-1.9.3\lz4-1.9.3\build\VS2017\liblz4\liblz4.vcxproj /property:Configuration=Release
+        cd ${env:LIBLZ4}\${env:LIBLZ4}\lib
+        cl /c *.c
+        lib /out:liblz4.lib *.obj
 
     - name: Set env variables
       run: |
         echo "SODIUM_LIB_DIR=.\${env:LIBSODIUM}\libsodium\x64\Release\v142\static" >> $env:GITHUB_ENV
         echo "SODIUM_STATIC=1" >> $env:GITHUB_ENV
-        echo "LZ4_LIB_DIR=.\${env:LIBLZ4}\static" >> $env:GITHUB_ENV
+        echo "LZ4_LIB_DIR=.\${env:LIBLZ4}\${env:LIBLZ4}\lib" >> $env:GITHUB_ENV
 
     - name: Build ZboxFS
       run: cargo build -q
