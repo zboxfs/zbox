@@ -2,14 +2,16 @@ use std::collections::HashMap;
 use std::fmt::{self, Debug};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 
+use lazy_static::lazy_static;
 use linked_hash_map::LinkedHashMap;
+use log::{debug, warn};
 
 use super::trans::{Action, Trans, TransRef, TransableRef};
 use super::wal::{EntityType, WalQueueMgr};
 use super::{Eid, Txid};
-use base::IntoRef;
-use error::{Error, Result};
-use volume::{Arm, VolumeRef};
+use crate::base::IntoRef;
+use crate::error::{Error, Result};
+use crate::volume::{Arm, VolumeRef};
 
 /// Tranaction manager
 #[derive(Default)]
@@ -259,17 +261,16 @@ impl TxHandle {
 
 #[cfg(test)]
 mod tests {
-    extern crate tempdir;
-
-    #[cfg(feature = "storage-file")]
-    use self::tempdir::TempDir;
     use super::*;
+    use serde::{Deserialize, Serialize};
+    #[cfg(feature = "storage-file")]
+    use tempdir::TempDir;
 
-    use base::init_env;
-    use fs::Config;
-    use trans::cow::{CowRef, Cowable, IntoCow};
-    use trans::TxMgr;
-    use volume::{ArmAccess, Volume};
+    use crate::base::init_env;
+    use crate::fs::Config;
+    use crate::trans::cow::{CowRef, Cowable, IntoCow};
+    use crate::trans::TxMgr;
+    use crate::volume::{ArmAccess, Volume};
 
     fn setup_mem_vol(loc: &str) -> VolumeRef {
         init_env();

@@ -8,10 +8,10 @@ use serde::{Deserialize, Serialize};
 
 use super::trans::{Action, Transable};
 use super::{Eid, EntityType, Id, TxMgrRef, Txid};
-use base::lru::{CountMeter, Lru, Pinnable};
-use base::IntoRef;
-use error::{Error, Result};
-use volume::{Arm, ArmAccess, Armor, Seq, VolumeArmor, VolumeRef};
+use crate::base::lru::{CountMeter, Lru, Pinnable};
+use crate::base::IntoRef;
+use crate::error::{Error, Result};
+use crate::volume::{Arm, ArmAccess, Armor, Seq, VolumeArmor, VolumeRef};
 
 /// Trait for entity can be wrapped in cow
 pub trait Cowable: Debug + Default + Clone + Send + Sync {
@@ -547,10 +547,10 @@ mod tests {
 
     use std::{thread, time};
 
-    use base::init_env;
-    use fs::Config;
-    use trans::{Eid, TxMgr};
-    use volume::Volume;
+    use crate::base::init_env;
+    use crate::fs::Config;
+    use crate::trans::{Eid, TxMgr};
+    use crate::volume::Volume;
 
     fn setup_vol(loc: &str) -> VolumeRef {
         init_env();

@@ -2,6 +2,8 @@ use std::iter::IntoIterator;
 use std::ops::Index;
 use std::slice::Iter;
 
+use serde::{Deserialize, Serialize};
+
 use super::{BLKS_PER_FRAME, BLK_SIZE, FRAME_SIZE};
 
 /// Block span

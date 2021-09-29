@@ -2,12 +2,14 @@ use std::io::{Result as IoResult, Seek, SeekFrom};
 use std::ops::Index;
 use std::slice::Iter;
 
+use serde::{Deserialize, Serialize};
+
 use super::chunk::ChunkMap;
 use super::segment::Segment;
 use super::span::{Cutable, Extent, Span};
 use super::Store;
-use error::Result;
-use trans::{Eid, Id, TxMgrRef};
+use crate::error::Result;
+use crate::trans::{Eid, Id, TxMgrRef};
 
 pub(super) trait CutableList: Clone + Extent {
     type Item: Extent + Cutable;
@@ -472,7 +474,7 @@ impl Seek for EntryList {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base::init_env;
+    use crate::base::init_env;
 
     #[test]
     fn entry_list_append() {

@@ -4,7 +4,7 @@ use std::time::Duration;
     feature = "storage-file",
     all(feature = "storage-zbox", not(target_arch = "wasm32"))
 ))]
-use error::{Error, Result};
+use crate::error::{Error, Result};
 
 /// Calculate usize align offset, size must be 2^n integer
 #[inline]

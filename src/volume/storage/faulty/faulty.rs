@@ -1,13 +1,13 @@
 use std::fmt::{self, Debug};
 
-use base::crypto::{Crypto, Key};
-use base::IntoRef;
-use error::Result;
-use trans::Eid;
-use volume::address::Span;
-use volume::storage::faulty_ctl::Controller;
-use volume::storage::mem::MemStorage;
-use volume::storage::Storable;
+use crate::base::crypto::{Crypto, Key};
+use crate::base::IntoRef;
+use crate::error::Result;
+use crate::trans::Eid;
+use crate::volume::address::Span;
+use crate::volume::storage::faulty_ctl::Controller;
+use crate::volume::storage::mem::MemStorage;
+use crate::volume::storage::Storable;
 
 /// Faulty Storage
 ///
@@ -140,8 +140,8 @@ impl IntoRef for FaultyStorage {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base::init_env;
-    use error::Error;
+    use crate::base::init_env;
+    use crate::error::Error;
 
     #[test]
     fn static_storages() {

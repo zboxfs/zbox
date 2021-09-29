@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use super::CacheBackend;
-use error::Result;
+use crate::error::Result;
 
 pub struct MemBackend {
     map: HashMap<PathBuf, Vec<u8>>,

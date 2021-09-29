@@ -1,12 +1,14 @@
 use std::io::{Error as IoError, ErrorKind, Result as IoResult};
 use std::sync::{Arc, RwLock};
 
-use base::crypto::{Crypto, RandomSeed};
+use lazy_static::lazy_static;
+
+use crate::base::crypto::{Crypto, RandomSeed};
 
 lazy_static! {
     // static variable to store random samples
     static ref ERR_CONTEXT: Arc<RwLock<ErrorContext>> =
-        { Arc::new(RwLock::new(ErrorContext::default())) };
+        Arc::new(RwLock::new(ErrorContext::default()));
 }
 
 // random error generator context

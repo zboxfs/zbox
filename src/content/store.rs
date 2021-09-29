@@ -3,6 +3,8 @@ use std::fmt::{self, Debug};
 use std::io::{Result as IoResult, Seek, SeekFrom, Write};
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
+
 use super::chunk::ChunkMap;
 use super::chunker::{Chunker, ChunkerParams};
 use super::content::{
@@ -12,12 +14,12 @@ use super::segment::{
     Cache as SegCache, DataCache as SegDataCache, SegDataRef, SegRef,
 };
 use super::Content;
-use base::crypto::Hash;
-use base::RefCnt;
-use error::{Error, Result};
-use trans::cow::{Cow, CowRef, CowWeakRef, Cowable, IntoCow};
-use trans::{Eid, Id, TxMgrRef, TxMgrWeakRef, Txid};
-use volume::{VolumeRef, VolumeWeakRef};
+use crate::base::crypto::Hash;
+use crate::base::RefCnt;
+use crate::error::{Error, Result};
+use crate::trans::cow::{Cow, CowRef, CowWeakRef, Cowable, IntoCow};
+use crate::trans::{Eid, Id, TxMgrRef, TxMgrWeakRef, Txid};
+use crate::volume::{VolumeRef, VolumeWeakRef};
 
 /// Content map entry
 #[derive(Debug, Clone, Deserialize, Serialize)]

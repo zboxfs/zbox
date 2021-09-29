@@ -4,13 +4,13 @@ use std::path::{Path, PathBuf};
 use super::index_accessor::IndexAccessor;
 use super::local_cache::{CacheType, LocalCache, LocalCacheRef};
 use super::sector::SectorMgr;
-use base::crypto::{Crypto, Key};
-use base::IntoRef;
-use error::{Error, Result};
-use trans::Eid;
-use volume::address::Span;
-use volume::storage::index_mgr::{IndexMgr, Lsmt, MemTab, Tab};
-use volume::storage::Storable;
+use crate::base::crypto::{Crypto, Key};
+use crate::base::IntoRef;
+use crate::error::{Error, Result};
+use crate::trans::Eid;
+use crate::volume::address::Span;
+use crate::volume::storage::index_mgr::{IndexMgr, Lsmt, MemTab, Tab};
+use crate::volume::storage::Storable;
 
 // parse uri
 // example: access_key@repo_id?cache_type=mem&cache_size=2mb[&base=path]

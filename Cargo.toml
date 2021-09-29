@@ -11,6 +11,7 @@ keywords = ["filesystem", "crypto", "security", "privacy", "storage"]
 categories = ["filesystem", "cryptography"]
 license = "Apache-2.0"
 build = "build.rs"
+edition = "2018"
 
 # This feature will be enabled during the docs.rs build
 [package.metadata.docs.rs]
@@ -52,7 +53,7 @@ storage-redis = ["redis"]
 storage-zbox-faulty = ["storage-zbox"]
 
 # zbox storage with native transport
-storage-zbox-native = ["storage-zbox", "reqwest"]
+storage-zbox-native = ["storage-zbox", "reqwest", "futures", "bytes"]
 
 # zbox storage with android storage as local cache backend
 storage-zbox-android = ["storage-zbox"]
@@ -71,40 +72,42 @@ cfg-if = "1.0.0"
 env_logger = "0.9.0"
 log = "0.4.14"
 rmp-serde = "0.15.5"
-serde = "1.0.130"
-serde_derive = "1.0.130"
+serde = { version = "1.0.130", features = ["derive"] }
 lazy_static = "1.4.0"
 libsqlite3-sys = { version = "0.22.2", optional = true }
 redis = { version = "0.21.2", optional = true }
-http  = { version = "0.2.4", optional = true }
-serde_json = { version = "1.0.67", optional = true }
-reqwest = { version = "0.9.18", default-features = false, features = [ "rustls-tls" ], optional = true }
+http  = { version = "0.2.5", optional = true }
+serde_json = { version = "1.0.68", optional = true }
+reqwest = { version = "0.11.4", default-features = false, features = ["rustls-tls"], optional = true }
+futures = { version = "0.3.17", features = ["executor"], optional = true }
+bytes = { version = "1.1.0", optional = true }
 
 [dependencies.linked-hash-map]
 version = "0.5.4"
 features = ["serde_impl"]
 
 [target.'cfg(target_os = "android")'.dependencies]
-jni = "0.14.0"
+jni = "0.19.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = { version = "0.2.50", features = ["serde-serialize"] }
 js-sys = { version = "0.3.27" }
-web-sys = { version = "0.3.27", features = [ "Crypto", "WorkerGlobalScope", "XmlHttpRequest", "XmlHttpRequestResponseType", "Blob"] }
+web-sys = { version = "0.3.27", features = ["Crypto", "WorkerGlobalScope", "XmlHttpRequest", "XmlHttpRequestResponseType", "Blob"] }
 
 [dev-dependencies]
 bytes = "1.1.0"
 tempdir = "0.3.7"
 rand = "0.8.4"
 rand_xorshift = "0.3.0"
+tokio = { version = "1.12.0", features = ["rt", "net", "macros", "rt-multi-thread"] }
 
 [build-dependencies]
-pkg-config = "0.3.19"
+pkg-config = "0.3.20"
 cc = "1.0.70"
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
-libflate = "0.1"
-reqwest = { version = "0.9.18", default-features = false, features = [ "rustls-tls" ] }
-tar = "0.4"
-tempfile = "3.0"
-zip = "0.5"
+libflate = "1.1.1"
+reqwest = { version = "0.11.4", default-features = false, features = ["rustls-tls"] }
+tar = "0.4.37"
+tempfile = "3.2.0"
+zip = "0.5.13"

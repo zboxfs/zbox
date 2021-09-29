@@ -1,7 +1,7 @@
 use std::sync::{Arc, RwLock};
 
 use super::address::Span;
-use base::IntoRef;
+use crate::base::IntoRef;
 
 /// Block allocator
 #[derive(Debug, Default)]

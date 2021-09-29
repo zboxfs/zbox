@@ -1,14 +1,16 @@
 use std::collections::HashMap;
-use std::convert::AsRef;
+use std::convert::{AsRef, TryFrom};
 use std::fmt::{self, Debug, Display};
 use std::path::{Path, PathBuf};
 
 use http::header::{self, HeaderMap, HeaderName, HeaderValue};
-use http::{Error as HttpError, HttpTryFrom, StatusCode, Uri};
+use http::{Error as HttpError, StatusCode, Uri};
+use log::{debug, trace, warn};
+use serde::Deserialize;
 
 use super::transport::{DummyTransport, Response, Transport};
-use base::Version;
-use error::{Error, Result};
+use crate::base::Version;
+use crate::error::{Error, Result};
 
 // remote object cache control
 #[derive(Clone, Copy)]
@@ -227,7 +229,7 @@ impl HttpClient {
     #[inline]
     fn make_uri<P: AsRef<Path>>(&self, rel_path: P) -> Result<Uri> {
         let s = self.base_url.clone() + rel_path.as_ref().to_str().unwrap();
-        HttpTryFrom::try_from(s)
+        Uri::try_from(s)
             .map_err(HttpError::from)
             .map_err(Error::from)
     }

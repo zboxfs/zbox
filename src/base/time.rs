@@ -1,6 +1,8 @@
 use std::fmt::{self, Debug};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use serde::{Deserialize, Serialize};
+
 #[cfg(target_arch = "wasm32")]
 use js_sys;
 

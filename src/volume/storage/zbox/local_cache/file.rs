@@ -2,9 +2,9 @@ use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use super::CacheBackend;
-use base::utils;
-use base::vio;
-use error::{Error, Result};
+use crate::base::utils;
+use crate::base::vio;
+use crate::error::{Error, Result};
 
 pub struct FileBackend {
     base: PathBuf,

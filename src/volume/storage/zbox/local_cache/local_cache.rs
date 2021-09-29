@@ -3,14 +3,15 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 use linked_hash_map::LinkedHashMap;
+use log::warn;
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
 use super::super::http_client::{CacheControl, HttpClient};
 use super::{CacheBackend, CacheType, DummyBackend};
-use base::crypto::{Crypto, Key};
-use base::IntoRef;
-use error::{Error, Result};
+use crate::base::crypto::{Crypto, Key};
+use crate::base::IntoRef;
+use crate::error::{Error, Result};
 
 // cached item in local cache
 #[derive(Debug, Clone, Deserialize, Serialize)]

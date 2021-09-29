@@ -5,14 +5,15 @@ use std::ptr;
 use std::thread::panicking;
 
 use libsqlite3_sys as ffi;
+use log::warn;
 
-use base::crypto::{Crypto, Key};
-use base::vio;
-use error::{Error, Result};
-use trans::Eid;
-use volume::address::Span;
-use volume::storage::Storable;
-use volume::BLK_SIZE;
+use crate::base::crypto::{Crypto, Key};
+use crate::base::vio;
+use crate::error::{Error, Result};
+use crate::trans::Eid;
+use crate::volume::address::Span;
+use crate::volume::storage::Storable;
+use crate::volume::BLK_SIZE;
 
 // check result code returned by sqlite
 fn check_result(result: c_int) -> Result<()> {

@@ -2,7 +2,9 @@ use std::fmt::{self, Debug};
 use std::ops::Index;
 use std::path::{Path, PathBuf};
 
-use base::crypto::Crypto;
+use serde::{Deserialize, Serialize};
+
+use crate::base::crypto::Crypto;
 
 /// Unique entity ID.
 ///

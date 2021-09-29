@@ -16,7 +16,7 @@ pub use self::wal::EntityType;
 
 use std::io::Write;
 
-use error::Result;
+use crate::error::Result;
 
 /// Finish trait, used with writer which implements std::io::Write trait
 pub trait Finish: Write {

@@ -2,9 +2,11 @@ use std::cmp::{max, min};
 use std::fmt::{self, Debug};
 use std::io::{Read, Result as IoResult, Seek, SeekFrom, Write};
 
-use base::crypto::{Crypto, Hash, HashState};
-use base::utils;
-use error::Result;
+use serde::{Deserialize, Serialize};
+
+use crate::base::crypto::{Crypto, Hash, HashState};
+use crate::base::utils;
+use crate::error::Result;
 
 // data piece size, must be 2^n
 const PIECE_SIZE: usize = 256 * 1024;
@@ -414,8 +416,8 @@ impl Debug for Writer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base::crypto::RandomSeed;
-    use base::init_env;
+    use crate::base::crypto::RandomSeed;
+    use crate::base::init_env;
     use std::io::Cursor;
 
     fn calculate_merkle_hash(buf: &[u8]) -> Hash {

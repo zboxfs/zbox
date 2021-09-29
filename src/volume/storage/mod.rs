@@ -35,10 +35,10 @@ mod index_mgr;
 
 use std::fmt::Debug;
 
-use base::crypto::{Crypto, Key};
-use error::Result;
-use trans::Eid;
-use volume::address::Span;
+use crate::base::crypto::{Crypto, Key};
+use crate::error::Result;
+use crate::trans::Eid;
+use crate::volume::address::Span;
 
 /// Storable trait
 pub trait Storable: Debug + Send + Sync {

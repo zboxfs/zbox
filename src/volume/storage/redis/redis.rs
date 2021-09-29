@@ -1,15 +1,16 @@
 use std::fmt::{self, Debug};
 use std::sync::Mutex;
 
+use log::warn;
 use redis::{self, Client, Commands, Connection};
 
-use base::crypto::{Crypto, Key};
-use base::IntoRef;
-use error::{Error, Result};
-use trans::Eid;
-use volume::address::Span;
-use volume::storage::Storable;
-use volume::BLK_SIZE;
+use crate::base::crypto::{Crypto, Key};
+use crate::base::IntoRef;
+use crate::error::{Error, Result};
+use crate::trans::Eid;
+use crate::volume::address::Span;
+use crate::volume::storage::Storable;
+use crate::volume::BLK_SIZE;
 
 // redis key for repo lock
 #[inline]

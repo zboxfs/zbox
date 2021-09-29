@@ -7,10 +7,10 @@ use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
 use super::local_cache::{LocalCache, LocalCacheRef};
-use base::crypto::{Crypto, HashKey, Key};
-use error::{Error, Result};
-use volume::address::Span;
-use volume::BLK_SIZE;
+use crate::base::crypto::{Crypto, HashKey, Key};
+use crate::error::{Error, Result};
+use crate::volume::address::Span;
+use crate::volume::BLK_SIZE;
 
 // number of blocks in a sector, sector size is 128KB
 const BLKS_PER_SECTOR: usize = 16;

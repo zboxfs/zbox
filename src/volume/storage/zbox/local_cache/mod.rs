@@ -7,12 +7,14 @@ mod file;
 mod local_cache;
 mod mem;
 
-pub use self::local_cache::{LocalCache, LocalCacheRef};
-
 use std::path::Path;
 use std::str::FromStr;
 
-use error::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+pub use self::local_cache::{LocalCache, LocalCacheRef};
+
+use crate::error::{Error, Result};
 
 // local cache type
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize, Serialize)]

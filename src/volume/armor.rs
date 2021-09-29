@@ -7,9 +7,9 @@ use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
 use super::volume::{self, VolumeRef};
-use base::crypto::Crypto;
-use error::{Error, Result};
-use trans::{Eid, Finish, Id};
+use crate::base::crypto::Crypto;
+use crate::error::{Error, Result};
+use crate::trans::{Eid, Finish, Id};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize, Serialize)]
 pub enum Arm {
@@ -249,9 +249,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base::{init_env, IntoRef};
-    use fs::Config;
-    use volume::Volume;
+    use crate::base::{init_env, IntoRef};
+    use crate::fs::Config;
+    use crate::volume::Volume;
 
     #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
     struct Item {

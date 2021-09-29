@@ -5,11 +5,11 @@ use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
 use super::local_cache::LocalCacheRef;
-use base::crypto::{Crypto, Key};
-use error::Result;
-use trans::Eid;
-use volume::storage::index_mgr::Accessor;
-use volume::ArmAccess;
+use crate::base::crypto::{Crypto, Key};
+use crate::error::Result;
+use crate::trans::Eid;
+use crate::volume::storage::index_mgr::Accessor;
+use crate::volume::ArmAccess;
 
 #[derive(Debug, Default)]
 pub struct IndexAccessor<T> {

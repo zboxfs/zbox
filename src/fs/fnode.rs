@@ -8,18 +8,20 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 
+use serde::{Deserialize, Serialize};
+
 use super::{Handle, Options};
-use base::lru::{CountMeter, Lru, PinChecker};
-use base::Time;
-use content::{
+use crate::base::lru::{CountMeter, Lru, PinChecker};
+use crate::base::Time;
+use crate::content::{
     ChunkMap, Content, ContentReader, Store, StoreRef, StoreWeakRef,
     Writer as StoreWriter,
 };
-use error::{Error, Result};
-use trans::cow::{Cow, CowCache, CowRef, CowWeakRef, Cowable, IntoCow};
-use trans::trans::{Action, Transable};
-use trans::{Eid, Id, TxMgrRef, Txid};
-use volume::VolumeRef;
+use crate::error::{Error, Result};
+use crate::trans::cow::{Cow, CowCache, CowRef, CowWeakRef, Cowable, IntoCow};
+use crate::trans::trans::{Action, Transable};
+use crate::trans::{Eid, Id, TxMgrRef, Txid};
+use crate::volume::VolumeRef;
 
 // maximum sub nodes for a fnode
 const SUB_NODES_CNT: usize = 8;

@@ -3,15 +3,18 @@ use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write};
 use std::ops::{Index, IndexMut, Range};
 use std::sync::{Arc, RwLock};
 
+use log::debug;
+use serde::{Deserialize, Serialize};
+
 use super::chunk::Chunk;
 use super::{Store, StoreWeakRef};
-use base::lru::{Lru, Meter, PinChecker};
-use base::IntoRef;
-use error::{Error, Result};
-use trans::cow::{Cow, CowCache, CowRef, Cowable, IntoCow};
-use trans::trans::{Action, Transable};
-use trans::{Eid, EntityType, Finish, Id, TxMgrRef, TxMgrWeakRef, Txid};
-use volume::{
+use crate::base::lru::{Lru, Meter, PinChecker};
+use crate::base::IntoRef;
+use crate::error::{Error, Result};
+use crate::trans::cow::{Cow, CowCache, CowRef, Cowable, IntoCow};
+use crate::trans::trans::{Action, Transable};
+use crate::trans::{Eid, EntityType, Finish, Id, TxMgrRef, TxMgrWeakRef, Txid};
+use crate::volume::{
     Arm, Reader as VolReader, VolumeRef, VolumeWeakRef, Writer as VolWriter,
 };
 
@@ -544,9 +547,9 @@ pub type Cache = CowCache<Segment>;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base::init_env;
-    use content::entry::{CutableList, EntryList};
-    use content::span::{Extent, Span};
+    use crate::base::init_env;
+    use crate::content::entry::{CutableList, EntryList};
+    use crate::content::span::{Extent, Span};
 
     fn test_split_off(
         elst: &EntryList,

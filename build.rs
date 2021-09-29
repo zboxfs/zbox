@@ -1,13 +1,3 @@
-extern crate cc;
-extern crate pkg_config;
-
-#[cfg(target_os = "windows")]
-extern crate libflate;
-#[cfg(target_os = "windows")]
-extern crate reqwest;
-#[cfg(target_os = "windows")]
-extern crate tar;
-
 use std::env;
 use std::path::PathBuf;
 #[cfg(feature = "libsodium-bundled")]

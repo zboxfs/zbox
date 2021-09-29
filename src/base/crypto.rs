@@ -12,7 +12,7 @@ use serde::de::{self, Deserializer};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 
-use error::{Error, Result};
+use crate::error::{Error, Result};
 
 extern "C" {
     // Initialisation

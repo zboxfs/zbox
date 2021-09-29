@@ -2,11 +2,11 @@ use std::fmt::{self, Debug};
 use std::io::{self, Error as IoError, ErrorKind, Read, Seek, SeekFrom, Write};
 
 use super::{Error, Result};
-use fs::fnode::{
+use crate::fs::fnode::{
     Fnode, Metadata, Reader as FnodeReader, Version, Writer as FnodeWriter,
 };
-use fs::Handle;
-use trans::{TxHandle, TxMgr};
+use crate::fs::Handle;
+use crate::trans::{TxHandle, TxMgr};
 
 /// A reader for a specific vesion of file content.
 ///

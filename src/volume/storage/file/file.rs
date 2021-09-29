@@ -2,16 +2,18 @@ use std::fmt::{self, Debug};
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 
+use log::warn;
+
 use super::file_armor::FileArmor;
 use super::sector::SectorMgr;
-use base::crypto::{Crypto, Key};
-use base::utils;
-use base::vio;
-use error::{Error, Result};
-use trans::Eid;
-use volume::address::Span;
-use volume::storage::index_mgr::{IndexMgr, Lsmt, MemTab, Tab};
-use volume::storage::Storable;
+use crate::base::crypto::{Crypto, Key};
+use crate::base::utils;
+use crate::base::vio;
+use crate::error::{Error, Result};
+use crate::trans::Eid;
+use crate::volume::address::Span;
+use crate::volume::storage::index_mgr::{IndexMgr, Lsmt, MemTab, Tab};
+use crate::volume::storage::Storable;
 
 /// File Storage
 pub struct FileStorage {
@@ -264,18 +266,16 @@ impl Debug for FileStorage {
 
 #[cfg(test)]
 mod tests {
-    extern crate tempdir;
-
     use std::fs;
     use std::time::Instant;
 
-    use self::tempdir::TempDir;
     use super::*;
-    use base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE};
-    use base::init_env;
-    use base::utils::speed_str;
-    use error::Error;
-    use volume::BLK_SIZE;
+    use crate::base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE};
+    use crate::base::init_env;
+    use crate::base::utils::speed_str;
+    use crate::error::Error;
+    use crate::volume::BLK_SIZE;
+    use tempdir::TempDir;
 
     fn setup() -> (PathBuf, TempDir) {
         init_env();

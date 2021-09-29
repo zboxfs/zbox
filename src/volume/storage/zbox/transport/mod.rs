@@ -16,7 +16,7 @@ use http::{HeaderMap, Response as HttpResponse, StatusCode, Uri};
 use serde::de::DeserializeOwned;
 use serde_json::from_slice;
 
-use error::{Error, Result};
+use crate::error::{Error, Result};
 
 /// Http response wrapper
 pub struct Response {

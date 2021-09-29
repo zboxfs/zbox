@@ -1,5 +1,7 @@
 use std::io::{Result as IoResult, Seek, SeekFrom};
 
+use serde::{Deserialize, Serialize};
+
 use super::segment::Segment;
 
 pub(super) trait Extent {

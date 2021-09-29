@@ -95,17 +95,6 @@
 //! [`File`]: struct.File.html
 //! [`RepoOpener`]: struct.RepoOpener.html
 
-#[macro_use]
-extern crate cfg_if;
-extern crate env_logger;
-extern crate linked_hash_map;
-#[macro_use]
-extern crate log;
-extern crate rmp_serde;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-
 // convert zbox error to IO error
 macro_rules! map_io_err {
     ($x:expr) => {
@@ -144,26 +133,8 @@ pub use self::fs::fnode::{DirEntry, FileType, Metadata, Version};
 pub use self::repo::{OpenOptions, Repo, RepoInfo, RepoOpener};
 pub use self::trans::Eid;
 
-#[macro_use]
-extern crate lazy_static;
-
 #[cfg(any(feature = "storage-faulty", feature = "storage-zbox-faulty"))]
 pub use self::volume::FaultyController;
-
-#[cfg(feature = "storage-sqlite")]
-extern crate libsqlite3_sys;
-
-#[cfg(feature = "storage-redis")]
-extern crate redis;
-
-#[cfg(feature = "storage-zbox")]
-extern crate http;
-
-#[cfg(feature = "storage-zbox")]
-extern crate serde_json;
-
-#[cfg(feature = "storage-zbox-native")]
-extern crate reqwest;
 
 #[cfg(target_os = "android")]
 extern crate jni;

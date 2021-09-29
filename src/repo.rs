@@ -4,11 +4,11 @@ use std::path::Path;
 use std::time::SystemTime;
 
 use super::{File, Result};
-use base::crypto::{Cipher, Cost, MemLimit, OpsLimit};
-use base::{self, Time};
-use error::Error;
-use fs::{Config, DirEntry, FileType, Fs, Metadata, Options, Version};
-use trans::Eid;
+use crate::base::crypto::{Cipher, Cost, MemLimit, OpsLimit};
+use crate::base::{self, Time};
+use crate::error::Error;
+use crate::fs::{Config, DirEntry, FileType, Fs, Metadata, Options, Version};
+use crate::trans::Eid;
 
 /// A builder used to create a repository [`Repo`] in various manners.
 ///

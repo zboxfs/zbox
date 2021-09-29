@@ -5,12 +5,14 @@
 pub mod fnode;
 mod fs;
 
+use serde::{Deserialize, Serialize};
+
 pub use self::fnode::{DirEntry, FileType, Fnode, FnodeRef, Metadata, Version};
 pub use self::fs::{Fs, ShutterRef};
 
-use base::crypto::{Cipher, Cost, Crypto};
-use content::StoreWeakRef;
-use trans::TxMgrWeakRef;
+use crate::base::crypto::{Cipher, Cost, Crypto};
+use crate::content::StoreWeakRef;
+use crate::trans::TxMgrWeakRef;
 
 // Default file versoin limit
 const DEFAULT_VERSION_LIMIT: u8 = 1;

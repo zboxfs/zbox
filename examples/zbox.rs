@@ -11,7 +11,8 @@ extern crate zbox;
 use std::io::Read;
 use zbox::{init_env, OpenOptions, RepoOpener};
 
-fn main() {
+#[tokio::main(flavor = "multi_thread")]
+async fn main() {
     // initialise zbox environment, called first
     init_env();
 
@@ -19,7 +20,7 @@ fn main() {
     // Note: replace the repo URI below with yours
     let mut repo = RepoOpener::new()
         .create(true)
-        .open("zbox://mcA4LKLT4mtSxHdSTptcmwHw@QDWYbndSEzPWrw", "pwd")
+        .open("zbox://6XMhGwq6GXTCTwLraNaZ37dS@tj78b38LDXGXct", "pwd")
         .unwrap();
 
     // display repo information

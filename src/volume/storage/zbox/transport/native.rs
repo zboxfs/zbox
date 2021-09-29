@@ -2,19 +2,23 @@ use http::{HeaderMap, Response as HttpResponse, Uri};
 use std::io::Read;
 use std::time::Duration;
 
+use bytes::Buf;
+use futures::executor::block_on;
+use log::trace;
 use reqwest::{Client, Response as NativeResponse};
 
 use super::{Response, Transport};
-use error::Result;
+use crate::error::Result;
 
 // convert reqwest response to response
 fn create_response(resp: NativeResponse) -> Result<Response> {
     let mut builder = HttpResponse::builder();
-    builder.status(resp.status()).version(resp.version());
+    builder = builder.status(resp.status()).version(resp.version());
     for (name, value) in resp.headers() {
-        builder.header(name, value);
+        builder = builder.header(name, value);
     }
-    let ret = Response::new(builder.body(Box::new(resp) as Box<dyn Read>)?);
+    let resp_rdr = block_on(resp.bytes())?.reader();
+    let ret = Response::new(builder.body(Box::new(resp_rdr) as Box<dyn Read>)?);
     Ok(ret)
 }
 
@@ -36,11 +40,12 @@ impl NativeTransport {
 impl Transport for NativeTransport {
     fn get(&self, uri: &Uri, headers: &HeaderMap) -> Result<Response> {
         trace!("get: {}, headers: {:?}", uri, headers);
-        let resp = self
-            .client
-            .get(&uri.to_string())
-            .headers(headers.clone())
-            .send()?;
+        let resp = block_on(
+            self.client
+                .get(&uri.to_string())
+                .headers(headers.clone())
+                .send(),
+        )?;
         create_response(resp)
     }
 
@@ -51,22 +56,24 @@ impl Transport for NativeTransport {
         body: &[u8],
     ) -> Result<Response> {
         trace!("put: {}, headers: {:?}", uri, headers);
-        let resp = self
-            .client
-            .put(&uri.to_string())
-            .headers(headers.clone())
-            .body(body.to_owned())
-            .send()?;
+        let resp = block_on(
+            self.client
+                .put(&uri.to_string())
+                .headers(headers.clone())
+                .body(body.to_owned())
+                .send(),
+        )?;
         create_response(resp)
     }
 
     fn delete(&mut self, uri: &Uri, headers: &HeaderMap) -> Result<Response> {
         trace!("delete: {}, headers: {:?}", uri, headers);
-        let resp = self
-            .client
-            .delete(&uri.to_string())
-            .headers(headers.clone())
-            .send()?;
+        let resp = block_on(
+            self.client
+                .delete(&uri.to_string())
+                .headers(headers.clone())
+                .send(),
+        )?;
         create_response(resp)
     }
 
@@ -77,12 +84,13 @@ impl Transport for NativeTransport {
         body: &[u8],
     ) -> Result<Response> {
         trace!("delete bulk: {}, headers: {:?}", uri, headers);
-        let resp = self
-            .client
-            .delete(&uri.to_string())
-            .headers(headers.clone())
-            .body(body.to_owned())
-            .send()?;
+        let resp = block_on(
+            self.client
+                .delete(&uri.to_string())
+                .headers(headers.clone())
+                .body(body.to_owned())
+                .send(),
+        )?;
         create_response(resp)
     }
 }

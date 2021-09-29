@@ -16,6 +16,9 @@ pub use self::version::Version;
 
 use std::sync::{Arc, Once, RwLock};
 
+use cfg_if::cfg_if;
+use log::info;
+
 #[cfg(target_os = "android")]
 use std::ptr::NonNull;
 

@@ -1,4 +1,6 @@
-use error::{Error, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::error::{Error, Result};
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct RefCnt(u32);

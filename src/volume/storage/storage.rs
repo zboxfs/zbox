@@ -7,14 +7,16 @@ use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
 use super::{DummyStorage, Storable};
-use base::crypto::{Cipher, Cost, Crypto, Key};
-use base::lru::{CountMeter, Lru, Meter, PinChecker};
-use base::utils::align_ceil_chunk;
-use base::IntoRef;
-use error::{Error, Result};
-use trans::{Eid, Finish};
-use volume::address::Addr;
-use volume::{Allocator, AllocatorRef, BLKS_PER_FRAME, BLK_SIZE, FRAME_SIZE};
+use crate::base::crypto::{Cipher, Cost, Crypto, Key};
+use crate::base::lru::{CountMeter, Lru, Meter, PinChecker};
+use crate::base::utils::align_ceil_chunk;
+use crate::base::IntoRef;
+use crate::error::{Error, Result};
+use crate::trans::{Eid, Finish};
+use crate::volume::address::Addr;
+use crate::volume::{
+    Allocator, AllocatorRef, BLKS_PER_FRAME, BLK_SIZE, FRAME_SIZE,
+};
 
 // parse storage part in uri
 fn parse_uri(uri: &str) -> Result<Box<dyn Storable>> {
@@ -699,17 +701,17 @@ impl Finish for Writer {
 
 #[cfg(test)]
 mod tests {
-    extern crate tempdir;
-
     use std::time::Instant;
 
-    #[cfg(feature = "storage-file")]
-    use self::tempdir::TempDir;
     use super::*;
-    use base::crypto::{Cipher, Cost, Crypto, RandomSeed, RANDOM_SEED_SIZE};
-    use base::init_env;
-    use base::utils::speed_str;
-    use volume::address::Span;
+    use crate::base::crypto::{
+        Cipher, Cost, Crypto, RandomSeed, RANDOM_SEED_SIZE,
+    };
+    use crate::base::init_env;
+    use crate::base::utils::speed_str;
+    use crate::volume::address::Span;
+    #[cfg(feature = "storage-file")]
+    use tempdir::TempDir;
 
     struct SizeVar {
         blk_size: usize,

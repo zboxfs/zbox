@@ -2,18 +2,20 @@ use std::fmt::{self, Debug};
 use std::io::{Read, Result as IoResult, Write};
 use std::sync::{Arc, RwLock, Weak};
 
+use log::debug;
+
 use super::allocator::AllocatorRef;
 use super::storage::{self, Storage, StorageRef};
 use super::super_block::SuperBlk;
-use base::crypto::{Cipher, Cost, Salt};
-use base::lz4::{
+use crate::base::crypto::{Cipher, Cost, Salt};
+use crate::base::lz4::{
     BlockMode, BlockSize, ContentChecksum, Decoder as Lz4Decoder,
     Encoder as Lz4Encoder, EncoderBuilder as Lz4EncoderBuilder,
 };
-use base::{IntoRef, Time, Version};
-use error::{Error, Result};
-use fs::Config;
-use trans::{Eid, Finish};
+use crate::base::{IntoRef, Time, Version};
+use crate::error::{Error, Result};
+use crate::fs::Config;
+use crate::trans::{Eid, Finish};
 
 /// Volume info
 #[derive(Debug, Clone, Default)]
@@ -361,16 +363,14 @@ impl Debug for Writer {
 
 #[cfg(test)]
 mod tests {
-    extern crate tempdir;
-
     use std::time::Instant;
 
-    #[cfg(feature = "storage-file")]
-    use self::tempdir::TempDir;
     use super::*;
-    use base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE};
-    use base::init_env;
-    use base::utils::speed_str;
+    use crate::base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE};
+    use crate::base::init_env;
+    use crate::base::utils::speed_str;
+    #[cfg(feature = "storage-file")]
+    use tempdir::TempDir;
 
     fn setup_mem_vol(loc: &str) -> VolumeRef {
         init_env();

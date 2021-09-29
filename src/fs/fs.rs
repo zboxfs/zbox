@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
+use log::info;
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
@@ -8,13 +9,13 @@ use super::fnode::{
     Cache as FnodeCache, DirEntry, FileType, Fnode, FnodeRef, Metadata, Version,
 };
 use super::{Config, Handle, Options};
-use base::crypto::Cost;
-use base::IntoRef;
-use content::{Store, StoreRef};
-use error::{Error, Result};
-use trans::cow::IntoCow;
-use trans::{Eid, Id, TxMgr, TxMgrRef};
-use volume::{Info as VolumeInfo, Volume, VolumeRef};
+use crate::base::crypto::Cost;
+use crate::base::IntoRef;
+use crate::content::{Store, StoreRef};
+use crate::error::{Error, Result};
+use crate::trans::cow::IntoCow;
+use crate::trans::{Eid, Id, TxMgr, TxMgrRef};
+use crate::volume::{Info as VolumeInfo, Volume, VolumeRef};
 
 // mask secrets in uri
 fn mask_uri(uri: &str) -> String {

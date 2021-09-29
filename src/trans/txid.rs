@@ -8,8 +8,8 @@ use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 
 use super::Eid;
-use base::crypto::{Crypto, HashKey};
-use error::{Error, Result};
+use crate::base::crypto::{Crypto, HashKey};
+use crate::error::{Error, Result};
 
 // per-thread txid
 thread_local! {

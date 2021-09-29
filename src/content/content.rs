@@ -6,17 +6,19 @@ use std::io::{
 };
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
+
 use super::chunk::ChunkMap;
 use super::entry::{CutableList, EntryList};
 use super::merkle_tree::{Leaves, MerkleTree, Writer as MerkleTreeWriter};
 use super::segment::Writer as SegWriter;
 use super::span::{Extent, Span};
 use super::{StoreRef, StoreWeakRef};
-use base::crypto::{Crypto, Hash};
-use error::{Error, Result};
-use trans::cow::{CowCache, CowRef, Cowable, IntoCow};
-use trans::{Eid, Finish, Id, TxMgrRef, TxMgrWeakRef, Txid};
-use volume::VolumeWeakRef;
+use crate::base::crypto::{Crypto, Hash};
+use crate::error::{Error, Result};
+use crate::trans::cow::{CowCache, CowRef, Cowable, IntoCow};
+use crate::trans::{Eid, Finish, Id, TxMgrRef, TxMgrWeakRef, Txid};
+use crate::volume::VolumeWeakRef;
 
 /// Content
 #[derive(Default, Clone, Deserialize, Serialize)]

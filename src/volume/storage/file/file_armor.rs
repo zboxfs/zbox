@@ -6,14 +6,14 @@ use std::io::{
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use base::crypto::{Crypto, Key};
-use base::utils::{ensure_parents_dir, remove_empty_parent_dir};
-use base::vio;
-use error::{Error, Result};
-use trans::Eid;
-use trans::Finish;
-use volume::storage::index_mgr::Accessor;
-use volume::{Arm, ArmAccess, Armor};
+use crate::base::crypto::{Crypto, Key};
+use crate::base::utils::{ensure_parents_dir, remove_empty_parent_dir};
+use crate::base::vio;
+use crate::error::{Error, Result};
+use crate::trans::Eid;
+use crate::trans::Finish;
+use crate::volume::storage::index_mgr::Accessor;
+use crate::volume::{Arm, ArmAccess, Armor};
 
 // read/write frame size
 const FRAME_SIZE: usize = 16 * 1024;

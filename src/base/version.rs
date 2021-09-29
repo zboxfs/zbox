@@ -1,6 +1,8 @@
 use std::fmt::{self, Debug, Display};
 
-use version;
+use serde::{Deserialize, Serialize};
+
+use crate::version;
 
 /// Semantic version
 #[derive(Default, Clone, Deserialize, Serialize)]

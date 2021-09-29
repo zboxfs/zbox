@@ -2,13 +2,16 @@ use std::collections::HashMap;
 use std::fmt::{self, Debug};
 use std::sync::Mutex;
 
-use base::crypto::{Crypto, Key};
-use base::IntoRef;
-use error::{Error, Result};
-use trans::Eid;
-use volume::address::Span;
-use volume::storage::Storable;
-use volume::BLK_SIZE;
+use lazy_static::lazy_static;
+use log::warn;
+
+use crate::base::crypto::{Crypto, Key};
+use crate::base::IntoRef;
+use crate::error::{Error, Result};
+use crate::trans::Eid;
+use crate::volume::address::Span;
+use crate::volume::storage::Storable;
+use crate::volume::BLK_SIZE;
 
 // memory storage depot
 struct Depot {
@@ -236,9 +239,9 @@ mod tests {
     use std::time::Instant;
 
     use super::*;
-    use base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE};
-    use base::init_env;
-    use base::utils::speed_str;
+    use crate::base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE};
+    use crate::base::init_env;
+    use crate::base::utils::speed_str;
 
     #[test]
     fn test_perf() {

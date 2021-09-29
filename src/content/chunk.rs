@@ -1,11 +1,12 @@
 use std::fmt::{self, Debug};
 
 use linked_hash_map::LinkedHashMap;
+use serde::{Deserialize, Serialize};
 
-use base::crypto::Hash;
-use base::RefCnt;
-use error::Result;
-use trans::Eid;
+use crate::base::crypto::Hash;
+use crate::base::RefCnt;
+use crate::error::Result;
+use crate::trans::Eid;
 
 /// Data chunk
 #[derive(Clone, Deserialize, Serialize)]

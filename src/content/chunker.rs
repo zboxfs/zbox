@@ -3,6 +3,8 @@ use std::fmt::{self, Debug};
 use std::io::{Result as IoResult, Seek, SeekFrom, Write};
 use std::ptr;
 
+use serde::{Deserialize, Serialize};
+
 // taken from pcompress implementation
 // https://github.com/moinakg/pcompress
 const PRIME: u64 = 153_191u64;
@@ -227,10 +229,10 @@ mod tests {
     use std::time::Instant;
 
     use super::*;
-    use base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE};
-    use base::init_env;
-    use base::utils::speed_str;
-    use content::chunk::Chunk;
+    use crate::base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE};
+    use crate::base::init_env;
+    use crate::base::utils::speed_str;
+    use crate::content::chunk::Chunk;
 
     #[derive(Debug)]
     struct Sinker {
