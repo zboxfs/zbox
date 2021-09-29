@@ -39,10 +39,11 @@ pub struct Volume {
 impl Volume {
     /// Create volume instance
     pub fn new(uri: &str) -> Result<Self> {
-        let mut info = Info::default();
-        info.uri = uri.to_string();
+        let info = Info {
+            uri: uri.to_string(),
+            ..Default::default()
+        };
         let storage = Storage::new(uri)?.into_ref();
-
         Ok(Volume { info, storage })
     }
 
@@ -119,7 +120,7 @@ impl Volume {
 
         debug!("volume opened: {}", *storage);
 
-        Ok(super_blk.body.payload.clone())
+        Ok(super_blk.body.payload)
     }
 
     /// Try to repair super block

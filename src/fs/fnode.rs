@@ -1,6 +1,6 @@
 #![allow(clippy::module_inception)]
 
-use std::cmp::min;
+use std::cmp::{min, Ordering};
 use std::collections::VecDeque;
 use std::fmt::{self, Debug};
 use std::io::{Read, Result as IoResult, Seek, SeekFrom, Write};
@@ -51,18 +51,18 @@ impl Default for FileType {
     }
 }
 
-impl Into<i32> for FileType {
-    fn into(self) -> i32 {
-        match self {
+impl From<FileType> for i32 {
+    fn from(ftype: FileType) -> i32 {
+        match ftype {
             FileType::File => 0,
             FileType::Dir => 1,
         }
     }
 }
 
-impl Into<String> for FileType {
-    fn into(self) -> String {
-        match self {
+impl From<FileType> for String {
+    fn from(ftype: FileType) -> String {
+        match ftype {
             FileType::File => String::from("File"),
             FileType::Dir => String::from("Dir"),
         }
@@ -369,10 +369,10 @@ impl Fnode {
         // if child is not in sub node list, load it from fnode cache
         self.kids
             .iter()
-            .find(|ref c| c.name == name)
+            .find(|c| c.name == name)
             .ok_or(Error::NotFound)
             .and_then(|child| cache.get(&child.id, vol).map_err(Error::from))
-            .and_then(|child| {
+            .map(|child| {
                 // set parent for the child
                 {
                     let mut child_cow = child.write().unwrap();
@@ -383,13 +383,13 @@ impl Fnode {
                 // add to parent's sub node list
                 self.sub_nodes
                     .insert(name.to_string(), Arc::downgrade(&child));
-                Ok(child)
+                child
             })
     }
 
     #[inline]
     pub fn has_child(&self, name: &str) -> bool {
-        self.kids.iter().any(|ref c| c.name == name)
+        self.kids.iter().any(|c| c.name == name)
     }
 
     #[inline]
@@ -410,7 +410,7 @@ impl Fnode {
     }
 
     fn children_names(&self) -> Vec<String> {
-        self.kids.iter().map(|ref k| k.name.clone()).collect()
+        self.kids.iter().map(|k| k.name.clone()).collect()
     }
 
     /// Get children dir entry list
@@ -445,8 +445,7 @@ impl Fnode {
         let child_names = par.children_names();
 
         for name in child_names.iter() {
-            let child_ref =
-                par.load_child(&name, parent.clone(), cache, vol)?;
+            let child_ref = par.load_child(name, parent.clone(), cache, vol)?;
             let child = child_ref.read().unwrap();
             ret.push(DirEntry {
                 path: parent_path.join(name),
@@ -496,7 +495,7 @@ impl Fnode {
                 let child_idx = par
                     .kids
                     .iter()
-                    .position(|ref c| c.id == *child.id())
+                    .position(|c| c.id == *child.id())
                     .ok_or(Error::NotFound)?;
                 {
                     let name = &par.kids[child_idx].name;
@@ -630,33 +629,37 @@ impl Fnode {
             fnode.curr_len()
         };
 
-        if curr_len < len {
-            // append
-            let mut size = len - curr_len;
-            let buf = vec![0u8; min(size, 16 * 1024)];
-            let mut wtr = Writer::new(handle.clone(), txid)?;
-            wtr.seek(SeekFrom::Start(curr_len as u64))?;
+        match curr_len.cmp(&len) {
+            Ordering::Greater => {
+                // truncate
+                let store = handle.store.upgrade().ok_or(Error::RepoClosed)?;
+                let txmgr = handle.txmgr.upgrade().ok_or(Error::RepoClosed)?;
+                let mut fnode_cow = handle.fnode.write().unwrap();
+                let new_ctn = {
+                    let mut ctn = fnode_cow.clone_current_content(&store)?;
+                    ctn.truncate(len, &store)?;
+                    ctn
+                };
 
-            while size > 0 {
-                let write_len = min(size, buf.len());
-                let written = wtr.write(&buf[..write_len])?;
-                size -= written;
+                // dedup content, if it is not duplicated then link the content
+                let fnode = fnode_cow.make_mut(&txmgr)?;
+                fnode.add_version(new_ctn, &store, &txmgr)?;
             }
-            wtr.finish()?;
-        } else if curr_len > len {
-            // truncate
-            let store = handle.store.upgrade().ok_or(Error::RepoClosed)?;
-            let txmgr = handle.txmgr.upgrade().ok_or(Error::RepoClosed)?;
-            let mut fnode_cow = handle.fnode.write().unwrap();
-            let new_ctn = {
-                let mut ctn = fnode_cow.clone_current_content(&store)?;
-                ctn.truncate(len, &store)?;
-                ctn
-            };
+            Ordering::Less => {
+                // append
+                let mut size = len - curr_len;
+                let buf = vec![0u8; min(size, 16 * 1024)];
+                let mut wtr = Writer::new(handle, txid)?;
+                wtr.seek(SeekFrom::Start(curr_len as u64))?;
 
-            // dedup content, if it is not duplicated then link the content
-            let fnode = fnode_cow.make_mut(&txmgr)?;
-            fnode.add_version(new_ctn, &store, &txmgr)?;
+                while size > 0 {
+                    let write_len = min(size, buf.len());
+                    let written = wtr.write(&buf[..write_len])?;
+                    size -= written;
+                }
+                wtr.finish()?;
+            }
+            Ordering::Equal => {}
         }
 
         Ok(())

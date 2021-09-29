@@ -71,9 +71,11 @@ impl LocalCache {
         let capacity = capacity_in_mb * 1024 * 1024; // capacity is in MB
         let client = HttpClient::new(repo_id, access_key)?;
 
-        let mut meta = CacheMeta::default();
-        meta.cache_type = cache_type;
-        meta.capacity = capacity;
+        let meta = CacheMeta {
+            cache_type,
+            capacity,
+            ..CacheMeta::default()
+        };
 
         let backend: Box<dyn CacheBackend> = match cache_type {
             CacheType::Mem => Box::new(super::mem::MemBackend::new()),
@@ -209,7 +211,7 @@ impl LocalCache {
         let path = Path::new(Self::META_FILE_NAME);
         let buf = self
             .backend
-            .get(&path)
+            .get(path)
             .and_then(|buf| self.crypto.decrypt(&buf, &self.key))?;
         let mut de = Deserializer::new(&buf[..]);
         let meta: CacheMeta = Deserialize::deserialize(&mut de)?;
@@ -226,7 +228,7 @@ impl LocalCache {
         let path = Path::new(Self::META_FILE_NAME);
         self.crypto
             .encrypt(&buf, &self.key)
-            .and_then(|buf| self.backend.insert(&path, &buf))
+            .and_then(|buf| self.backend.insert(path, &buf))
     }
 
     #[inline]

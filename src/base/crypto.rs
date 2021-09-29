@@ -394,7 +394,7 @@ pub type HashKey = SafeBox<[u8; HASHKEY_SIZE]>;
 impl HashKey {
     #[inline]
     pub fn derive(&self, subkey_id: u64) -> Self {
-        Crypto::derive_from_key(&self, subkey_id).unwrap()
+        Crypto::derive_from_key(self, subkey_id).unwrap()
     }
 }
 
@@ -481,9 +481,9 @@ impl Default for OpsLimit {
     }
 }
 
-impl Into<i32> for OpsLimit {
-    fn into(self) -> i32 {
-        match self {
+impl From<OpsLimit> for i32 {
+    fn from(n: OpsLimit) -> i32 {
+        match n {
             OpsLimit::Interactive => 0,
             OpsLimit::Moderate => 1,
             OpsLimit::Sensitive => 2,
@@ -541,9 +541,9 @@ impl Default for MemLimit {
     }
 }
 
-impl Into<i32> for MemLimit {
-    fn into(self) -> i32 {
-        match self {
+impl From<MemLimit> for i32 {
+    fn from(m: MemLimit) -> i32 {
+        match m {
             MemLimit::Interactive => 0,
             MemLimit::Moderate => 1,
             MemLimit::Sensitive => 2,
@@ -676,18 +676,18 @@ impl Cipher {
     }
 }
 
-impl Into<u8> for Cipher {
-    fn into(self) -> u8 {
-        match self {
+impl From<Cipher> for u8 {
+    fn from(c: Cipher) -> u8 {
+        match c {
             Cipher::Xchacha => 0,
             Cipher::Aes => 1,
         }
     }
 }
 
-impl Into<i32> for Cipher {
-    fn into(self) -> i32 {
-        match self {
+impl From<Cipher> for i32 {
+    fn from(c: Cipher) -> i32 {
+        match c {
             Cipher::Xchacha => 0,
             Cipher::Aes => 1,
         }

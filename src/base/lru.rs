@@ -94,9 +94,9 @@ where
         K: Borrow<Q>,
         Q: Eq + Hash,
     {
-        self.map.remove(k).and_then(|v| {
+        self.map.remove(k).map(|v| {
             self.used = (self.used as isize - self.meter.measure(&v)) as usize;
-            Some(v)
+            v
         })
     }
 
@@ -107,7 +107,7 @@ where
             .entries()
             .enumerate()
             .find(|&(_, ref ent)| !pin_ckr.is_pinned(ent.get()))
-            .and_then(|(_, ent)| Some(ent.remove()));
+            .map(|(_, ent)| ent.remove());
         if let Some(ref v) = ret {
             self.used = (self.used as isize - self.meter.measure(v)) as usize;
         }

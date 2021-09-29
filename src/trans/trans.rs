@@ -76,9 +76,9 @@ impl Trans {
         // save the wal now before writing to that entity. For the other types
         // of entities, the wal save is delayed before commit.
         if ent_type == EntityType::Direct {
-            self.wal_armor.save_item(&mut self.wal).or_else(|err| {
+            self.wal_armor.save_item(&mut self.wal).map_err(|err| {
                 self.wal.remove_entry(id);
-                Err(err)
+                err
             })?;
             self.wal_saved = true;
         }
@@ -109,21 +109,21 @@ impl Trans {
 
             // make sure deleted entity is not in use
             if ent.action() == Action::Delete {
-                let using_cnt = Arc::strong_count(&entity);
+                let using_cnt = Arc::strong_count(entity);
                 if using_cnt > 1 {
                     ent_in_use.push(ent.id().clone());
                 }
             }
 
             // commit entity
-            ent.commit(&vol)?;
+            ent.commit(vol)?;
         }
 
         // make sure all deleted entities are not used
         for id in ent_in_use {
             let entity = self.cohorts.get(&id).unwrap();
             let ent = entity.read().unwrap();
-            let using_cnt = Arc::strong_count(&entity);
+            let using_cnt = Arc::strong_count(entity);
             if using_cnt > 1 {
                 error!(
                     "deleted entity({:?}) still in use (using: {})",

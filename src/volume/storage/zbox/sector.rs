@@ -109,7 +109,7 @@ impl RecycleMap {
         local_cache: &mut LocalCache,
     ) -> Result<Self> {
         let rel_path = Path::new(RECYCLE_FILE);
-        let buf = local_cache.get(&rel_path)?;
+        let buf = local_cache.get(rel_path)?;
         let buf = crypto.decrypt(&buf, key)?;
         let mut de = Deserializer::new(&buf[..]);
         let ret: Self = Deserialize::deserialize(&mut de)?;

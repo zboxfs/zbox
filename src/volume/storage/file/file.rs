@@ -89,8 +89,7 @@ impl FileStorage {
         self.idx_mgr
             .set_crypto_ctx(crypto.clone(), key.derive(Self::SUBKEY_ID_INDEX));
         let hash_key = key.derive(Self::SUBKEY_ID_SECTOR);
-        self.sec_mgr
-            .set_crypto_ctx(crypto.clone(), key.clone(), hash_key);
+        self.sec_mgr.set_crypto_ctx(crypto, key, hash_key);
     }
 
     fn lock_repo(&mut self, force: bool) -> Result<()> {
@@ -142,7 +141,7 @@ impl Storable for FileStorage {
 
     #[inline]
     fn open(&mut self, crypto: Crypto, key: Key, force: bool) -> Result<()> {
-        self.set_crypto_ctx(crypto, key.clone());
+        self.set_crypto_ctx(crypto, key);
         self.idx_mgr.open()?;
         self.lock_repo(force)
     }

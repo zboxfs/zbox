@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use log::debug;
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
@@ -181,13 +183,13 @@ impl SuperBlk {
                     {
                         return Err(Error::InvalidSuperBlk);
                     }
-                    if left.body.seq > right.body.seq {
-                        left.save(pwd, storage)?;
-                    } else if left.body.seq < right.body.seq {
-                        right.save(pwd, storage)?;
-                    } else {
-                        debug!("super block all good, no need repair");
-                        return Ok(());
+                    match left.body.seq.cmp(&right.body.seq) {
+                        Ordering::Greater => left.save(pwd, storage)?,
+                        Ordering::Less => right.save(pwd, storage)?,
+                        Ordering::Equal => {
+                            debug!("super block all good, no need repair");
+                            return Ok(());
+                        }
                     }
                 }
                 Err(_) => left.save(pwd, storage)?,

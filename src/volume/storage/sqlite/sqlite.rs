@@ -548,9 +548,8 @@ impl Drop for SqliteStorage {
         // release repo lock and ignore the result
         if self.is_attached {
             let stmt = self.stmts[2];
-            let _ = reset_stmt(stmt).and_then(|_| unsafe {
+            let _ = reset_stmt(stmt).map(|_| unsafe {
                 ffi::sqlite3_step(stmt);
-                Ok(())
             });
             self.is_attached = false;
         }
@@ -587,13 +586,9 @@ unsafe impl Sync for SqliteStorage {}
 
 #[cfg(test)]
 mod tests {
-    extern crate tempdir;
-
-    use self::tempdir::TempDir;
-
     use super::*;
-
-    use base::init_env;
+    use crate::base::init_env;
+    use tempdir::TempDir;
 
     #[test]
     fn sqlite_storage() {

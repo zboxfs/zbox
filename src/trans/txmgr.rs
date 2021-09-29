@@ -62,11 +62,11 @@ impl TxMgr {
         debug!("begin tx#{}", txid);
 
         // begin a transaction in wal queue
-        tm.walq_mgr.begin_trans(txid).or_else(|err| {
+        tm.walq_mgr.begin_trans(txid).map_err(|err| {
             // if failed, remove the thread tx mark
             Txid::reset_current();
             debug!("tx#{} aborted before start", txid);
-            Err(err)
+            err
         })?;
 
         // create a new transaction and add it to transaction manager
@@ -85,7 +85,7 @@ impl TxMgr {
 
         Ok(TxHandle {
             txid,
-            txmgr: Arc::downgrade(&txmgr),
+            txmgr: Arc::downgrade(txmgr),
         })
     }
 
@@ -234,7 +234,7 @@ impl TxHandle {
     where
         F: FnOnce() -> Result<()>,
     {
-        let _ = EXCL_TX_LOCK.lock().unwrap();
+        let _lock = EXCL_TX_LOCK.lock().unwrap();
         self.run_all(oper)
     }
 

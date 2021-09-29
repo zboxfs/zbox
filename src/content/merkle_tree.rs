@@ -104,7 +104,7 @@ impl MerkleTree {
 
     #[inline]
     pub fn root_hash(&self) -> &Hash {
-        &self.nodes.first().unwrap()
+        self.nodes.first().unwrap()
     }
 
     #[inline]

@@ -286,9 +286,9 @@ impl From<JniError> for Error {
     }
 }
 
-impl Into<i32> for Error {
-    fn into(self) -> i32 {
-        match self {
+impl From<Error> for i32 {
+    fn from(e: Error) -> i32 {
+        match e {
             Error::RefOverflow => -1000,
             Error::RefUnderflow => -1001,
 

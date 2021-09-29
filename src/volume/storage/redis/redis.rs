@@ -54,8 +54,8 @@ impl RedisStorage {
         // url format:
         // redis://[:<passwd>@]<hostname>[:port][/<db>]
         // redis+unix:///[:<passwd>@]<path>[?db=<db>]
-        let url = if path.starts_with("+unix+") {
-            format!("redis+unix:///{}", &path[6..])
+        let url = if let Some(p) = path.strip_prefix("+unix+") {
+            format!("redis+unix:///{}", p)
         } else {
             format!("redis://{}", path)
         };
@@ -273,10 +273,11 @@ impl IntoRef for RedisStorage {}
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
-    use base::init_env;
+    use crate::base::init_env;
 
+    // run a local redis instance before test, for example,
+    // $ docker run -d --name some-redis -p 6379:6379 redis
     #[test]
     fn redis_storage() {
         init_env();

@@ -156,7 +156,7 @@ impl ZboxStorage {
         self.sec_mgr.set_crypto_ctx(crypto.clone(), subkey);
 
         let subkey = key.derive(Self::SUBKEY_ID_IDX_MGR);
-        self.idx_mgr.set_crypto_ctx(crypto.clone(), subkey);
+        self.idx_mgr.set_crypto_ctx(crypto, subkey);
     }
 }
 

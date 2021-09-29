@@ -359,11 +359,11 @@ where
                     // toggle arm temporarily because save() will toggle it
                     self.arm.toggle();
 
-                    self.save(vol).or_else(|err| {
+                    self.save(vol).map_err(|err| {
                         // if saving cow failed, arm will not be switched,
                         // so we need to switch it back here
                         self.arm.toggle();
-                        Err(err)
+                        err
                     })
                 }
                 Action::Update => {
@@ -374,11 +374,10 @@ where
                     let old = self.curr_mut().take();
 
                     // save cow and restore the old inner object
-                    let result = self.save(vol).and_then(|_| {
+                    let result = self.save(vol).map(|_| {
                         // toggle the arm back because save() has
                         // already toggled it
                         self.arm.toggle();
-                        Ok(())
                     });
 
                     // restore the old inner object

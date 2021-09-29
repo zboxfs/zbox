@@ -49,6 +49,9 @@ storage-sqlite = ["libsqlite3-sys"]
 # redis storage
 storage-redis = ["redis"]
 
+# zbox storage base dependencies
+storage-zbox = ["http", "serde_json"]
+
 # zbox storage with faulty transport, for test only
 storage-zbox-faulty = ["storage-zbox"]
 
@@ -57,9 +60,6 @@ storage-zbox-native = ["storage-zbox", "reqwest", "futures", "bytes"]
 
 # zbox storage with android storage as local cache backend
 storage-zbox-android = ["storage-zbox"]
-
-# zbox storage base dependencies
-storage-zbox = ["http", "serde_json"]
 
 # build-in libsodium dependency
 libsodium-bundled = []

@@ -398,7 +398,7 @@ impl Lsmt {
                     if addr.is_empty() {
                         return Err(Error::NotFound);
                     }
-                    return Ok(addr.clone());
+                    return Ok(addr);
                 }
             }
         }
@@ -731,7 +731,7 @@ impl IndexMgr {
         self.memtab_armor.set_crypto_ctx(crypto.clone(), sub_key);
 
         let sub_key = key.derive(Self::SUBKEY_ID_TAB);
-        self.tab_armor.set_crypto_ctx(crypto.clone(), sub_key);
+        self.tab_armor.set_crypto_ctx(crypto, sub_key);
     }
 
     pub fn init(&mut self) -> Result<()> {

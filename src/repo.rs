@@ -336,9 +336,10 @@ impl OpenOptions {
     ///
     /// All options are initially set to false, except for `read`.
     pub fn new() -> Self {
-        let mut opt = Self::default();
-        opt.read = true;
-        opt
+        OpenOptions {
+            read: true,
+            ..Default::default()
+        }
     }
 
     /// Sets the option for read access.

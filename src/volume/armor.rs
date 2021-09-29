@@ -144,10 +144,10 @@ pub trait Armor<'de> {
             wtr.finish()?;
             Ok(())
         })()
-        .or_else(|err| {
+        .map_err(|err| {
             // if save item failed, revert its arm back
             item.arm_mut().toggle();
-            Err(err)
+            err
         })
     }
 
@@ -231,12 +231,12 @@ where
 
     #[inline]
     fn get_item_reader(&self, arm_id: &Eid) -> Result<Self::ItemReader> {
-        Ok(volume::Reader::new(arm_id, &self.vol)?)
+        volume::Reader::new(arm_id, &self.vol)
     }
 
     #[inline]
     fn get_item_writer(&self, arm_id: &Eid) -> Result<Self::ItemWriter> {
-        Ok(volume::Writer::new(arm_id, &Arc::downgrade(&self.vol))?)
+        volume::Writer::new(arm_id, &Arc::downgrade(&self.vol))
     }
 
     #[inline]

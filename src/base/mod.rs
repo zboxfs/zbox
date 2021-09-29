@@ -28,9 +28,6 @@ use std::sync::Mutex;
 #[cfg(target_os = "android")]
 use jni::{JNIEnv, JavaVM};
 
-#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-use env_logger;
-
 /// Get ZboxFS library version string.
 ///
 /// This method return ZboxFS library version as a string, e.g. "ZboxFS v0.9.2".

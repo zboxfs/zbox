@@ -90,7 +90,7 @@ impl Payload {
     }
 
     fn deseri(buf: &[u8]) -> Result<Self> {
-        let mut de = Deserializer::new(&buf[..]);
+        let mut de = Deserializer::new(buf);
         let ret: Self = Deserialize::deserialize(&mut de)?;
         Ok(ret)
     }
@@ -477,8 +477,8 @@ impl Fs {
             let child_from = child.path();
             let child_to = to.join(child.file_name());
             match child.metadata().file_type() {
-                FileType::File => self.copy(&child_from, &child_to)?,
-                FileType::Dir => self.copy_dir_all(&child_from, &child_to)?,
+                FileType::File => self.copy(child_from, &child_to)?,
+                FileType::Dir => self.copy_dir_all(child_from, &child_to)?,
             }
         }
 
@@ -553,8 +553,8 @@ impl Fs {
         for child in self.read_dir(path)? {
             let child_path = child.path();
             match child.metadata().file_type() {
-                FileType::File => self.remove_file(&child_path)?,
-                FileType::Dir => self.remove_dir_all(&child_path)?,
+                FileType::File => self.remove_file(child_path)?,
+                FileType::Dir => self.remove_dir_all(child_path)?,
             }
         }
         match self.remove_dir(path) {

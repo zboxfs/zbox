@@ -46,7 +46,7 @@ pub(super) trait CutableList: Clone + Extent {
         if !split.is_empty() {
             tail.insert(0, split);
         }
-        ret.set_len(tail.iter().fold(0, |sum, ref i| sum + i.len()));
+        ret.set_len(tail.iter().fold(0, |sum, i| sum + i.len()));
         ret.set_items(tail);
 
         let new_len = at - self.offset();
@@ -76,7 +76,7 @@ pub(super) trait CutableList: Clone + Extent {
 
         let mut ret = self.clone();
         ret.set_items(self.items().to_vec());
-        let head_len = ret.items().iter().fold(0, |sum, ref i| sum + i.len());
+        let head_len = ret.items().iter().fold(0, |sum, i| sum + i.len());
         ret.set_len(head_len);
 
         self.set_items(tail);

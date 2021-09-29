@@ -27,7 +27,7 @@ impl Time {
     }
 
     #[inline]
-    pub fn to_system_time(&self) -> SystemTime {
+    pub fn to_system_time(self) -> SystemTime {
         UNIX_EPOCH + self.0
     }
 }

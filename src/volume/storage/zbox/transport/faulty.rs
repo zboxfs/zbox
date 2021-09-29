@@ -3,13 +3,15 @@ use std::io::{Cursor, Read};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+use lazy_static::lazy_static;
+
 use http::header::HeaderName;
 use http::status::StatusCode;
 use http::{HeaderMap, Response as HttpResponse, Uri};
 
 use super::{Response, Transport};
-use error::Result;
-use volume::storage::faulty_ctl::Controller;
+use crate::error::Result;
+use crate::volume::storage::faulty_ctl::Controller;
 
 lazy_static! {
     // static store
@@ -20,7 +22,7 @@ lazy_static! {
 
 fn create_response(status: StatusCode, body: Vec<u8>) -> Result<Response> {
     let mut builder = HttpResponse::builder();
-    builder.status(status);
+    builder = builder.status(status);
     let body = Cursor::new(body);
     let ret = Response::new(builder.body(Box::new(body) as Box<dyn Read>)?);
     Ok(ret)

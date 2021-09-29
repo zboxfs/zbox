@@ -470,10 +470,10 @@ impl WalQueueMgr {
                     debug!("cold abort completed");
                     Ok(())
                 })
-                .or_else(|err| {
+                .map_err(|err| {
                     debug!("cold redo abort failed: {:?}", err);
                     self.restore_walq();
-                    Err(err)
+                    err
                 })?;
         }
 
@@ -521,9 +521,9 @@ impl WalQueueMgr {
     pub fn begin_trans(&mut self, txid: Txid) -> Result<()> {
         self.backup_walq();
         self.walq.begin_trans(txid);
-        self.save_walq().or_else(|err| {
+        self.save_walq().map_err(|err| {
             self.restore_walq();
-            Err(err)
+            err
         })
     }
 
@@ -532,10 +532,10 @@ impl WalQueueMgr {
         self.walq
             .commit_trans(wal)
             .and_then(|_| self.save_walq())
-            .or_else(|err| {
+            .map_err(|err| {
                 // if commit failed, restore the walq backup
                 self.restore_walq();
-                Err(err)
+                err
             })
     }
 
@@ -547,9 +547,9 @@ impl WalQueueMgr {
     pub fn end_abort(&mut self, txid: Txid) -> Result<()> {
         self.backup_walq();
         self.walq.end_abort(txid);
-        self.save_walq().or_else(|err| {
+        self.save_walq().map_err(|err| {
             self.restore_walq();
-            Err(err)
+            err
         })
     }
 
@@ -566,11 +566,11 @@ impl WalQueueMgr {
                 debug!("hot abort completed");
                 Ok(())
             })
-            .or_else(|err| {
+            .map_err(|err| {
                 // if failed, restore the walq backup
                 debug!("hot redo abort failed: {:?}", err);
                 self.restore_walq();
-                Err(err)
+                err
             })
     }
 }
