@@ -98,7 +98,7 @@
 // convert zbox error to IO error
 macro_rules! map_io_err {
     ($x:expr) => {
-        $x.map_err(|e| IoError::new(ErrorKind::Other, e.to_string()));
+        $x.map_err(|e| IoError::new(ErrorKind::Other, e.to_string()))
     };
 }
 
