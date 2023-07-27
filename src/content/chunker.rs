@@ -2,117 +2,54 @@ use std::cmp::min;
 use std::fmt::{self, Debug};
 use std::io::{Result as IoResult, Seek, SeekFrom, Write};
 use std::ptr;
+use rand::prelude::{Distribution, ThreadRng};
+use rand_distr::Normal;
 
 use serde::{Deserialize, Serialize};
 
-// taken from pcompress implementation
-// https://github.com/moinakg/pcompress
-const PRIME: u64 = 153_191u64;
-const MASK: u64 = 0x00ff_ffff_ffffu64;
-const MIN_SIZE: usize = 16 * 1024; // minimal chunk size, 16k
-const AVG_SIZE: usize = 32 * 1024; // average chunk size, 32k
-const MAX_SIZE: usize = 64 * 1024; // maximum chunk size, 64k
-
-// Irreducible polynomial for Rabin modulus, from pcompress
-const FP_POLY: u64 = 0xbfe6_b8a5_bf37_8d83u64;
-
-// since we will skip MIN_SIZE when sliding window, it only
-// needs to target (AVG_SIZE - MIN_SIZE) cut length,
-// note the (AVG_SIZE - MIN_SIZE) must be 2^n
-const CUT_MASK: u64 = (AVG_SIZE - MIN_SIZE - 1) as u64;
-
-// rolling hash window constants
-const WIN_SIZE: usize = 16; // must be 2^n
-const WIN_MASK: usize = WIN_SIZE - 1;
-const WIN_SLIDE_OFFSET: usize = 64;
-const WIN_SLIDE_POS: usize = MIN_SIZE - WIN_SLIDE_OFFSET;
-
 // writer buffer length
-const WTR_BUF_LEN: usize = 8 * MAX_SIZE;
+const BUFFER_SIZE: usize = 8 * MAX_CHUNK_SIZE;
 
-/// Pre-calculated chunker parameters
-#[derive(Clone, Deserialize, Serialize)]
-pub struct ChunkerParams {
-    poly_pow: u64,     // poly power
-    out_map: Vec<u64>, // pre-computed out byte map, length is 256
-    ir: Vec<u64>,      // irreducible polynomial, length is 256
-}
+// leap-based cdc constants
+const MIN_CHUNK_SIZE: usize = 1024 * 16;
+const MAX_CHUNK_SIZE: usize = 1024 * 64;
 
-impl ChunkerParams {
-    pub fn new() -> Self {
-        let mut cp = ChunkerParams::default();
+const WINDOW_PRIMARY_COUNT: usize = 22;
+const WINDOW_SECONDARY_COUNT: usize = 2;
+const WINDOW_COUNT: usize = WINDOW_PRIMARY_COUNT + WINDOW_SECONDARY_COUNT;
 
-        // calculate poly power, it is actually PRIME ^ WIN_SIZE
-        for _ in 0..WIN_SIZE {
-            cp.poly_pow = (cp.poly_pow * PRIME) & MASK;
-        }
+const WINDOW_SIZE: usize = 180;
+const WINDOW_MATRIX_SHIFT: usize = 42; // WINDOW_MATRIX_SHIFT * 4 < WINDOW_SIZE - 5
+const MATRIX_WIDTH: usize = 8;
+const MATRIX_HEIGHT: usize = 255;
 
-        // pre-calculate out map table and irreducible polynomial
-        // for each possible byte, copy from PCompress implementation
-        for i in 0..256 {
-            cp.out_map[i] = (i as u64 * cp.poly_pow) & MASK;
-
-            let (mut term, mut pow, mut val) = (1u64, 1u64, 1u64);
-            for _ in 0..WIN_SIZE {
-                if (term & FP_POLY) != 0 {
-                    val += (pow * i as u64) & MASK;
-                }
-                pow = (pow * PRIME) & MASK;
-                term *= 2;
-            }
-            cp.ir[i] = val;
-        }
-
-        cp
-    }
-}
-
-impl Debug for ChunkerParams {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "ChunkerParams()")
-    }
-}
-
-impl Default for ChunkerParams {
-    fn default() -> Self {
-        let mut ret = ChunkerParams {
-            poly_pow: 1,
-            out_map: vec![0u64; 256],
-            ir: vec![0u64; 256],
-        };
-        ret.out_map.shrink_to_fit();
-        ret.ir.shrink_to_fit();
-        ret
-    }
+enum PointStatus {
+    Satisfied,
+    Unsatisfied(usize),
 }
 
 /// Chunker
 pub struct Chunker<W: Write + Seek> {
     dst: W,                // destination writer
-    params: ChunkerParams, // chunker parameters
     pos: usize,
     chunk_len: usize,
     buf_clen: usize,
-    win_idx: usize,
-    roll_hash: u64,
-    win: [u8; WIN_SIZE], // rolling hash circle window
-    buf: Vec<u8>,        // chunker buffer, fixed size: WTR_BUF_LEN
+    ef_matrix: Vec<Vec<u8>>,
+    buf: Vec<u8>,        // chunker buffer, fixed size: BUFFER_SIZE
 }
 
 impl<W: Write + Seek> Chunker<W> {
-    pub fn new(params: ChunkerParams, dst: W) -> Self {
-        let mut buf = vec![0u8; WTR_BUF_LEN];
+    pub fn new(dst: W) -> Self {
+        let mut buf = vec![0u8; BUFFER_SIZE];
         buf.shrink_to_fit();
+        let ef_matrix = generate_ef_matrix();
 
         Chunker {
             dst,
-            params,
-            pos: WIN_SLIDE_POS,
-            chunk_len: WIN_SLIDE_POS,
+            pos: MIN_CHUNK_SIZE,
+            chunk_len: MIN_CHUNK_SIZE,
             buf_clen: 0,
-            win_idx: 0,
-            roll_hash: 0,
-            win: [0u8; WIN_SIZE],
+            ef_matrix,
             buf,
         }
     }
@@ -120,6 +57,58 @@ impl<W: Write + Seek> Chunker<W> {
     pub fn into_inner(mut self) -> IoResult<W> {
         self.flush()?;
         Ok(self.dst)
+    }
+
+    fn is_point_satisfied(&self) -> PointStatus {
+        // primary check, T<=x<M where T is WINDOW_SECONDARY_COUNT and M is WINDOW_COUNT
+        for i in WINDOW_SECONDARY_COUNT..WINDOW_COUNT {
+            if !self.is_window_qualified(&self.buf[self.pos - i - WINDOW_SIZE..self.pos - i]) { // window is WINDOW_SIZE bytes long and moves to the left
+                let leap = WINDOW_COUNT - i;
+                return PointStatus::Unsatisfied(leap);
+            }
+        }
+
+        //secondary check, 0<=x<T bytes
+        for i in 0..WINDOW_SECONDARY_COUNT {
+            if !self.is_window_qualified(&self.buf[self.pos - i - WINDOW_SIZE..self.pos - i]) {
+                let leap = WINDOW_COUNT - WINDOW_SECONDARY_COUNT - i;
+                return PointStatus::Unsatisfied(leap);
+            }
+        }
+
+        PointStatus::Satisfied
+    }
+
+    fn is_window_qualified(&self, window: &[u8]) -> bool {
+        (0..5)
+            .map(|index| window[WINDOW_SIZE - 1 - index * WINDOW_MATRIX_SHIFT]) // init array
+            .enumerate()
+            .map(|(index, byte)| self.ef_matrix[byte as usize][index]) // get elements from ef_matrix
+            .fold(0, |acc, value| acc ^ (value as usize)) // why is acc of type usize?
+            != 0
+    }
+
+    fn write_to_dst(&mut self) -> IoResult<usize> {
+        let p = self.pos - self.chunk_len;
+        let written = self.dst.write(&self.buf[p..self.pos])?;
+        assert_eq!(written, self.chunk_len);
+
+        if self.pos + MAX_CHUNK_SIZE >= BUFFER_SIZE {
+            let left_len = self.buf_clen - self.pos;
+            unsafe {
+                ptr::copy::<u8>(
+                    self.buf[self.pos..].as_ptr(),
+                    self.buf.as_mut_ptr(),
+                    left_len,
+                );
+            }
+            self.buf_clen = left_len;
+            self.pos = 0;
+        }
+
+        self.pos += MIN_CHUNK_SIZE;
+        self.chunk_len = MIN_CHUNK_SIZE;
+        Ok(written)
     }
 }
 
@@ -131,63 +120,27 @@ impl<W: Write + Seek> Write for Chunker<W> {
         }
 
         // copy source data into chunker buffer
-        let in_len = min(WTR_BUF_LEN - self.buf_clen, buf.len());
+        let in_len = min(BUFFER_SIZE - self.buf_clen, buf.len());
         assert!(in_len > 0);
         self.buf[self.buf_clen..self.buf_clen + in_len]
             .copy_from_slice(&buf[..in_len]);
         self.buf_clen += in_len;
 
         while self.pos < self.buf_clen {
-            // get current byte and pushed out byte
-            let ch = self.buf[self.pos];
-            let out = self.win[self.win_idx] as usize;
-            let pushed_out = self.params.out_map[out];
-
-            // calculate Rabin rolling hash
-            self.roll_hash = (self.roll_hash * PRIME) & MASK;
-            self.roll_hash += u64::from(ch);
-            self.roll_hash = self.roll_hash.wrapping_sub(pushed_out) & MASK;
-
-            // forward circle window
-            self.win[self.win_idx] = ch;
-            self.win_idx = (self.win_idx + 1) & WIN_MASK;
-
-            self.chunk_len += 1;
-            self.pos += 1;
-
-            if self.chunk_len >= MIN_SIZE {
-                let chksum = self.roll_hash ^ self.params.ir[out];
-
-                // reached cut point, chunk can be produced now
-                if (chksum & CUT_MASK) == 0 || self.chunk_len >= MAX_SIZE {
-                    // write the chunk to destination writer,
-                    // ensure it is consumed in whole
-                    let p = self.pos - self.chunk_len;
-                    let written = self.dst.write(&self.buf[p..self.pos])?;
-                    assert_eq!(written, self.chunk_len);
-
-                    // not enough space in buffer, copy remaining to
-                    // the head of buffer and reset buf position
-                    if self.pos + MAX_SIZE >= WTR_BUF_LEN {
-                        let left_len = self.buf_clen - self.pos;
-                        unsafe {
-                            ptr::copy::<u8>(
-                                self.buf[self.pos..].as_ptr(),
-                                self.buf.as_mut_ptr(),
-                                left_len,
-                            );
-                        }
-                        self.buf_clen = left_len;
-                        self.pos = 0;
+            if self.chunk_len >= MAX_CHUNK_SIZE {
+                self.write_to_dst()?;
+            } else {
+                match self.is_point_satisfied() {
+                    PointStatus::Satisfied => {
+                        self.write_to_dst()?;
                     }
-
-                    // jump to next start sliding position
-                    self.pos += WIN_SLIDE_POS;
-                    self.chunk_len = WIN_SLIDE_POS;
-                }
+                    PointStatus::Unsatisfied(leap) => {
+                        self.pos += leap;
+                        self.chunk_len += leap;
+                    },
+                };
             }
         }
-
         Ok(in_len)
     }
 
@@ -200,12 +153,9 @@ impl<W: Write + Seek> Write for Chunker<W> {
         }
 
         // reset chunker
-        self.pos = WIN_SLIDE_POS;
-        self.chunk_len = WIN_SLIDE_POS;
+        self.pos = MIN_CHUNK_SIZE;
+        self.chunk_len = MIN_CHUNK_SIZE;
         self.buf_clen = 0;
-        self.win_idx = 0;
-        self.roll_hash = 0;
-        self.win = [0u8; WIN_SIZE];
 
         self.dst.flush()
     }
@@ -221,6 +171,77 @@ impl<W: Write + Seek> Seek for Chunker<W> {
     fn seek(&mut self, pos: SeekFrom) -> IoResult<u64> {
         self.dst.seek(pos)
     }
+}
+
+fn generate_ef_matrix() -> Vec<Vec<u8>> {
+    let base_matrix = (0..=255)
+        .map(|index| vec![index; 5])
+        .collect::<Vec<Vec<u8>>>(); // 256x5 matrix that looks like ((0,0,0,0,0), (1,1,1,1,1)..)
+
+    let matrix_h = generate_matrix();
+    let matrix_g = generate_matrix();
+
+    let e_matrix = transform_base_matrix(&base_matrix, &matrix_h);
+    let f_matrix = transform_base_matrix(&base_matrix, &matrix_g);
+
+    let ef_matrix = e_matrix.iter().zip(f_matrix.iter())
+        .map(concatenate_bits_in_rows)
+        .collect();
+    ef_matrix
+}
+
+fn transform_base_matrix(base_matrix: &[Vec<u8>], additional_matrix: &[Vec<f64>]) -> Vec<Vec<bool>> {
+    base_matrix.iter()
+        .map(|row| transform_byte_row(row[0], additional_matrix))
+        .collect::<Vec<Vec<bool>>>()
+}
+
+fn concatenate_bits_in_rows((row_x, row_y): (&Vec<bool>, &Vec<bool>)) -> Vec<u8> {
+    row_x.iter().zip(row_y.iter())
+        .map(concatenate_bits)
+        .collect()
+}
+
+fn concatenate_bits((x, y): (&bool, &bool)) -> u8 {
+    match (*x, *y) {
+        (true, true) => 3,
+        (true, false) => 2,
+        (false, true) => 1,
+        (false, false) => 0,
+    }
+}
+
+fn transform_byte_row(byte: u8, matrix: &[Vec<f64>]) -> Vec<bool> {
+    let mut new_row = vec![0u8; 5];
+    (0..255)
+        .map(|index| multiply_rows(byte, &matrix[index]))
+        .enumerate()
+        .for_each(|(index, value)| if value > 0.0 { new_row[index / 51] += 1; });
+
+    new_row.iter()
+        .map(|&number| if number % 2 == 0 {false} else {true})
+        .collect::<Vec<bool>>()
+}
+
+fn multiply_rows(byte: u8, numbers: &[f64]) -> f64 {
+    numbers.iter().enumerate()
+        .map(|(index, number)| if (byte >> index) & 1 == 1 {*number} else {-(*number)})
+        .sum()
+}
+
+fn generate_matrix() -> Vec<Vec<f64>> {
+    let normal = Normal::new(0.0, 1.0).unwrap();
+    let mut rng = rand::thread_rng();
+
+    (0..MATRIX_HEIGHT)
+        .map(|_| generate_row(&normal, &mut rng))
+        .collect()
+}
+
+fn generate_row(normal: &Normal<f64>, rng: &mut ThreadRng) -> Vec<f64> {
+    (0..MATRIX_WIDTH)
+        .map(|_| normal.sample(rng))
+        .collect()
 }
 
 #[cfg(test)]
@@ -293,7 +314,6 @@ mod tests {
 
         // perpare test data
         const DATA_LEN: usize = 765 * 1024;
-        let params = ChunkerParams::new();
         let mut data = vec![0u8; DATA_LEN];
         Crypto::random_buf(&mut data);
         let mut cur = Cursor::new(data);
@@ -303,7 +323,7 @@ mod tests {
         };
 
         // test chunker
-        let mut ckr = Chunker::new(params, sinker);
+        let mut ckr = Chunker::new(sinker);
         let result = copy(&mut cur, &mut ckr);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), DATA_LEN as u64);
@@ -314,9 +334,8 @@ mod tests {
     fn chunker_perf() {
         init_env();
 
-        // perpare test data
-        const DATA_LEN: usize = 10 * 1024 * 1024;
-        let params = ChunkerParams::new();
+        // prepare test data
+        const DATA_LEN: usize = 800 * 1024 * 1024;
         let mut data = vec![0u8; DATA_LEN];
         let seed = RandomSeed::from(&[0u8; RANDOM_SEED_SIZE]);
         Crypto::random_buf_deterministic(&mut data, &seed);
@@ -324,7 +343,7 @@ mod tests {
         let sinker = VoidSinker {};
 
         // test chunker performance
-        let mut ckr = Chunker::new(params, sinker);
+        let mut ckr = Chunker::new(sinker);
         let now = Instant::now();
         copy(&mut cur, &mut ckr).unwrap();
         ckr.flush().unwrap();

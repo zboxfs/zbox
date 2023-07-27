@@ -6,7 +6,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use super::chunk::ChunkMap;
-use super::chunker::{Chunker, ChunkerParams};
+use super::chunker::Chunker;
 use super::content::{
     Cache as ContentCache, ContentRef, Writer as ContentWriter,
 };
@@ -50,7 +50,6 @@ impl ContentMapEntry {
 /// Content Store
 #[derive(Default, Clone, Deserialize, Serialize)]
 pub struct Store {
-    chunker_params: ChunkerParams,
     dedup_file: bool,
     content_map: HashMap<Hash, ContentMapEntry>,
 
@@ -82,7 +81,6 @@ impl Store {
 
     pub fn new(dedup_file: bool, txmgr: &TxMgrRef, vol: &VolumeRef) -> Self {
         Store {
-            chunker_params: ChunkerParams::new(),
             dedup_file,
             content_map: HashMap::new(),
             content_cache: ContentCache::new(Self::CONTENT_CACHE_SIZE),
@@ -248,14 +246,14 @@ impl Writer {
         txmgr: &TxMgrWeakRef,
         store: &StoreWeakRef,
     ) -> Result<Self> {
-        let (params, vol) = {
+        let vol = {
             let store = store.upgrade().ok_or(Error::RepoClosed)?;
             let store = store.read().unwrap();
-            (store.chunker_params.clone(), Arc::downgrade(&store.vol))
+            Arc::downgrade(&store.vol)
         };
         let ctn_wtr = ContentWriter::new(txid, chk_map, store, txmgr, &vol);
         Ok(Writer {
-            inner: Chunker::new(params, ctn_wtr),
+            inner: Chunker::new(ctn_wtr),
         })
     }
 
