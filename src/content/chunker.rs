@@ -246,14 +246,19 @@ fn generate_row(normal: &Normal<f64>, rng: &mut ThreadRng) -> Vec<f64> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::io::{copy, Cursor, Result as IoResult, Seek, SeekFrom, Write};
+    use std::iter::FromIterator;
+    use std::path::{Path, PathBuf};
     use std::time::Instant;
+    use plotters::prelude::IntoSegmentedCoord;
 
     use super::*;
-    use crate::base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE};
+    use crate::base::crypto::{Crypto, RandomSeed, RANDOM_SEED_SIZE, Hash};
     use crate::base::init_env;
     use crate::base::utils::speed_str;
     use crate::content::chunk::Chunk;
+    use crate::content::segment::Segment;
 
     #[derive(Debug)]
     struct Sinker {
@@ -350,5 +355,64 @@ mod tests {
         let time = now.elapsed();
 
         println!("Chunker perf: {}", speed_str(&time, DATA_LEN));
+    }
+
+    #[test]
+    fn file_dedup_ratio() {
+        let path = Path::new("C:/Users/ОЛЕГ/Downloads/JetBrains.Rider-2023.1.3.exe");
+        chunker_draw_sizes(path.to_str().unwrap());
+    }
+
+    fn chunker_draw_sizes(path: &str) {
+        use plotters::prelude::*;
+        let vec = std::fs::read(path).unwrap();
+
+        init_env();
+
+        let mut sinker = Sinker {
+            len: 0,
+            chks: Vec::new(),
+        };
+
+        {
+            let mut cur = Cursor::new(vec.clone());
+            let mut ckr = Chunker::new(&mut sinker);
+            copy(&mut cur, &mut ckr).unwrap();
+            ckr.flush().unwrap();
+        }
+
+        const ADJUSTMENT: usize = 256;
+
+        let mut chunks: HashMap<usize, u32> = HashMap::new();
+        for chunk in sinker.chks {
+            chunks
+                .entry(chunk.len / ADJUSTMENT * ADJUSTMENT)
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
+        }
+
+        let root_area = SVGBackend::new("chart.svg", (600, 400))
+            .into_drawing_area();
+        root_area.fill(&WHITE).unwrap();
+
+        let mut ctx = ChartBuilder::on(&root_area)
+            .set_label_area_size(LabelAreaPosition::Left, 40)
+            .set_label_area_size(LabelAreaPosition::Bottom, 40)
+            .caption("Chunk Size Distribution", ("sans-serif", 50))
+            .build_cartesian_2d(
+                (MIN_CHUNK_SIZE..(*chunks.keys().max().unwrap() as f64 * 1.02) as usize).into_segmented(),
+                0u32..(*chunks.values().max().unwrap() as f64 * 1.02) as u32
+            )
+            .unwrap();
+
+        ctx.configure_mesh().draw().unwrap();
+
+        ctx.draw_series(chunks.iter().map(|(&size, &count)| {
+            let x0 = SegmentValue::Exact(size);
+            let x1 = SegmentValue::Exact(size + ADJUSTMENT);
+            let mut bar = Rectangle::new([(x0, count), (x1, 0)], RED.filled());
+            bar
+        })
+        ).unwrap();
     }
 }
