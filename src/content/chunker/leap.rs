@@ -1,7 +1,7 @@
 use std::cmp::min;
 use std::fmt::{self, Debug};
 use std::io::{Result as IoResult, Seek, SeekFrom, Write};
-use std::ptr;
+use std::ops::{Deref, DerefMut, Index, IndexMut, Range};
 use rand::prelude::{Distribution, ThreadRng};
 use rand_distr::Normal;
 
@@ -28,29 +28,61 @@ enum PointStatus {
     Unsatisfied(usize),
 }
 
+struct ChunkerBuf {
+    pos: usize,
+    clen: usize,
+    buf: Vec<u8>, // chunker buffer, fixed size: WTR_BUF_LEN
+}
+
 /// Chunker
 pub struct LeapChunker<W: Write + Seek> {
     dst: W,                // destination writer
-    pos: usize,
     chunk_len: usize,
-    buf_clen: usize,
     ef_matrix: Vec<Vec<u8>>,
-    buf: Vec<u8>,        // chunker buffer, fixed size: BUFFER_SIZE
+    buf: ChunkerBuf,        // chunker buffer, fixed size: BUFFER_SIZE
+}
+
+impl ChunkerBuf {
+    fn new() -> Self {
+        let mut buf = vec![0u8; BUFFER_SIZE];
+        buf.shrink_to_fit();
+
+        Self {
+            pos: MIN_CHUNK_SIZE,
+            clen: 0,
+            buf,
+        }
+    }
+
+    fn reset_position(&mut self) {
+        let left_len = self.clen - self.pos;
+        let copy_range = self.pos..self.clen;
+
+        self.buf.copy_within(copy_range, 0);
+        self.clen = left_len;
+        self.pos = 0;
+    }
+
+    fn copy_into(&mut self, buf: &[u8], in_len: usize) {
+        let copy_range = self.clen..self.clen + in_len;
+        self.buf[copy_range].copy_from_slice(&buf[..in_len]);
+        self.clen += in_len;
+    }
+
+    fn has_something(&self) -> bool {
+        self.pos < self.clen
+    }
 }
 
 impl<W: Write + Seek> LeapChunker<W> {
     pub fn new(dst: W) -> Self {
-        let mut buf = vec![0u8; BUFFER_SIZE];
-        buf.shrink_to_fit();
         let ef_matrix = generate_ef_matrix();
 
         LeapChunker {
             dst,
-            pos: MIN_CHUNK_SIZE,
             chunk_len: MIN_CHUNK_SIZE,
-            buf_clen: 0,
             ef_matrix,
-            buf,
+            buf: ChunkerBuf::new(),
         }
     }
 
@@ -62,7 +94,7 @@ impl<W: Write + Seek> LeapChunker<W> {
     fn is_point_satisfied(&self) -> PointStatus {
         // primary check, T<=x<M where T is WINDOW_SECONDARY_COUNT and M is WINDOW_COUNT
         for i in WINDOW_SECONDARY_COUNT..WINDOW_COUNT {
-            if !self.is_window_qualified(&self.buf[self.pos - i - WINDOW_SIZE..self.pos - i]) { // window is WINDOW_SIZE bytes long and moves to the left
+            if !self.is_window_qualified(&self.buf[self.buf.pos - i - WINDOW_SIZE..self.buf.pos - i]) { // window is WINDOW_SIZE bytes long and moves to the left
                 let leap = WINDOW_COUNT - i;
                 return PointStatus::Unsatisfied(leap);
             }
@@ -70,7 +102,7 @@ impl<W: Write + Seek> LeapChunker<W> {
 
         //secondary check, 0<=x<T bytes
         for i in 0..WINDOW_SECONDARY_COUNT {
-            if !self.is_window_qualified(&self.buf[self.pos - i - WINDOW_SIZE..self.pos - i]) {
+            if !self.is_window_qualified(&self.buf[self.buf.pos - i - WINDOW_SIZE..self.buf.pos - i]) {
                 let leap = WINDOW_COUNT - WINDOW_SECONDARY_COUNT - i;
                 return PointStatus::Unsatisfied(leap);
             }
@@ -89,24 +121,16 @@ impl<W: Write + Seek> LeapChunker<W> {
     }
 
     fn write_to_dst(&mut self) -> IoResult<usize> {
-        let p = self.pos - self.chunk_len;
-        let written = self.dst.write(&self.buf[p..self.pos])?;
+        let write_range =
+            self.buf.pos - self.chunk_len..self.buf.pos;
+        let written = self.dst.write(&self.buf[write_range])?;
         assert_eq!(written, self.chunk_len);
 
-        if self.pos + MAX_CHUNK_SIZE >= BUFFER_SIZE {
-            let left_len = self.buf_clen - self.pos;
-            unsafe {
-                ptr::copy::<u8>(
-                    self.buf[self.pos..].as_ptr(),
-                    self.buf.as_mut_ptr(),
-                    left_len,
-                );
-            }
-            self.buf_clen = left_len;
-            self.pos = 0;
+        if self.buf.pos + MAX_CHUNK_SIZE >= BUFFER_SIZE {
+            self.buf.reset_position();
         }
 
-        self.pos += MIN_CHUNK_SIZE;
+        self.buf.pos += MIN_CHUNK_SIZE;
         self.chunk_len = MIN_CHUNK_SIZE;
         Ok(written)
     }
@@ -120,13 +144,15 @@ impl<W: Write + Seek> Write for LeapChunker<W> {
         }
 
         // copy source data into chunker buffer
-        let in_len = min(BUFFER_SIZE - self.buf_clen, buf.len());
+        let in_len = min(BUFFER_SIZE - self.buf.clen, buf.len());
         assert!(in_len > 0);
-        self.buf[self.buf_clen..self.buf_clen + in_len]
-            .copy_from_slice(&buf[..in_len]);
-        self.buf_clen += in_len;
+        self.buf.copy_into(buf, in_len);
 
-        while self.pos < self.buf_clen {
+        while self.buf.has_something() {
+            if self.buf.pos > BUFFER_SIZE {
+                self.write_to_dst()?;
+            }
+
             if self.chunk_len >= MAX_CHUNK_SIZE {
                 self.write_to_dst()?;
             } else {
@@ -135,7 +161,7 @@ impl<W: Write + Seek> Write for LeapChunker<W> {
                         self.write_to_dst()?;
                     }
                     PointStatus::Unsatisfied(leap) => {
-                        self.pos += leap;
+                        self.buf.pos += leap;
                         self.chunk_len += leap;
                     },
                 };
@@ -146,16 +172,17 @@ impl<W: Write + Seek> Write for LeapChunker<W> {
 
     fn flush(&mut self) -> IoResult<()> {
         // flush remaining data to destination
-        let p = self.pos - self.chunk_len;
-        if p < self.buf_clen {
-            self.chunk_len = self.buf_clen - p;
-            let _ = self.dst.write(&self.buf[p..(p + self.chunk_len)])?;
+        let p = self.buf.pos - self.chunk_len;
+        if p < self.buf.clen {
+            self.chunk_len = self.buf.clen - p;
+            let write_range = p..p + self.chunk_len;
+            let _ = self.dst.write(&self.buf.buf[write_range])?;
         }
 
         // reset chunker
-        self.pos = MIN_CHUNK_SIZE;
+        self.buf.pos = MIN_CHUNK_SIZE;
         self.chunk_len = MIN_CHUNK_SIZE;
-        self.buf_clen = 0;
+        self.buf.clen = 0;
 
         self.dst.flush()
     }
@@ -244,6 +271,48 @@ fn generate_row(normal: &Normal<f64>, rng: &mut ThreadRng) -> Vec<f64> {
         .collect()
 }
 
+impl Index<Range<usize>> for ChunkerBuf {
+    type Output = [u8];
+
+    fn index(&self, index: Range<usize>) -> &Self::Output {
+        &self.buf[index]
+    }
+}
+
+impl Index<usize> for ChunkerBuf {
+    type Output = u8;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.buf[index]
+    }
+}
+
+impl Deref for ChunkerBuf {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        &self.buf
+    }
+}
+
+impl IndexMut<usize> for ChunkerBuf {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.buf[index]
+    }
+}
+
+impl IndexMut<Range<usize>> for ChunkerBuf {
+    fn index_mut(&mut self, index: Range<usize>) -> &mut Self::Output {
+        &mut self.buf[index]
+    }
+}
+
+impl DerefMut for ChunkerBuf {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.buf
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -257,6 +326,7 @@ mod tests {
     use crate::content::chunker::Chunker;
 
     #[test]
+    #[ignore]
     fn file_dedup_ratio() {
         let path = Path::new("C:/Users/ОЛЕГ/Downloads/JetBrains.Rider-2023.1.3.exe");
         chunker_draw_sizes(path.to_str().unwrap());
